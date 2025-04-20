@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %} Edit Task Component {% endblock %}
+{% block content %}
+
+<h2>Edit Task component</h2>
+
+<table class="table table-striped table-dark w-25 text-center">
+  <thead>
+    <th>Ingredient</th>
+    <th>Tool</th>
+    <th>Content</th>
+  </thead>
+  <tr>
+    {% if taskcomponent.product.id %}
+    <td class="table-success">yes{% else %}<td class="table-danger">no
+    {% endif %}
+    </td>
+    {% if taskcomponent.tool.id %}
+    <td class="table-success">yes{% else %}<td class="table-danger">no
+    {% endif %}
+    </td>
+    {% if taskcomponent.text %}
+    <td class="table-success">yes{% else %}<td class="table-danger">no
+    {% endif %}
+    </td>
+  </tr>
+</table>
+
+id: {{ taskcomponent.id }}<br>
+pk: {{ taskcomponent.pk }}<br>
+task: {{ taskcomponent.task }}<br>
+end product_id: {{ taskcomponent.product_id }}<br>
+end product: {{ taskcomponent.product }}<br>
+task_id: {{ taskcomponent.task_id }}<br>
+<br>
+
+Order: {{ taskcomponent.order.id }}<br>
+<br>
+{% if taskcomponent.product.id %}
+  <h5>Ingredient</h5>
+  Name: {{ taskcomponent.product.id }} {{ taskcomponent.product.name }}<br>
+  Mass: {{ taskcomponent.mass }}<br>
+  Volume: {{ taskcomponent.volume }}<br>
+  <br>
+{% endif %}
+
+{% if taskcomponent.tool.id %}
+  <h5>Tool</h5>
+  Tool id: {{ taskcomponent.tool.id }}<br>
+  Tool name: {{ taskcomponent.tool.name }}<br>
+  Setting 1: {{ taskcomponent.setting_1 }}<br>
+  Setting 2: {{ taskcomponent.setting_2 }}<br>
+  Time: {{ taskcomponent.time }}<br>
+  <br>
+{% endif %}
+
+{% if taskcomponent.text %}
+  <h5>Content</h5>
+  Text: {{ taskcomponent.text }}<br>
+{% endif %}
+
+<h5>Edit Component</h5>
+<form method="POST">
+  {% csrf_token %}
+  {{form}}
+  <input type="submit" name ="Submit">
+</form>
+
+{% endblock %}

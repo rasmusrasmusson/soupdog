@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% block title %} EP temp {% endblock %}
+{% block content %}
+
+<h4>EP temp</h4>
+
+  <div class="form-group">
+    <form action="" method="POST" enctype="multipart/form-data">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <input type='Submit' value="submit" class="btn btn-secondary">
+      
+    </form>
+  </div>
+
+
+
+
+{% endblock %}

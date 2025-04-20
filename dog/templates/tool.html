@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %} {{ tools.pk }} {{ tools.name }} {% endblock %}
+{% block content %}
+
+<div class="row d-flex align-items-center">
+  {% if user.is_authenticated %}
+
+  {% endif %}
+  <div class="box col-md-1 mb-2">
+    {% if user.is_authenticated %}
+    <small><a href="{% url 'edit_tool' tools.pk %}">Edit tool</a></small>
+    {% endif %}<br>
+  </div>
+</div>
+
+<b>{{ tools.pk }} {{ tools.name }}</b><br>
+{{ tools.description }}<br>
+
+
+
+{% endblock %}

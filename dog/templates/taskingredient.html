@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %} Task Ingredients {% endblock %}
+{% block content %}
+
+<h3>Ingredient list</h3>
+
+PK: {{ pk }}
+
+<table class="table table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <td scope="col">Task id</td>     
+      <td scope="col">Product</td>
+      <td scope="col">Mass</td>      
+      <td scope="col">Volume</td>
+      <td scope="col">Quantity</td>
+    </tr>
+  </thead>
+  <tbody>
+ 	{% for task_ingredients in task_ingredients %}
+   <tr>
+      <td scope="col">{{ taskingredient.task.id }}</td>
+      <td scope="col">{{ taskingredient.product }}</td>
+      <td scope="col">{{ taskingredient.mass }}</td>
+      <td scope="col">{{ taskingredient.volume }}</td>
+      <td scope="col">{{ taskingredient.quantity }}</td>
+    </tr>
+	{% endfor %}    
+  </tbody>
+</table>
+
+{% endblock %}

@@ -1,0 +1,150 @@
+{% extends 'base.html' %}
+{% block title %} {{ product.cats }} {{ product.name }} {% endblock %}
+{% block content %}
+
+<b>{{ program.product.cats }} {{ program.product }}</b><br>
+
+<a class="btn btn-primary btn-sm btn-block" href="">Create task</a>&nbsp;
+
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link" aria-current="page" href="{% url 'product' program.product.id %}">Basics</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Details</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Groups</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Ingredients</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="#">Program</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">History</a>
+  </li>     
+</ul>
+
+<b>Program id:</b> {{ program.pk }}<br>
+<b>Version:</b> {{ program.version }}<br>
+
+{% if not program.programs.all  %}
+  No tasks yet!
+  {% else %}
+
+{% for task in program.programs.all %}   
+  {% if task.tasks.all %}
+  {% else %}
+  
+  {% endif %}
+
+{% endfor %}
+
+<h1>testing</h1>
+{% for task in program.programs.all %}   
+{{ task.id }}<br>
+{% endfor %}
+<br><br><br>
+
+<table class="table table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <td scope="col">(Id)</td>     
+      <td scope="col">(Order)</td>
+      <td scope="col">Ingredient</td>      
+      <td scope="col">Mass</td>
+      <td scope="col">Volume</td>
+      <td scope="col">Quantity</td>
+      <td scope="col">Tool</td>
+      <td scope="col">(Setting_1)</td>
+      <td scope="col">(Time)</td>
+      <td scope="col">Instruction</td>
+      <td scope="col">(End ingredient)</td>      
+    </tr>
+  </thead>
+  <tbody>
+ {% for task in program.programs.all %}   
+    {% if not task.tasks.all %}
+    <tr>
+      <td scope="col"><a class="" href="/../task/edit/{{ task.id }}">{{ task.id }}</a></td>
+      <td scope="col">&#x2193;{{ task.order }}</td>
+      <td scope="col">
+        No product.
+      </td>      
+      <td scope="col">{{ taskingredient.mass }}</td>
+      <td scope="col">{{ taskingredient.volume }}</td>
+      <td scope="col">{{ taskingredient.quantity }}</td>
+      <td scope="col">
+      {% for tasktool in task.tooltask.all %}
+        {{ tasktool.id }} - {{ tasktool.task.name }}<br>
+      {% endfor %}
+      </td>
+      <td scope="col">setting</td>      
+      <td scope="col">time</td>      
+      <td scope="col">{{ task.text1 }}</td>
+      <td scope="col">End ingredient from the task will be here!</td>      
+    </tr>
+    {% else %}
+
+    {% for taskingredient in task.tasks.all %}
+    <script>
+      var rowspanVar = {{ forloop.counter }};
+      document.getElementById("taskidSpan").rowSpan = rowspanVar;
+      document.getElementById("orderSpan").rowSpan = rowspanVar;
+      document.getElementById("instructionSpan").rowSpan = rowspanVar;
+      
+    </script>
+
+        {% if forloop.first %}
+    <tr>
+      <td id="taskidSpan" scope="col"><a class="" href="/../task/edit/{{ task.id }}">{{ task.id }}</a></td>
+      <td id="orderSpan" scope="col">&#x2193;{{ task.order }}</td>
+      <td scope="col">
+            {{ taskingredient.product }}<br>
+      </td>      
+      <td scope="col">{{ taskingredient.mass }}</td>
+      <td scope="col">{{ taskingredient.volume }}</td>
+      <td scope="col">{{ taskingredient.quantity }}</td>
+      <td scope="col">
+
+      </td>
+      <td scope="col">setting</td>      
+      <td scope="col">time</td>
+      <td id="instructionSpan" scope="col">{{ task.text1 }}</td>
+      <td scope="col">End ingredient from the task will be here!</td>          
+    </tr>
+        {% else %}
+    <tr>
+      
+      <td scope="col">
+            {{ taskingredient.product }}<br>
+      </td>      
+      <td scope="col">{{ taskingredient.mass }}</td>
+      <td scope="col">{{ taskingredient.volume }}</td>
+      <td scope="col">{{ taskingredient.quantity }}</td>
+      <td scope="col">
+
+        {% for tasktool in task.tasks.all %}
+          {{ tasktool.id }} - {{ tasktool.task.name }}<br>
+        {% endfor %}
+
+      </td>
+      <td scope="col">setting</td>      
+      <td scope="col">time</td> 
+      <td scope="col">End ingredient from the task will be here!</td>              
+    </tr>        
+        {% endif %}
+    {% endfor %}
+    {% endif %}
+
+  {% endfor %}
+  </tbody>
+</table>
+
+
+
+{% endif %}
+
+{% endblock %}

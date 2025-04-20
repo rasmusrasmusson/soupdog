@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Selected Categories</h1>
+    
+    <div class="card">
+        <div class="card-header">
+            <h5>You selected {{ selected_categories|length }} categories</h5>
+        </div>
+        
+        <div class="card-body">
+            <ul class="list-group">
+                {% for category in selected_categories %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        {{ category.name }}
+                        <span class="badge bg-primary rounded-pill">ID: {{ category.id }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        <div class="card-footer">
+            <a href="{% url 'edit_tool' %}" class="btn btn-primary">Back to Editor</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,532 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Edit Tool - {{ tool.name }}{% endblock %}
+
+{% block content %}
+{% if user.is_authenticated %}
+<div class="tool-edit-container">
+    <h1>Edit Tool: {{ tool.name }}</h1>
+    
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form id="tool-form" method="post" action="{% url 'edit_tool' task=task.id tasklist=tasklist.id tool=tool.id %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        
+        <div class="form-section">
+            <div class="form-column">
+                <div class="form-group">
+                    <label for="tool-name">Tool Name:</label>
+                    <input type="text" id="tool-name" name="name" value="{{ tool.name }}" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="tool-description">Description:</label>
+                    <textarea id="tool-description" name="description">{{ tool.description }}</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label>Tool Image:</label>
+                    
+                    <!-- Current Image Display -->
+                    <div class="image-controls">
+                        {% if tool.image1 %}
+                        <div class="current-image-wrapper">
+                            <img src="{{ tool.image1.url }}" alt="Current tool image" class="current-image" id="current-tool-image">
+                            <div class="image-actions">
+                                <button type="button" class="btn btn-replace" onclick="document.getElementById('image-upload').click()">
+                                    <i class="fas fa-sync-alt"></i> Replace
+                                </button>
+                                <button type="submit" name="delete_image" class="btn btn-delete" onclick="return confirm('Are you sure you want to delete this image?')">
+                                    <i class="fas fa-trash-alt"></i> Delete
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        <!-- Image Upload Area -->
+                        <div class="upload-area {% if tool.image1 %}hidden{% endif %}" id="upload-area">
+                            <input type="file" id="image-upload" name="image1" accept="image/*" style="display: none;">
+                            <div class="drop-zone" onclick="document.getElementById('image-upload').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>Click to upload or drag and drop</p>
+                                <p class="small">(Max size: 5MB)</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Image Preview -->
+                        <div class="image-preview-wrapper hidden" id="image-preview-wrapper">
+                            <img id="image-preview" class="image-preview">
+                            <button type="button" class="btn btn-clear" onclick="clearImage()">
+                                <i class="fas fa-times"></i> Clear
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-save">
+                        <i class="fas fa-save"></i> Save Changes
+                    </button>
+                    <a href="{% url 'add_task_tool' tasklist=tasklist.id task=task.id %}" class="btn btn-cancel">
+                        <i class="fas fa-times"></i> Cancel
+                    </a>
+                </div>
+            </div>
+            
+            <div class="categories-column">
+                <h2 class="section-title">Categories</h2>
+                <div id="categories-container"></div>
+                
+                <div id="selected-categories">
+                    <h3>Selected Categories</h3>
+                    <ul id="selected-list"></ul>
+                </div>
+                
+                <input type="hidden" id="selected-categories-input" name="categories" value="">
+            </div>
+        </div>
+    </form>
+</div>
+{% else %}
+<div class="auth-required">
+    <p>Please login to access this page.</p>
+    <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-login">
+        <i class="fas fa-sign-in-alt"></i> Login
+    </a>
+</div>
+{% endif %}
+
+<script>
+// Image Handling
+const imageUpload = document.getElementById('image-upload');
+const currentImage = document.getElementById('current-tool-image');
+const uploadArea = document.getElementById('upload-area');
+const imagePreviewWrapper = document.getElementById('image-preview-wrapper');
+const imagePreview = document.getElementById('image-preview');
+
+// Show upload area if no image exists
+{% if not tool.image1 %}
+uploadArea.classList.remove('hidden');
+{% endif %}
+
+imageUpload.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        // Validate file size (5MB max)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('File size exceeds 5MB limit');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            // Hide current image and upload area
+            if (currentImage) currentImage.classList.add('hidden');
+            uploadArea.classList.add('hidden');
+            
+            // Show preview
+            imagePreview.src = event.target.result;
+            imagePreviewWrapper.classList.remove('hidden');
+        }
+        reader.readAsDataURL(file);
+    }
+});
+
+function clearImage() {
+    imageUpload.value = '';
+    imagePreviewWrapper.classList.add('hidden');
+    {% if tool.image1 %}
+    currentImage.classList.remove('hidden');
+    {% else %}
+    uploadArea.classList.remove('hidden');
+    {% endif %}
+}
+
+// Category Selection Handling
+document.addEventListener('DOMContentLoaded', function() {
+    const kitchenTools = JSON.parse('{{ kitchen_tools|escapejs }}');
+    const initialCategories = {{ initial_categories|safe }};
+    const selectedCategories = new Set(initialCategories);
+    const container = document.getElementById('categories-container');
+    const selectedList = document.getElementById('selected-list');
+    const categoriesInput = document.getElementById('selected-categories-input');
+
+    // Function to create category buttons recursively
+    function createCategoryButtons(categories, parentElement, level = 0) {
+        if (!categories || categories.length === 0) {
+            return;
+        }
+
+        categories.forEach(category => {
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'category-item';
+            itemDiv.style.marginLeft = level > 0 ? '20px' : '0';
+
+            // Create checkbox
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.id = `category-${category.id}`;
+            checkbox.className = 'category-checkbox';
+            checkbox.checked = selectedCategories.has(category.name);
+            checkbox.addEventListener('change', function() {
+                if (this.checked) {
+                    selectedCategories.add(category.name);
+                } else {
+                    selectedCategories.delete(category.name);
+                }
+                updateSelectedList();
+            });
+
+            // Create label
+            const label = document.createElement('label');
+            label.htmlFor = `category-${category.id}`;
+            label.textContent = category.name;
+            label.className = 'category-label';
+
+            // Create toggle for children
+            if (category.children && category.children.length > 0) {
+                const toggle = document.createElement('span');
+                toggle.className = 'toggle-children';
+                toggle.innerHTML = '▼';
+                toggle.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    childrenContainer.classList.toggle('collapsed');
+                    this.innerHTML = childrenContainer.classList.contains('collapsed') ? '▶' : '▼';
+                });
+                label.prepend(toggle);
+            }
+
+            itemDiv.appendChild(checkbox);
+            itemDiv.appendChild(label);
+            parentElement.appendChild(itemDiv);
+
+            // Add children if they exist
+            if (category.children && category.children.length > 0) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'children-container';
+                createCategoryButtons(category.children, childrenContainer, level + 1);
+                itemDiv.appendChild(childrenContainer);
+            }
+        });
+    }
+
+    function updateSelectedList() {
+        selectedList.innerHTML = '';
+        
+        if (selectedCategories.size === 0) {
+            const item = document.createElement('li');
+            item.textContent = 'No categories selected';
+            item.className = 'no-items';
+            selectedList.appendChild(item);
+        } else {
+            Array.from(selectedCategories).sort().forEach(categoryName => {
+                const item = document.createElement('li');
+                item.className = 'selected-category-item';
+                
+                const nameSpan = document.createElement('span');
+                nameSpan.textContent = categoryName;
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-category';
+                removeBtn.innerHTML = '×';
+                removeBtn.addEventListener('click', () => {
+                    selectedCategories.delete(categoryName);
+                    // Update corresponding checkbox
+                    document.querySelectorAll('.category-checkbox').forEach(checkbox => {
+                        const label = checkbox.nextElementSibling;
+                        if (label.textContent === categoryName) {
+                            checkbox.checked = false;
+                        }
+                    });
+                    updateSelectedList();
+                });
+
+                item.appendChild(nameSpan);
+                item.appendChild(removeBtn);
+                selectedList.appendChild(item);
+            });
+        }
+        
+        categoriesInput.value = Array.from(selectedCategories).join(',');
+    }
+
+    // Initialize the category hierarchy
+    if (kitchenTools && kitchenTools.children) {
+        createCategoryButtons(kitchenTools.children, container);
+        updateSelectedList();
+    } else {
+        console.error('No category data found');
+        container.innerHTML = '<p>No categories available</p>';
+    }
+});
+
+// Drag and drop for images
+function setupDragAndDrop() {
+    const dropZone = document.querySelector('.drop-zone');
+    
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    function highlight() {
+        dropZone.classList.add('highlight');
+    }
+
+    function unhighlight() {
+        dropZone.classList.remove('highlight');
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, highlight, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, unhighlight, false);
+    });
+
+    dropZone.addEventListener('drop', handleDrop, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length) {
+            imageUpload.files = files;
+            const event = new Event('change');
+            imageUpload.dispatchEvent(event);
+        }
+    }
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    setupDragAndDrop();
+});
+</script>
+
+<style>
+.tool-edit-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.form-section {
+    display: flex;
+    gap: 30px;
+}
+
+.form-column {
+    flex: 2;
+}
+
+.categories-column {
+    flex: 1;
+}
+
+/* Image Styles */
+.image-controls {
+    margin: 15px 0;
+}
+
+.current-image-wrapper {
+    margin-bottom: 15px;
+}
+
+.current-image {
+    max-width: 100%;
+    max-height: 300px;
+    display: block;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+.image-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.upload-area {
+    border: 2px dashed #ccc;
+    padding: 20px;
+    text-align: center;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.upload-area.highlight {
+    border-color: #4CAF50;
+    background-color: #f8f9fa;
+}
+
+.upload-area i {
+    font-size: 48px;
+    color: #6c757d;
+    margin-bottom: 10px;
+}
+
+.image-preview-wrapper {
+    margin-top: 15px;
+    text-align: center;
+}
+
+.image-preview {
+    max-width: 100%;
+    max-height: 300px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+}
+
+/* Button Styles */
+.btn {
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.btn i {
+    font-size: 14px;
+}
+
+.btn-save {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.btn-cancel {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-replace {
+    background-color: #17a2b8;
+    color: white;
+}
+
+.btn-delete {
+    background-color: #dc3545;
+    color: white;
+}
+
+.btn-clear {
+    background-color: #ffc107;
+    color: #212529;
+    margin-top: 10px;
+}
+
+.form-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 10px;
+}
+
+/* Category Tree Styles */
+#categories-container {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+}
+
+.category-item {
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+}
+
+.category-checkbox {
+    margin-right: 8px;
+}
+
+.category-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.category-label:hover {
+    background: #e9ecef;
+}
+
+.category-checkbox:checked + .category-label {
+    background: #007bff;
+    color: white;
+}
+
+.toggle-children {
+    margin-right: 8px;
+    cursor: pointer;
+    font-size: 0.8em;
+    width: 15px;
+    display: inline-block;
+}
+
+.children-container {
+    margin-left: 15px;
+}
+
+.children-container.collapsed {
+    display: none;
+}
+
+/* Selected Categories Styles */
+#selected-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.selected-category-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin-bottom: 5px;
+}
+
+.remove-category {
+    background: none;
+    border: none;
+    color: #dc3545;
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 0 5px;
+}
+
+.no-items {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Utility Classes */
+.hidden {
+    display: none;
+}
+</style>
+
+{% endblock %}

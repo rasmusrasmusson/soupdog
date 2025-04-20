@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %} Add Task Tasklist Redirect{% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Add task to Task list redirect</h1>
+	Will add redirect later.
+<BR>
+task: {{ task }}<br>
+tasklist: {{ tasklist }}<br>
+
+
+	<div class="form-group">
+	  <form method="POST" enctype="multipart/form-data">
+	    {% csrf_token %}
+	    {{ form.as_p }}
+	    <input type='Submit' value="submit" class="btn btn-secondary">
+	    
+	  </form>
+	</div>
+
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

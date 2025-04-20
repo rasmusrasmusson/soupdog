@@ -1,0 +1,304 @@
+{% extends 'base.html' %}
+{% block title %} Soup.Dog - Task list {% endblock %}
+{% block content %}
+{% load humanize %}
+{% load mathfilters %}
+{% load static %}
+<form id="ep_form" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data" style="margin-bottom:0px">
+ 				{% csrf_token %}
+		{{ form.as_p }}
+		<input name='task_list_id' value="{{ cats }}" type="hidden">
+</form>
+
+<table class="table table-bordered">
+	<thead class="table-dark">
+		<td class="col-sm-1 text-center">#</td>     
+		<td class="col-sm-1 text-center">
+			<img src="{% static 'images/icon_sorting-arrows_white.svg' %}" height=22>
+		</td>
+		<td class="col-sm-4" class="">
+    	<table class="my-0 w-100">
+				<tr class="table-dark">
+					<td class="col-sm-4 text-center">
+						<img src="{% static 'images/icon_tomatoe_white.svg' %}" height=20>
+						<img src="{% static 'images/icon_milk-bottle_white.svg' %}" height=20>
+						<img src="{% static 'images/icon_eggplant_white.svg' %}" height=20>
+						<img src="{% static 'images/icon_bread_white.svg' %}" height=20>
+					</td>
+					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_scale_white.svg' %}" height=20></td>
+					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_volume_white.svg' %}" height=18></td>
+					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_abacus_white.svg' %}" height=24></td>
+					<td class="col-sm-1 text-center"></td>
+					<td class="col-sm-1 text-center"></td>				
+				</tr>
+    	</table>
+		</td>      
+		<td scope="col-sm-3" class="py-0 px-0">
+	      	<table class="table my-0">
+	      		<tr class="table-dark">
+	      			<td class="col-sm-4 text-center align-middle">
+	      				<img src="{% static 'images/icon_knife_white.svg' %}" height=18>
+	      				<img src="{% static 'images/icon_oven2-lines_white.svg' %}" height=18>&nbsp;
+	      				<img src="{% static 'images/icon_pot_white.svg' %}" height=20>
+	      			</td>
+				    <td class="col-sm-2 text-center align-middle">
+				    	<img src="{% static 'images/icon_settings-lines_white.svg' %}" height=18>
+				    </td>
+				    <td class="col-sm-2 text-center align-middle">
+				    	<img src="{% static 'images/icon_timer_white.svg' %}" height=18>
+				    </td>
+				    <td class="col-sm-2"></td>
+				    <td class="col-sm-2"></td>
+	      		</tr>
+	      	</table>
+		</td>  
+		<td class="col-sm-2 text-center align-middle">
+			<img src="{% static 'images/icon_information_white.svg' %}" height=20>
+		</td>
+		<td class="col-sm-1 text-center align-middle">
+			<img src="{% static 'images/icon_flag-2_white.svg' %}" height=18>
+		</td>
+	</thead>
+	<tbody id="sortable">
+		Tasklist: {{ cats }}<br>
+		{% for listtask in task_list_match %}
+		<tr class="ui-state-default">
+			<td class="col text-center">
+				<table>
+					<tr>
+						<td>
+							<div class="form-check">
+  							<input name="used_in_task" id="task_{{ listtask.task.id }}" form="ep_form" class="form-check-input " value="{{ listtask.task.id }}" type="radio" checked onchange="task{{ listtask.task.id }}()" onchange="alert('{{ listtask.task.id }} was checked')">	
+							</div>
+						<script>
+						function task{{ listtask.task.id }}() {
+						  var x = document.getElementById("task_{{ listtask.task.id }}").value;
+						  document.getElementById("demo").innerHTML = "You selected: " + x;
+						}
+						</script>							
+						</td>
+						<td>
+							<a href="{% url 'task' listtask.task.id %}">{{ listtask.task.id }}</a>
+						</td>
+						<td>
+							<form id="delete_task" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
+				    			{% csrf_token %}
+				    			{{ form.as_p }}
+				    			<input name='delete_task' value="{{ listtask.task.id }}" type="hidden">
+								<button type="submit" class="btn btn-sm text-secondary">
+								    <i class="fa fa-trash-o"></i>
+								</button>
+							</form>
+						</td>
+					</tr>
+				</table>
+			</td>
+			<td class="col text-center">&#x2193;{{ listtask.order|ordinal }}</td>
+			<td class="col px-0 py-0 table-borderless bg-light">
+				<table class="table my-0">
+				{% with comptask=listtask.task.id  %}
+					{% for comp in task_component %}					
+						{% if comp.task_id == comptask %}
+							{% if comp.product.name %}
+					<tr>
+						<td class="col-sm-4 bg-white border-end align-middle">
+							{{ comp.product.id }} {{ comp.product.name }}
+						</td>
+						<td class="col-sm-2 bg-white text-center border-end">
+						{% if comp.task_id == comptask %}							
+							{% if comp.product.mass %}
+								{{ comp.product.mass|floatformat:0|intcomma }} g
+							{% endif %}							
+						{% endif %}
+						</td>
+						<td class="col-sm-2 bg-white text-center border-end">
+						{% if comp.task_id == comptask %}							
+							{% if comp.product.volume %}
+								{% if comp.product.volume < 100 %}
+									{{ comp.product.volume|floatformat:0|intcomma }} ml
+								{% else %}
+									{% if comp.product.volume < 1000 %}
+										{% with numerator=comp.product.volume denominator=100 %}
+											{{ numerator|div:denominator|floatformat:1 }} dl
+										{% endwith %}
+									{% else %}
+										{% with numerator=comp.product.volume denominator=1000 %}
+											{{ numerator|div:denominator|floatformat:1 }} l
+										{% endwith %}
+									{% endif %}
+								{% endif %}
+							{% endif %}
+						{% endif %}							
+						</td>
+						<td class="col-sm-2 bg-white text-center border-end">
+						{% if comp.task_id == comptask %}							
+							{% if comp.product.quantity %}
+								{{ comp.product.quantity|floatformat:2|intcomma }} pcs
+							{% endif %}			
+						{% endif %}
+						</td>
+						<td class="col-sm-1 align-middle border-end px-0 text-center">
+							<a href="{% url 'edit_ingredient' comp.id cats %}"><p class="text-secondary my-0"><i class="fas fa-edit"></i></p></a>
+						</td>						
+						<td class="col-sm-1 align-middle text-center px-0">
+							<form id="delete_ingredient_form" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
+				    			{% csrf_token %}
+				    			{{ form.as_p }}
+								<input name='delete_component' value="{{ comp.id }}" type="hidden">
+								<input name='delete_ingredient' value="{{ comp.product_id }}" type="hidden">								
+								<input name='delete_from_task' value="{{ listtask.task.id }}" type="hidden">
+								{% for c in end_product_usage_list %}
+									{% if c.used_in_task_id == listtask.task.id and c.end_product_id == comp.product_id %}
+								<input name='remove_from_ep_usage' value="yes" type="hidden">
+									{% endif %}
+								{% endfor %}
+								<button type="submit" class="btn btn-sm text-secondary">
+								    <i class="fa fa-trash-o"></i>
+								</button>
+							</form>
+						</td>							
+							{% endif %}
+						{% endif %}	
+					{% endfor %}
+					<tr class="">
+						<td colspan="6" class="border-0">
+							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_product_2' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
+							</td>
+						</tr>
+				{% endwith %}
+				</table>
+			</td>
+			<td scope="col" class="px-0 py-0 bg-light">
+				<table class="table">
+				{% with comptask=listtask.task.id  %}
+					{% for comp in task_component %}
+						{% if comp.task_id == comptask %}							
+							{% if comp.tool.name %}
+					<tr class="">						
+						<td class="col-sm-4 bg-white border-end">
+							{{ comp.tool.name }}
+						</td>
+						<td class="col-sm-2 bg-white text-center border-end">
+							{% if comp.task_id == comptask %}							
+								{% if comp.tool.name %}
+									{% if comp.setting_1 %}
+										{{ comp.setting_1 }}
+									{% endif %}
+								{% endif %}			
+							{% endif %}
+						</td>
+						<td class="col-sm-2 bg-white text-center border-end">
+							{% if comp.task_id == comptask %}							
+								{% if comp.tool.name %}
+									{% if comp.time %}
+										{{ comp.time }} s
+									{% endif %}
+								{% endif %}			
+							{% endif %}
+						</td>
+						<td class="col-sm-2 align-middle border-end px-0 mx-0 text-center">
+							<a href="{% url 'edit_task_tool' comp.id cats %}"><p class="button text-secondary px-0 mx-0 py-0 my-0"><i class="fas fa-edit"></i></p></a>
+						</td>						
+						<td class="col-sm-2 text-center px-0 mx-0 align-middle">
+							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="button text-secondary py-0 my-0"><i class="fa fa-trash-o"></i></p></a>							
+						</td>						
+								{% else %}
+							{% endif %}
+						{% endif %}
+					{% endfor %}
+					</tr>
+					<tr>
+						<td colspan="5" class="border-0">
+							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_task_tool' cats listtask.task.id %}'"><i class="fa-solid fa-plus"></i></button></p>
+							</td>
+						</tr>					
+				{% endwith %}
+				</table>
+			</td>         
+			<td class="col px-0 py-0 table-borderless bg-light">
+				<table class="table">
+				{% with comptask=listtask.task.id  %}
+					{% for comp in task_component %}
+						{% if comp.task_id == comptask %}							
+							{% if comp.text %}
+					<tr>
+						<td class="bg-white border-end">
+							{{ comp.text }}
+						</td>
+						<td class="col-sm-1 align-middle border-end">
+							<a href="{% url 'task_component_edit' comp.id cats %}"><p class="my-0 text-secondary"><i class="fas fa-edit"></i></p></a>
+						</td>						
+						<td class="col-sm-1 text-center align-middle">
+							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="my-0 text-secondary"><i class="fa fa-trash-o"></i></p></a>							
+						</td>			
+					</tr>
+								{% else %}
+							{% endif %}
+						{% endif %}
+					{% endfor %}
+					<tr>
+						<td colspan = 3 class="border-0 text-center">
+							<p class="text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_instruction' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
+							</td>
+						</tr>							
+				{% endwith %}		
+						</td>
+					</tr>
+				</table>
+			</td>   
+			<td class="col py-0 px-0 table-borderless bg-light">
+				<table class="table">
+				{% with comptask=listtask.task.id  %}
+					{% for comp in task_component %}
+						{% if comp.task_id == comptask %}
+							{% if comp.end_product.name %}
+					<tr>
+						<td class="col-sm-5 mx-0 py-0">
+							<table class="table-borderless ">
+								<tr>
+									<td class="col-11 py-2 bg-white border-end">{{ comp.task_id }} - {{ comp.end_product.id }} {{ comp.end_product.name }}</td>
+									<td class="col-1 ps-2 text-center">
+	    							<!-- Is the EP from this task already in use? -->
+							      {% for b in end_product_available %}
+						      		{% if b.task_id == comp.task_id and b.end_product_id == comp.end_product.id %}
+						      			<button class="btn btn-link text-secondary" form="ep_form" name='inherit_ep' value="task_component_id: {{ comp.id }}, task_list_match_id: {{ listtask.id }}, end_product_id: {{ comp.end_product.id }}, added_from_task_id: {{ comp.task_id }} ">
+													<i class="fa-solid fa-arrow-down"></i>
+						      			</button>
+						      		{% endif %}
+						      	{% endfor %}
+									</td>
+								</tr>
+							</table>
+						</td>
+					</tr>
+							{% endif %}
+						{% endif %}
+					{% endfor %}
+				{% endwith %}	
+				</table>
+			</td>
+		</tr>
+		{% endfor %}
+		<tr class="border-0">
+			<td class="border-0 text-center">
+				<form id="task" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
+	    			{% csrf_token %}
+	    			{{ form.as_p }}
+	    			<input name='add_task' value="add" type="hidden">
+						<button type="submit" class="btn btn-outline-secondary btn-lg btn-block">
+					    <i class="fa-solid fa-plus"></i>
+					</button>
+				</form>
+			</td>
+			<td colspan=5 class="border-0"></td>
+		</tr>
+	</tbody>
+</table>
+
+{% for listtask in task_list_match %}
+
+{% endfor %}
+
+
+
+{% endblock %}

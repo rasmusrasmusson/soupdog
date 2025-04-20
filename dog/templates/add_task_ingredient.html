@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block title %} Add ingredient {% endblock %}
+{% block content %}
+	<h1>Add ingredient to task</h1>
+{% if user.is_authenticated %}
+
+The task field should not appear here. Write the name of the task. <br><br>
+The name of the task is (not working): <br>
+The task id (PK) is: {{ task_id }} 
+
+	<div class="form-group" >
+	  <form  method="POST" enctype="multipart/form-data">
+	    {% csrf_token %}
+	    {{ form.as_p }}
+	    <button type="submit" class="btn btn-secondary">Add</button>
+	  </form>
+
+	</div>
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

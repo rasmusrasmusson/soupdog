@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %} {{ product.pk }} {{ product.name }} {% endblock %}
+{% block content %}
+
+<div class="row d-flex align-items-center">
+  {% if user.is_authenticated %}
+  <div class="box col-md-1">
+    <form name="Add program" method="post" action="{% url 'add_program' product.pk %}">
+      {% csrf_token %}
+      <input type="submit" class="mt-2 btn btn-outline-dark btn-sm btn-block" value="Add program" />
+    </form>
+  </div>
+  {% endif %}
+  <div class="box col-md-1 mb-2">
+    {% if user.is_authenticated %}
+    <small><a href="{% url 'edit_product' product.pk %}">Edit product</a></small>
+    {% endif %}<br>
+  </div>
+</div>
+
+<b>{{ product.pk }} {{ product.name }}</b><br>
+{{ product.description }}<br>
+Created date: {{ product.create_date }} <br>
+Last updated: {{ product.edit_date }}<br><br>
+
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link active" aria-current="page" href="#">Basics</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Details</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Groups</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Ingredients</a>
+  </li>
+  <li class="nav-item">
+   
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">History</a>
+  </li>     
+</ul>
+
+
+<h4>Media</h4>
+{% if product.product_image %}
+	<img src="{{ product.product_image.url }}" width="100 px"><br><br>
+{% endif %}
+
+<h3>Definition</h3>
+<h5>Surface temperature</h5>
+{{ product.surface_temp }}
+<h5>Core temperature</h5>
+{{ product.core_temp }}
+<h5>Mass</h5>
+{{ product.mass }}
+<h5>Volume</h5>
+{{ product.volume }}
+<h5>Quantity</h5>
+{{ product.quantity }}
+
+<h3>Identifiers</h3>
+<h5>Barcode</h5>
+{{ product.barcode }}
+
+
+
+
+{% endblock %}

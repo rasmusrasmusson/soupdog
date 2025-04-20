@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %} Delete Task Choice {% endblock %}
+{% block content %}
+
+<h2>Delete task?</h2>
+Records: {{ task_count }} <br><br>
+<button type="button" class="btn btn-dark btn-sm" onclick="document.location='{% url 'delete_task_from_list' tasklistmatch tasklist %}'">Remove task from list</button> 
+<br><br>
+
+<button type="button" class="btn btn-dark btn-sm" onclick="document.location='{% url 'delete_task_tasklistmatch' tasklistmatch tasklist task %}'">Remove and Delete task</button><br><br>
+<button type="button" class="btn btn-primary btn-sm" onclick="document.location=''">Cancel</button><br>
+
+Task: {{ task }}<br>
+Tasklistmatch: {{ tasklistmatch }}<br>
+Tasklist: {{ tasklist }} <br>
+
+
+{% endblock %}

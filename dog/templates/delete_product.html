@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %} Delete product {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Delete product: {{ product.pk }} {{ product.name }}</h1>
+
+	<div class="form-group">
+	  <form method="POST">
+	    {% csrf_token %}
+	    <button class="btn btn-secondary" >Delete product</button>
+
+	</div>
+
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

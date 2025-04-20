@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %} Edit Ingredient{% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+<h1>Edit ingredient</h1>
+Task: {{ task }}<br>
+Tasklist: {{ tasklist }}<br>
+	<div class="form-group">
+	  <form method="POST" class="row" method="POST" action="{% url 'edit_ingredient_check' component tasklist %}" >
+		<div class="col ">
+			<div class="row">
+				<div class="col">
+					<label for="product_name" class="form-label">Name</label>
+					<input type="text" class="form-control" name="product_name" aria-describedby="nameHelp" value="{% if ingredient.name %} {{ ingredient.name }} {% endif %}">
+					<div id="nameHelp" class="form-text">Enter a name in English.</div>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col">
+					<label for="description" class="form-label">Description</label>
+					<textarea class="form-control" name="description" rows="3" aria-describedby="descriptionHelp">{% if ingredient.description %}{{ ingredient.description }}{% endif %}</textarea>
+
+					<div id="descriptionHelp" class="form-text">Write a description.</div>
+				</div>
+			</div>
+		</div>
+		<div class="col">
+			<div class="row">
+				<div class="col">
+					<label for="mass" class="form-label">Mass</label>
+					<input type="text" class="form-control" name="mass" aria-describedby="massHelp" value="{% if ingredient.mass %}{{ ingredient.mass }}{% endif %}">
+					<div id="massHelp" class="form-text">The mass (weight) in gram.</div>
+				</div>
+			</div>
+			<div class="row">
+				<div class="col">				
+					<label for="volume" class="form-label">Volume</label>
+					<input type="text" class="form-control" name="volume" aria-describedby="volumeHelp" value="{% if ingredient.volume %}{{ ingredient.volume }}{% endif %}">
+					<div id="volumeHelp" class="form-text">The volume in ml.</div>
+				</div>					
+			</div>
+			<div class="row">
+				<div class="col">				
+					<label for="quantity" class="form-label">Quantity</label>
+					<input type="text" class="form-control" name="quantity" aria-describedby="quantityHelp" value="{% if ingredient.quantity %}{{ ingredient.quantity }}{% endif %}">
+					<div id="quantityHelp" class="form-text">The quantity in pieces.</div>
+				</div>
+			</div>
+	  	<button class="btn btn-outline-secondary" type="submit">Update</button>
+	    {% csrf_token %}
+	  </form>
+	</div>
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %} Add tool {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Add tool</h1>
+
+	<div class="form-group">
+		<form id="newTool" action="{% url 'add_task_tool' task tasklist %}" method="POST" enctype="multipart/form-data">
+		    {% csrf_token %}
+			<input name="name" type="text" placeholder="Tool name, e.g. Knife or Oven"><br>
+			<textarea name="description" rows="3" cols="50" placeholder="Describe the tool or equipment."></textarea><br>
+			<input class="form-control" type="file" name="image_upload" id="formFile"><br><br><br>
+		<div class="fileinput fileinput-new" data-provides="fileinput">
+		  <div class="fileinput-preview thumbnail" data-trigger="fileinput" style="width: 200px; height: 150px;"></div>
+		  <div>
+		    <span class="btn btn-default btn-file"><span class="fileinput-new">Select image</span><span class="fileinput-exists">Change</span><input type="file" name="..."></span>
+		    <a href="#" class="btn btn-default fileinput-exists" data-dismiss="fileinput">Remove</a>
+		  </div>
+		</div>
+	    	<button class="btn btn-secondary" name="newTool">Add</button>
+	  </form>
+	</div>
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

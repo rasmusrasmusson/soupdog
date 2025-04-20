@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %} Product Match {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Product Match</h1>
+New product: {{ new_product }}<br>
+Add to task: {{ add_to_task }}<br>
+Product Object: {{ product_object }}<br>
+product_object_id: {{ product_object_id }}<br>
+
+object id :{{ product_object_id.id }}<br>
+product id: {{ product_object_id.id}}<br>
+
+<br>
+NEW TASK: {{ new_task }}
+<h2>Product</h2>
+{% if product %}
+	{% for product in product %}
+		<b>ID: {{ product.id }}</b><br>
+		Name: {{ product.name }}<br>
+		Description: {{ product.description }}<br>	
+		Mass: {{ product.mass }}<br>
+		Volume: {{ product.volume }}<br>
+		Quantity: {{ product.quantity }}<br>
+		Template: {{ product.template }}<br><br>
+	{% endfor %}
+{% else %}
+	No result
+{% endif %}
+
+
+<a class="nav-link" href="{% url 'task_list_match_view' tasklist %}">Continue</a>
+
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

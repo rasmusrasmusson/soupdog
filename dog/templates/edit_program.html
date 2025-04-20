@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %} Edit program {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Edit product</h1>
+{% if user.id == product.author.id %}
+You created this product.
+{% else %}
+You did not create this product.
+{% endif %}
+
+<b>{{ product.pk }} {{ product.name }}</b><br>
+{{ product.description }}<br>
+Created date: {{ product.create_date }} <br>
+Last updated: {{ product.edit_date }}<br>
+<br><br>
+
+
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link " aria-current="page" href="#">Basics</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Details</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Groups</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Ingredients</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="#">Program</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">History</a>
+  </li>     
+</ul>
+
+
+	<div class="form-group">
+	  <form method="POST" enctype="multipart/form-data">
+	    {% csrf_token %}
+	    {{ form.as_p }}
+	    <button class="btn btn-secondary" >Update</button>
+	</div>
+
+
+{% else %}
+Login to access this page.<br> 
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

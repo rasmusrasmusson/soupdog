@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block title %} Add program {% endblock %}
+{% block content %}
+
+<h4>Create a new product and add</h4>
+<a class="nav-link mt-2" href="{% url 'add_product'  %}"><button class="btn btn-secondary">Create new product </button></a><br><br>
+
+<h4>Add an existing product</h4>
+{% for product in object_list %} 
+<ul>
+  <li>{{ product.pk }} {{ product.name }}</li>
+</ul>
+
+{% endfor %}
+
+{% endblock %}

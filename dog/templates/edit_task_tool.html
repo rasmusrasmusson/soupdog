@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %} Edit Task Tool {% endblock %}
+{% block content %}
+
+<h2>Edit Task Tool</h2>
+
+
+<form method="POST">
+  {% csrf_token %}
+  {{form}}
+  <input type="submit" name ="Submit">
+</form>
+
+{% endblock %}

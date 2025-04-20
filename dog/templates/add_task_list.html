@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %} Add task list{% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Add task list</h1>
+
+	<div class="form-group">
+	  <form id="task" action="" method="POST" enctype="multipart/form-data">
+	    {% csrf_token %}
+	    {{ form.as_p }}
+	    <input type='Submit' value="submit" class="btn btn-secondary">
+	    
+	  </form>
+	</div>
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

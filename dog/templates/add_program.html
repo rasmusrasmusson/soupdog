@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %} Add program {% endblock %}
+{% block content %}
+
+<b>{{ product_id }} {{ product_name }}</b>
+
+<ul class="nav nav-tabs">
+  <li class="nav-item">
+    <a class="nav-link " aria-current="page" href="{% url 'product' product_id %}">Basics</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Details</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Groups</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">Ingredients</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link active" href="">Program</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link" href="#">History</a>
+  </li>     
+</ul>
+
+{% if user.is_authenticated %}
+	<div class="form-group">
+	  <form method="POST" enctype="multipart/form-data">
+	    {% csrf_token %}
+	    {{ form.as_p }}
+	    <button class="btn btn-secondary" >Add program</button>
+	  </form>
+	</div>
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+
+
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends 'base.html' %}
+{% block title %} Delete Task Ingredient {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+	<h1>Delete {{ taskingredient.name }}</h1>
+
+	<div class="form-group">
+	  <form method="POST">
+	    {% csrf_token %}
+	    <strong>Confirm that you want to delete this</strong><br>
+	    <button class="btn btn-secondary" >Delete Task Ingredient</button>
+	  </form>
+	</div>
+
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+{% endblock %}

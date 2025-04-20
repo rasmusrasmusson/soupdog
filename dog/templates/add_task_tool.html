@@ -1,0 +1,86 @@
+{% extends 'base.html' %}
+{% block title %} Soup.Dog - Add Tool {% endblock %}
+{% block content %}
+
+{% if user.is_authenticated %}
+
+	<h1>Add Tool to Task</h1>
+	
+	{% if messages %}
+		{% for message in messages %}
+			<div class="message {% if message.tags %}{{ message.tags }}{% endif %}">
+				{{ message }}
+			</div>
+		{% endfor %}
+	{% endif %}
+
+	<div class="tool-list">
+		{% for tool in all_tools %}
+			<div class="tool-card" onclick="document.getElementById('form-{{ tool.id }}').submit()">
+				<h3>{{ tool.name }}</h3>
+				<p>{{ tool.description|truncatechars:100 }}</p>
+				{% if tool.image1 %}
+					<img src="{{ tool.image1.url }}" alt="{{ tool.name }}">
+				{% endif %}
+				<form id="form-{{ tool.id }}" method="post" action="{% url 'add_task_tool' tasklist=tasklist.id task=task.id %}">
+					{% csrf_token %}
+					<input type="hidden" name="tool_id" value="{{ tool.id }}">
+					<input type="hidden" name="select_tool" value="1">
+				</form>
+
+				<a href="{% url 'edit_tool' task=task.id tasklist=tasklist.id tool=tool.id %}" class="action-btn">Edit Tool</a>
+
+			</div>
+		{% empty %}
+			<p>No tools available.</p>
+		{% endfor %}
+	</div>
+   
+
+{% else %}
+Login to access this page. <br>
+<a class="nav-link" href="{% url 'login' %}">Login</a>
+{% endif %}
+
+
+    <script>
+        // Initialize the category hierarchy when editing a tool
+        document.addEventListener('DOMContentLoaded', function() {
+            {% if selected_tool %}
+            const kitchenTools = JSON.parse('{{ kitchen_tools|escapejs }}');
+            const initialCategories = {{ selected_tool.categories.all|safe|default:"[]" }};
+            
+            const selectedCategories = new Set(initialCategories);
+            const container = document.getElementById('categories-container');
+            
+            function createCategoryButton(categoryData, parentElement) {
+                // Your existing createCategoryButton implementation
+            }
+            
+            // Create buttons for each root category
+            kitchenTools.children.forEach(category => {
+                createCategoryButton(category, container);
+            });
+            {% endif %}
+            
+            // Image preview functionality
+            const imageInput = document.getElementById('tool-image');
+            if (imageInput) {
+                imageInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            const preview = document.getElementById('image-preview');
+                            preview.src = event.target.result;
+                            preview.style.display = 'block';
+                        }
+                        reader.readAsDataURL(file);
+                    }
+                });
+            }
+        });
+    </script>
+
+
+{% endblock %}

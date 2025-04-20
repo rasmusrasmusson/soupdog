@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}
+{% endblock %}
+{% block content %}
+
+<h3>Task page</h3>
+<button type="button" class="btn btn-dark btn-sm" onclick="document.location='{% url 'edit_task' pk %}'">Edit</button><br>
+
+Task id: {{ pk }}<br>
+
+<h5>Ingredient</h5>
+<table class="table table-hover">
+    <tr>
+      <td>
+
+      </td>
+    </tr>
+</table>
+<h5>Components</h5>
+<table class="table">
+	<thead class="table-dark">
+		<tr>
+      <td scope="col">(Id)</td>			
+      <td scope="col">(Order)</td>
+      <td scope="col">Ingredient</td>      
+      <td scope="col">Mass</td>
+      <td scope="col">Volume</td>
+      <td scope="col">Tool</td>
+      <td scope="col">(Setting_1)</td>
+      <td scope="col">(Setting_2)</td>
+      <td scope="col">(Time)</td>
+      <td scope="col">Text</td>
+		</tr>
+	</thead>
+	<tbody>
+  {% for comp in task_component %}
+    <tr>
+      <td scope="col"><a class="" href="{% url 'task_component' comp.id %}">{{ comp.id }}</a></td>
+      <td scope="col">
+        {% if comp.order %}
+          {{ comp.order }}
+        {% endif %}
+      </td>      
+      <td scope="col">
+        {% if comp.product %}
+          {{ comp.product }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.product.mass %}
+          {{ comp.product.mass }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.product.volume %}
+          {{ comp.product.volume }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.tool %}
+          {{ comp.tool }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.setting_1 %}
+          {{ comp.setting_1 }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.setting_2 %}
+          {{ comp.setting_2 }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.time %}
+          {{ comp.time }}
+        {% endif %}
+      </td>
+      <td scope="col">
+        {% if comp.text %}
+          {{ comp.text }}
+        {% endif %}
+      </td>
+
+		</tr>
+  {% endfor %}
+	</tbody>
+</table>
+
+{% endblock %}

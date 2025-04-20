@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %} Edit task {% endblock %}
+{% block content %}
+
+<h3>Edit task page</h3>
+
+<form method="POST">
+	{% csrf_token %}
+	{{form}}
+	<input type="submit" name ="Submit">
+</form>
+
+Task id: {{ pk }}<br>
+
+<h5>Ingredient</h5>
+<table class="table table-hover">
+    <tr>
+      <td>
+
+      </td>
+    </tr>
+</table>
+
+<h5>Components</h5>
+<small><a href="">Add component</a></small>
+Add later. Will need a separate Add Component to task page (as the other one returns to a tasklist).
+
+<table class="table">
+	<thead class="table-dark">
+		<tr>
+      <td scope="col">(Id)</td>			
+      <td scope="col">(Order)</td>
+      <td scope="col">Ingredient</td>      
+      <td scope="col">Mass</td>
+      <td scope="col">Volume</td>
+      <td scope="col">Tool</td>
+      <td scope="col">(Setting_1)</td>
+      <td scope="col">(Setting_2)</td>
+      <td scope="col">(Time)</td>
+      <td scope="col">Text</td>
+		</tr>
+	</thead>
+	<tbody>
+  
+    <tr>
+      
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.order %}
+            <a class="" href="{% url 'task_component' comp.id %}">{{ comp.id }}</a><hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>   
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.order %}
+            {{ comp.order }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>      
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.product %}
+        <button type="button" class="btn btn-danger btn-sm" onclick="document.location='{% url 'task_component_delete' comp.id pk %}'">X</button>            
+
+            {{ comp.product }}
+            <hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.product.mass %}
+            {{ comp.product.mass }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.product.volume %}
+            {{ comp.product.volume }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.tool %}
+        <button type="button" class="btn btn-danger btn-sm" onclick="document.location='{% url 'task_component_delete' comp.id pk %}'">X</button>
+            {{ comp.tool }}
+            <hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.setting_1 %}
+            {{ comp.setting_1 }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.setting_2 %}
+            {{ comp.setting_2 }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.time %}
+            {{ comp.time }}<hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+      <td scope="col">
+        {% for comp in task_component %}
+          {% if comp.text %}
+        <button type="button" class="btn btn-danger btn-sm" onclick="document.location='{% url 'task_component_delete' comp.id pk %}'">X</button>            
+            {{ comp.text }}
+            <hr style="height: 0.1px">
+          {% endif %}
+        {% endfor %}
+      </td>
+ 
+		</tr>
+
+	</tbody>
+</table>
+
+
+{% endblock %}

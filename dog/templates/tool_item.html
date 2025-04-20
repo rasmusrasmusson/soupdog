@@ -1,0 +1,23 @@
+<li class="tool-item">
+    <div>
+        {% if tool.has_children %}
+            <span class="toggle-children" onclick="toggleChildren(this)">+</span>
+        {% else %}
+            <span class="no-children"></span>
+        {% endif %}
+        
+        <button class="tool-button" onclick="editTool({{ tool.id }})">
+            {{ tool.name }}
+        </button>
+    </div>
+    
+    {% if tool.has_children %}
+        <div class="children-container">
+            <ul class="tool-list">
+                {% for child in tool.children.all %}
+                    {% include "tool_item.html" with tool=child %}
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+</li>
