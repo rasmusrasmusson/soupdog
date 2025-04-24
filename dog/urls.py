@@ -27,8 +27,10 @@ urlpatterns = [
  	path('add_tool/<int:task>/<int:tasklist>', AddToolView, name="add_tool"),
  	#path('tool/edit/<int:task>/<int:tasklist>/<int:tool>', EditToolView, name="edit_tool"),
 	#path('tool/edit/<int:task>/<int:tasklist>/<int:tool>/', EditToolView.as_view(), name='edit_tool'),
+	#path('edit-tool/<int:task>/<int:tasklist>/<int:tool>/', EditToolView.as_view(), name='edit_tool'),
+	path('edit-tool/<int:task>/<int:tasklist>/', EditToolView.as_view(), name='edit_tool'),
 	path('edit-tool/<int:task>/<int:tasklist>/<int:tool>/', EditToolView.as_view(), name='edit_tool'),
-	
+	#path('tool/<int:tool_id>/delete', views.delete_tool, name='delete_tool'),
 
 	path('tool/<int:pk>/delete', DeleteToolView.as_view(), name="delete_tool"),
 	

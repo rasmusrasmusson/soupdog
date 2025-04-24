@@ -26,183 +26,10 @@
 }
 
 * Category Selection Styles */
-#categories-container {
-    background: #f8f9fa;
-    padding: 15px;
-    border-radius: 4px;
-    margin-bottom: 20px;
-}
+<style>
 
-.category-button {
-    display: block;
-    width: 100%;
-    padding: 8px 12px;
-    margin-bottom: 5px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    text-align: left;
-    cursor: pointer;
-    transition: all 0.2s;
-}
 
-.category-button:hover {
-    background: #e9ecef;
-}
 
-.category-button.selected {
-    background: #007bff;
-    color: white;
-    border-color: #007bff;
-}
-
-.children-container {
-    margin-left: 20px;
-    margin-top: 5px;
-}
-
-#selected-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-#selected-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    margin-bottom: 5px;
-}
-
-.remove-category {
-    background: none;
-    border: none;
-    color: #dc3545;
-    cursor: pointer;
-    font-size: 1.2em;
-    line-height: 1;
-    padding: 0 5px;
-}
-
-.no-items {
-    color: #6c757d;
-    font-style: italic;
-}
-
-        .main-container {
-            display: flex;
-            gap: 30px;
-            margin-top: 20px;
-        }
-        
-        .form-column {
-            flex: 1;
-            max-width: 400px;
-        }
-        
-        .categories-column {
-            flex: 1;
-            max-width: 350px;
-        }
-        
-        .category-button {
-            display: flex;
-            align-items: center;
-            width: 100%;
-            padding: 10px 15px;
-            margin: 5px 0;
-            text-align: left;
-            background-color: white;
-            color: black;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            cursor: pointer;
-            position: relative;
-            transition: all 0.3s ease;
-        }
-        
-        .category-button:hover {
-            background-color: #f0f0f0;
-        }
-        
-        .category-button.has-children::after {
-            content: "▶";
-            position: absolute;
-            right: 10px;
-            transition: transform 0.3s ease;
-        }
-        
-        .category-button.open {
-            background-color: black;
-            color: white;
-        }
-        
-        .category-button.open.has-children::after {
-            transform: rotate(90deg);
-        }
-        
-        .children-container {
-            margin-left: 20px;
-            display: none;
-        }
-        
-        .children-container.show {
-            display: block;
-        }
-        
-        .checkbox {
-            margin-right: 10px;
-        }
-        
-        #selected-categories {
-            padding: 15px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background-color: #f9f9f9;
-            margin-top: 20px;
-        }
-        
-        #selected-categories h3 {
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
-        
-        #selected-list {
-            list-style-type: none;
-            padding-left: 0;
-            max-height: 200px;
-            overflow-y: auto;
-        }
-        
-        #selected-list li {
-            padding: 8px 0;
-            border-bottom: 1px solid #eee;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        #selected-list li:last-child {
-            border-bottom: none;
-        }
-        
-        .delete-btn {
-            background: none;
-            border: none;
-            color: #ff4444;
-            cursor: pointer;
-            font-size: 16px;
-            padding: 0 5px;
-        }
-        
-        .delete-btn:hover {
-            color: #cc0000;
-        }
-        
         .button-container {
             display: flex;
             gap: 10px;
@@ -211,7 +38,7 @@
         
         button.action-btn {
             padding: 8px 16px;
-            background-color: #4CAF50;
+           
             color: white;
             border: none;
             border-radius: 4px;
@@ -219,7 +46,7 @@
         }
         
         button.action-btn:hover {
-            background-color: #45a049;
+            
         }
         
         .no-items {
@@ -283,7 +110,7 @@
         }
         .action-btn {
             padding: 8px 16px;
-            background-color: #4CAF50;
+           
             color: white;
             border: none;
             border-radius: 4px;
@@ -379,12 +206,12 @@
 
 <nav class="navbar fixed-top navbar-expand-lg bg-black">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#"><img src="{% static 'images/Soup dog logotype.svg' %}" height="40vt"></a>
+    <a class="navbar-brand d-flex align-items-center" href="#"><img src="{% static 'images/Soup dog logotype.svg' %}" height="40vt"></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
     <div class="collapse navbar-collapse" id="navbarNavDropdown">
-      <ul class="navbar-nav">
+      <ul class="navbar-nav d-flex align-items-center">
         <li class="nav-item">
           <a class="nav-link active text-white" aria-current="page" href="{% url 'home' %}">Home</a>
         </li>
@@ -402,7 +229,7 @@
           <a class="nav-link text-white" href="{% url 'edit_profile' %}">Edit profile</a>
         </li>        
         <li class="nav-item">
-          <form id="logout" method="post" action="{% url 'logout' %}">
+          <form id="logout" method="post" action="{% url 'logout' %}" class="m-0 p-0 d-inline">
             {% csrf_token %}
             <a class="nav-link text-white" href="javascript:{}" onclick="document.getElementById('logout').submit(); return false;">Logout</a>
           </form>

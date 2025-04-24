@@ -1,14 +1,20 @@
 import json
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.views.generic.detail import SingleObjectMixin
 from django.contrib import messages
+from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password
 from .models import Product, Group, Program, Task, TaskIngredient, TaskList, TaskListMatch, TaskComponent, Tools, EndProductUsage, ToolCategory
+from django.db.models import Q
 from .forms import ProductForm, EditProductForm, GroupForm, EditGroupForm, ProgramForm, EditProgramForm, TaskForm, EditTaskForm, AddTaskIngredientForm, TaskListForm, AddExistingTaskForm, AddTaskComponentForm, EditTaskComponentForm, ToolForm, EditToolForm, AddIngredientForm, AddToolForm, AddInstructionForm, EditTaskToolForm, EpForm
 from django.urls import reverse_lazy, reverse
 from django.http import HttpResponseRedirect
 from django.forms import inlineformset_factory
+import secrets
+import string
 
 #def home(request):
 #	return render(request, 'home.html', {})
@@ -179,14 +185,25 @@ def AddToolView(request, task, tasklist):
 
 	return render(request, 'add_tool.html', {'tasklist': tasklist, 'task': task})
 
+def generate_api_key(length=32):
+	alphabet = string.ascii_letters + string.digits
+	return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
 class EditToolView(View):
-	def get(self, request, task, tasklist, tool):
+	def get(self, request, task, tasklist, tool=None):
 		try:
-			tool_obj = get_object_or_404(Tools, id=tool)
+			if tool:  # Edit mode
+				tool_obj = get_object_or_404(Tools, id=tool)
+				edit_mode = True
+			else:  # Add mode
+				tool_obj = None
+				edit_mode = False
+
 			task_obj = get_object_or_404(Task, id=task)
 			tasklist_obj = get_object_or_404(TaskList, id=tasklist)
 
-			# Get all categories and build a proper hierarchy
+			# Get all categories and build hierarchy
 			all_categories = ToolCategory.objects.all().select_related('parent').prefetch_related('children')
 			
 			def build_hierarchy(categories, parent=None):
@@ -201,31 +218,104 @@ class EditToolView(View):
 						hierarchy.append(node)
 				return hierarchy
 
-			# Build complete hierarchy
 			full_hierarchy = build_hierarchy(all_categories)
-			
-			# Debug output
-			print("Hierarchy structure:", json.dumps(full_hierarchy, indent=2))
 			
 			return render(request, 'edit_tool.html', {
 				'tool': tool_obj,
 				'task': task_obj,
 				'tasklist': tasklist_obj,
+				'edit_mode': edit_mode,
 				'kitchen_tools': json.dumps({
 					'name': 'Kitchen Tools',
 					'children': full_hierarchy
 				}),
-				'initial_categories': list(tool_obj.categories.values_list('name', flat=True)),
-				'has_image': bool(tool_obj.image1)
+				'initial_categories': list(tool_obj.categories.values_list('id', flat=True)) if tool_obj else [],
+				'has_image': bool(tool_obj.image1) if tool_obj else False
 			})
 			
 		except Exception as e:
 			messages.error(request, f"Error loading tool: {str(e)}")
 			return redirect('add_task_tool', tasklist=tasklist, task=task)
 
+	def post(self, request, task, tasklist, tool=None):
+		try:
+			if tool:  # Edit mode
+				tool_obj = get_object_or_404(Tools, id=tool)
+			else:  # Add mode
+				tool_obj = Tools()
+				tool_obj.author_id = request.user  # Assign User instance to author_id field
+
+			# Handle immediate image upload/delete without full form submission
+			if 'upload_only' in request.POST:
+				if 'image1' in request.FILES:
+					tool_obj.image1 = request.FILES['image1']
+					tool_obj.save()
+					return JsonResponse({
+						'success': True,
+						'image_url': tool_obj.image1.url
+					})
+				elif 'delete_image' in request.POST:
+					if tool_obj and tool_obj.image1:
+						tool_obj.image1.delete()
+						tool_obj.image1 = None
+						tool_obj.save()
+						return JsonResponse({'success': True})
+					return JsonResponse({'success': False, 'error': 'No image to delete'})
+				return JsonResponse({'success': False, 'error': 'Invalid request'})
+			
+			# Handle delete action
+			if 'delete_tool' in request.POST:
+				tool_obj.delete()
+				messages.success(request, 'Tool deleted successfully!')
+				return redirect('add_task_tool', tasklist=tasklist, task=task)
+			
+			# Update basic fields
+			tool_obj.name = request.POST.get('name')
+			tool_obj.description = request.POST.get('description')
+			
+			# Handle image upload from form submission
+			if 'image1' in request.FILES:
+				tool_obj.image1 = request.FILES['image1']
+			elif 'delete_image' in request.POST:
+				tool_obj.image1.delete()
+			
+			tool_obj.save()
+			
+			# Update categories
+			selected_category_ids = request.POST.get('categories', '').split(',')
+			if selected_category_ids != ['']:  # Only update if categories were selected
+				current_categories = set(tool_obj.categories.values_list('id', flat=True))
+				new_categories = set(map(int, filter(None, selected_category_ids)))
+				
+				# Remove deselected categories
+				for cat_id in current_categories - new_categories:
+					tool_obj.categories.remove(cat_id)
+				
+				# Add new categories
+				for cat_id in new_categories - current_categories:
+					tool_obj.categories.add(cat_id)
+			
+			messages.success(request, f'Tool {"updated" if tool else "created"} successfully!')
+			return redirect('add_task_tool', tasklist=tasklist, task=task)
+			
+		except Exception as e:
+			messages.error(request, f'Error {"updating" if tool else "creating"} tool: {str(e)}')
+			return redirect('edit_tool', task=task, tasklist=tasklist, tool=tool) if tool else redirect('edit_tool', task=task, tasklist=tasklist)
+			
 class AddTaskTool(View):
 	def get(self, request, tasklist, task):
-		all_tools = Tools.objects.all()
+		search_query = request.GET.get('q', '')
+		
+		if search_query:
+			# Search in name, description, and categories
+			all_tools = Tools.objects.filter(
+				Q(name__icontains=search_query) |
+				Q(description__icontains=search_query) |
+				Q(categories__name__icontains=search_query)
+			).distinct()
+		else:
+			all_tools = Tools.objects.all()
+		
 		task_obj = get_object_or_404(Task, id=task)
 		tasklist_obj = get_object_or_404(TaskList, id=tasklist)
 

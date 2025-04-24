@@ -4,36 +4,36 @@
 {% load humanize %}
 {% load mathfilters %}
 {% load static %}
+<button class="btn btn-secondary mb-1">API</button>
 <form id="ep_form" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data" style="margin-bottom:0px">
- 				{% csrf_token %}
+ 		{% csrf_token %}
 		{{ form.as_p }}
 		<input name='task_list_id' value="{{ cats }}" type="hidden">
 </form>
-
 <table class="table table-bordered">
 	<thead class="table-dark">
-		<td class="col-sm-1 text-center">#</td>     
-		<td class="col-sm-1 text-center">
+		<td class="col text-center" style="width: 30px">#</td>     
+		<td class="col text-center" style="width: 30px">
 			<img src="{% static 'images/icon_sorting-arrows_white.svg' %}" height=22>
 		</td>
-		<td class="col-sm-4" class="">
-    	<table class="my-0 w-100">
-				<tr class="table-dark">
-					<td class="col-sm-4 text-center">
-						<img src="{% static 'images/icon_tomatoe_white.svg' %}" height=20>
-						<img src="{% static 'images/icon_milk-bottle_white.svg' %}" height=20>
-						<img src="{% static 'images/icon_eggplant_white.svg' %}" height=20>
-						<img src="{% static 'images/icon_bread_white.svg' %}" height=20>
-					</td>
-					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_scale_white.svg' %}" height=20></td>
-					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_volume_white.svg' %}" height=18></td>
-					<td class="col-sm-2 text-center"><img src="{% static 'images/icon_abacus_white.svg' %}" height=24></td>
-					<td class="col-sm-1 text-center"></td>
-					<td class="col-sm-1 text-center"></td>				
-				</tr>
-    	</table>
+		<td class="col-sm-3" name="ingredients" class="">
+			<table class="my-0 w-100">
+					<tr class="table-dark">
+						<td class="col-sm-4 text-center">
+							<img src="{% static 'images/icon_tomatoe_white.svg' %}" height=20>
+							<img src="{% static 'images/icon_milk-bottle_white.svg' %}" height=20>
+							<img src="{% static 'images/icon_eggplant_white.svg' %}" height=20>
+							<img src="{% static 'images/icon_bread_white.svg' %}" height=20>
+						</td>
+						<td class="col-sm-2 text-center"><img src="{% static 'images/icon_scale_white.svg' %}" height=20></td>
+						<td class="col-sm-2 text-center"><img src="{% static 'images/icon_volume_white.svg' %}" height=18></td>
+						<td class="col-sm-2 text-center"><img src="{% static 'images/icon_abacus_white.svg' %}" height=24></td>
+						<td class="col-sm-1 text-center"></td>
+						<td class="col-sm-1 text-center"></td>				
+					</tr>
+	    	</table>
 		</td>      
-		<td scope="col-sm-3" class="py-0 px-0">
+		<td scope="col-sm-4" class="py-0 px-0" name="tools">
 	      	<table class="table my-0">
 	      		<tr class="table-dark">
 	      			<td class="col-sm-4 text-center align-middle">
@@ -52,23 +52,22 @@
 	      		</tr>
 	      	</table>
 		</td>  
-		<td class="col-sm-2 text-center align-middle">
+		<td class="col-sm-3 text-center align-middle">
 			<img src="{% static 'images/icon_information_white.svg' %}" height=20>
 		</td>
-		<td class="col-sm-1 text-center align-middle">
+		<td class="col-sm-2 text-center align-middle">
 			<img src="{% static 'images/icon_flag-2_white.svg' %}" height=18>
 		</td>
 	</thead>
 	<tbody id="sortable">
-		Tasklist: {{ cats }}<br>
 		{% for listtask in task_list_match %}
 		<tr class="ui-state-default">
 			<td class="col text-center">
 				<table>
 					<tr>
-						<td>
+						<td class="Check task">
 							<div class="form-check">
-  							<input name="used_in_task" id="task_{{ listtask.task.id }}" form="ep_form" class="form-check-input " value="{{ listtask.task.id }}" type="radio" checked onchange="task{{ listtask.task.id }}()" onchange="alert('{{ listtask.task.id }} was checked')">	
+  							<input name="used_in_task" id="task_{{ listtask.task.id }}" form="ep_form" class="form-check-input " value="{{ listtask.task.id }}" type="radio" checked onchange="task{{ listtask.task.id }}()" onchange="alert('{{ listtask.task.id }} was checked')">
 							</div>
 						<script>
 						function task{{ listtask.task.id }}() {
@@ -77,8 +76,8 @@
 						}
 						</script>							
 						</td>
-						<td>
-							<a href="{% url 'task' listtask.task.id %}">{{ listtask.task.id }}</a>
+						<td class="Task id">
+							<a href="{% url 'task' listtask.task.id %}"></a>
 						</td>
 						<td>
 							<form id="delete_task" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
@@ -95,7 +94,7 @@
 			</td>
 			<td class="col text-center">&#x2193;{{ listtask.order|ordinal }}</td>
 			<td class="col px-0 py-0 table-borderless bg-light">
-				<table class="table my-0">
+				<table class="table">
 				{% with comptask=listtask.task.id  %}
 					{% for comp in task_component %}					
 						{% if comp.task_id == comptask %}
@@ -105,10 +104,10 @@
 							{{ comp.product.id }} {{ comp.product.name }}
 						</td>
 						<td class="col-sm-2 bg-white text-center border-end">
-						{% if comp.task_id == comptask %}							
+						{% if comp.task_id == comptask %}
 							{% if comp.product.mass %}
 								{{ comp.product.mass|floatformat:0|intcomma }} g
-							{% endif %}							
+							{% endif %}
 						{% endif %}
 						</td>
 						<td class="col-sm-2 bg-white text-center border-end">
@@ -140,8 +139,8 @@
 						<td class="col-sm-1 align-middle border-end px-0 text-center">
 							<a href="{% url 'edit_ingredient' comp.id cats %}"><p class="text-secondary my-0"><i class="fas fa-edit"></i></p></a>
 						</td>						
-						<td class="col-sm-1 align-middle text-center px-0">
-							<form id="delete_ingredient_form" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
+						<td class="col-sm-1 align-middle text-center px-0 py-0 my-0">
+							<form id="delete_ingredient_form" class="py-0 my-0" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
 				    			{% csrf_token %}
 				    			{{ form.as_p }}
 								<input name='delete_component' value="{{ comp.id }}" type="hidden">
@@ -163,18 +162,18 @@
 					<tr class="">
 						<td colspan="6" class="border-0">
 							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_product_2' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
-							</td>
-						</tr>
+						</td>
+					</tr>
 				{% endwith %}
 				</table>
 			</td>
 			<td scope="col" class="px-0 py-0 bg-light">
-				<table class="table">
+				<table class="table my-0">
 				{% with comptask=listtask.task.id  %}
 					{% for comp in task_component %}
 						{% if comp.task_id == comptask %}							
 							{% if comp.tool.name %}
-					<tr class="">						
+					<tr class="">
 						<td class="col-sm-4 bg-white border-end">
 							{{ comp.tool.name }}
 						</td>
@@ -198,88 +197,90 @@
 						</td>
 						<td class="col-sm-2 align-middle border-end px-0 mx-0 text-center">
 							<a href="{% url 'edit_task_tool' comp.id cats %}"><p class="button text-secondary px-0 mx-0 py-0 my-0"><i class="fas fa-edit"></i></p></a>
-						</td>						
+						</td>
 						<td class="col-sm-2 text-center px-0 mx-0 align-middle">
-							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="button text-secondary py-0 my-0"><i class="fa fa-trash-o"></i></p></a>							
-						</td>						
-								{% else %}
+							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="button text-secondary py-0 my-0"><i class="fa fa-trash-o"></i></p></a>
+						</td>
+					</tr>
 							{% endif %}
 						{% endif %}
 					{% endfor %}
-					</tr>
 					<tr>
 						<td colspan="5" class="border-0">
 							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_task_tool' cats listtask.task.id %}'"><i class="fa-solid fa-plus"></i></button></p>
-							</td>
-						</tr>					
+						</td>
+					</tr>
 				{% endwith %}
 				</table>
-			</td>         
+			</td>
 			<td class="col px-0 py-0 table-borderless bg-light">
-				<table class="table">
+				<table class="table my-0">
 				{% with comptask=listtask.task.id  %}
 					{% for comp in task_component %}
-						{% if comp.task_id == comptask %}							
+						{% if comp.task_id == comptask %}
 							{% if comp.text %}
-					<tr>
-						<td class="bg-white border-end">
+					<tr class="">
+						<td class="col-sm-8 bg-white border-end">
 							{{ comp.text }}
 						</td>
-						<td class="col-sm-1 align-middle border-end">
-							<a href="{% url 'task_component_edit' comp.id cats %}"><p class="my-0 text-secondary"><i class="fas fa-edit"></i></p></a>
-						</td>						
-						<td class="col-sm-1 text-center align-middle">
-							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="my-0 text-secondary"><i class="fa fa-trash-o"></i></p></a>							
-						</td>			
+						<td class="col-sm-2 align-middle border-end px-0 mx-0 text-center">
+							<a href="{% url 'task_component_edit' comp.id cats %}"><p class="button text-secondary px-0 mx-0 py-0 my-0"><i class="fas fa-edit"></i></p></a>
+						</td>
+						<td class="col-sm-2 text-center px-0 mx-0 align-middle">
+							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="button text-secondary py-0 my-0"><i class="fa fa-trash-o"></i></p></a>
+						</td>
 					</tr>
-								{% else %}
 							{% endif %}
 						{% endif %}
 					{% endfor %}
 					<tr>
-						<td colspan = 3 class="border-0 text-center">
-							<p class="text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_instruction' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
-							</td>
-						</tr>							
-				{% endwith %}		
+						<td colspan="5" class="border-0">
+							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_instruction' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
 						</td>
 					</tr>
+				{% endwith %}
 				</table>
-			</td>   
+			</td>
 			<td class="col py-0 px-0 table-borderless bg-light">
 				<table class="table">
 				{% with comptask=listtask.task.id  %}
 					{% for comp in task_component %}
 						{% if comp.task_id == comptask %}
 							{% if comp.end_product.name %}
-					<tr>
-						<td class="col-sm-5 mx-0 py-0">
-							<table class="table-borderless ">
-								<tr>
-									<td class="col-11 py-2 bg-white border-end">{{ comp.task_id }} - {{ comp.end_product.id }} {{ comp.end_product.name }}</td>
-									<td class="col-1 ps-2 text-center">
-	    							<!-- Is the EP from this task already in use? -->
-							      {% for b in end_product_available %}
-						      		{% if b.task_id == comp.task_id and b.end_product_id == comp.end_product.id %}
-						      			<button class="btn btn-link text-secondary" form="ep_form" name='inherit_ep' value="task_component_id: {{ comp.id }}, task_list_match_id: {{ listtask.id }}, end_product_id: {{ comp.end_product.id }}, added_from_task_id: {{ comp.task_id }} ">
-													<i class="fa-solid fa-arrow-down"></i>
-						      			</button>
-						      		{% endif %}
-						      	{% endfor %}
-									</td>
-								</tr>
-							</table>
+					<tr class="">
+						<td class="col-sm-7 bg-white border-end">
+							{{ comp.end_product.id }} {{ comp.end_product.name }}
+						</td>
+						<td class="col-sm-1 bg-white text-center border-end py-1">
+							{% for b in end_product_available %}
+								{% if b.task_id == comp.task_id and b.end_product_id == comp.end_product.id %}
+									<button class="btn btn-link text-secondary" form="ep_form" name='inherit_ep' value="task_component_id: {{ comp.id }}, task_list_match_id: {{ listtask.id }}, end_product_id: {{ comp.end_product.id }}, added_from_task_id: {{ comp.task_id }} ">
+										<i class="fa-solid fa-arrow-down"></i>
+									</button>
+								{% endif %}
+							{% endfor %}
+						</td>
+						<td class="col-sm-2 align-middle border-end px-0 mx-0 text-center">
+							<a href="{% url 'task_component_edit' comp.id cats %}"><p class="button text-secondary px-0 mx-0 py-0 my-0"><i class="fas fa-edit"></i></p></a>
+						</td>
+						<td class="col-sm-2 text-center px-0 mx-0 align-middle">
+							<a href="{% url 'task_component_delete' comp.id cats %}"><p class="button text-secondary py-0 my-0"><i class="fa fa-trash-o"></i></p></a>
 						</td>
 					</tr>
 							{% endif %}
 						{% endif %}
 					{% endfor %}
-				{% endwith %}	
+					<tr>
+						<td colspan="5" class="border-0">
+							<p class="pe-0 text-center my-0"><button type="button" class="btn btn-outline-secondary btn-sm" onclick="document.location='{% url 'add_product_2' listtask.task.id cats %}'"><i class="fa-solid fa-plus"></i></button></p>
+						</td>
+					</tr>
+				{% endwith %}
 				</table>
 			</td>
 		</tr>
 		{% endfor %}
-		<tr class="border-0">
+		<tr class="border-0 py-0 my-0">
 			<td class="border-0 text-center">
 				<form id="task" action="{% url 'task_list_match_view' cats %}" method="POST" enctype="multipart/form-data">
 	    			{% csrf_token %}
@@ -298,7 +299,4 @@
 {% for listtask in task_list_match %}
 
 {% endfor %}
-
-
-
 {% endblock %}

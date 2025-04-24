@@ -1,10 +1,36 @@
 {% extends 'base.html' %}
-{% block title %} Soup.Dog - Add Tool {% endblock %}
+{% block title %} Soup.Dog - Add Tool to Task {% endblock %}
 {% block content %}
-
 {% if user.is_authenticated %}
 
-	<h1>Add Tool to Task</h1>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Add Tool to Task</h1>
+        <a href="{% url 'edit_tool' tasklist=tasklist.id task=task.id %}" 
+           class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Tool
+        </a>
+    </div>
+	
+	<!-- Search Form -->
+	<div class="search-container mb-4">
+		<form id="search-form" method="GET" action="">
+			<div class="input-group">
+				<input type="text" 
+					   class="form-control" 
+					   name="q" 
+					   placeholder="Search tools by name, description or category..." 
+					   value="{{ request.GET.q }}">
+				<button class="btn btn-dark" type="submit">
+					<i class="fas fa-search"></i> Search
+				</button>
+				{% if request.GET.q %}
+				<a href="{% url 'add_task_tool' tasklist=tasklist.id task=task.id %}" class="btn btn-outline-secondary">
+					Clear
+				</a>
+				{% endif %}
+			</div>
+		</form>
+	</div>
 	
 	{% if messages %}
 		{% for message in messages %}
@@ -16,71 +42,197 @@
 
 	<div class="tool-list">
 		{% for tool in all_tools %}
-			<div class="tool-card" onclick="document.getElementById('form-{{ tool.id }}').submit()">
-				<h3>{{ tool.name }}</h3>
-				<p>{{ tool.description|truncatechars:100 }}</p>
-				{% if tool.image1 %}
-					<img src="{{ tool.image1.url }}" alt="{{ tool.name }}">
+			<div class="tool-card">
+				<div class="tool-header">
+					<h3>{{ tool.name }}</h3>
+					<a href="{% url 'edit_tool' task=task.id tasklist=tasklist.id tool=tool.id %}" class="btn-edit">
+						<i class="fas fa-edit"></i>
+					</a>
+				</div>
+				
+				<div class="tool-content">
+					<p>{{ tool.description|truncatechars:100 }}</p>
+					{% if tool.image1 %}
+						<img src="{{ tool.image1.url }}" alt="{{ tool.name }}">
+					{% endif %}
+				</div>
+
+				{% if tool.categories.all %}
+				<div class="tool-categories">
+					<small>{{ tool.categories.all|join:", " }}</small>
+				</div>
 				{% endif %}
-				<form id="form-{{ tool.id }}" method="post" action="{% url 'add_task_tool' tasklist=tasklist.id task=task.id %}">
+
+				<form method="post" action="{% url 'task_list_match_view' tasklist.id %}">
 					{% csrf_token %}
-					<input type="hidden" name="tool_id" value="{{ tool.id }}">
-					<input type="hidden" name="select_tool" value="1">
+					<input type="hidden" name="tool" value="{{ tool.id }}">
+					<input type="hidden" name="task" value="{{ task.id }}">
+					<input type="hidden" name="tasklist" value="{{ tasklist.id }}">
+					<button type="submit" class="btn-select">
+						<i class="fas fa-check"></i> 
+					</button>
 				</form>
-
-				<a href="{% url 'edit_tool' task=task.id tasklist=tasklist.id tool=tool.id %}" class="action-btn">Edit Tool</a>
-
 			</div>
 		{% empty %}
-			<p>No tools available.</p>
+			<p>No tools found matching your search.</p>
 		{% endfor %}
 	</div>
-   
 
 {% else %}
 Login to access this page. <br>
 <a class="nav-link" href="{% url 'login' %}">Login</a>
 {% endif %}
 
+<style>
+	.search-container {
+		max-width: 800px;
+		margin: 0 auto 20px;
+	}
+	
+	.tool-list {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+		gap: 20px;
+		margin-top: 10px;
+	}
 
-    <script>
-        // Initialize the category hierarchy when editing a tool
-        document.addEventListener('DOMContentLoaded', function() {
-            {% if selected_tool %}
-            const kitchenTools = JSON.parse('{{ kitchen_tools|escapejs }}');
-            const initialCategories = {{ selected_tool.categories.all|safe|default:"[]" }};
-            
-            const selectedCategories = new Set(initialCategories);
-            const container = document.getElementById('categories-container');
-            
-            function createCategoryButton(categoryData, parentElement) {
-                // Your existing createCategoryButton implementation
-            }
-            
-            // Create buttons for each root category
-            kitchenTools.children.forEach(category => {
-                createCategoryButton(category, container);
-            });
-            {% endif %}
-            
-            // Image preview functionality
-            const imageInput = document.getElementById('tool-image');
-            if (imageInput) {
-                imageInput.addEventListener('change', function(e) {
-                    const file = e.target.files[0];
-                    if (file) {
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            const preview = document.getElementById('image-preview');
-                            preview.src = event.target.result;
-                            preview.style.display = 'block';
-                        }
-                        reader.readAsDataURL(file);
-                    }
-                });
-            }
-        });
-    </script>
+	.tool-card {
+		border: 1px solid #ddd;
+		border-radius: 8px;
+		padding: 15px;
+		transition: all 0.3s ease;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+	}
 
+	.tool-header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 10px;
+	}
+
+	.tool-card h3 {
+		margin: 0;
+		color: #333;
+		flex-grow: 1;
+	}
+
+	.tool-content {
+		margin-bottom: 10px;
+		flex-grow: 1;
+	}
+
+	.tool-card p {
+		color: #666;
+		margin-bottom: 10px;
+	}
+
+	.tool-card img {
+		width: 100%;
+		height: 150px;
+		object-fit: cover;
+		border-radius: 4px;
+		margin-bottom: 10px;
+	}
+
+	.btn-edit {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 4px;
+		background-color: transparent;
+		color: #6c757d;
+		border: none;
+		transition: all 0.3s ease;
+		margin-left: 10px;
+	}
+
+	.btn-edit:hover {
+		color: #495057;
+		background-color: #f8f9fa;
+	}
+
+	.btn-select {
+		width: 100%;
+		padding: 8px;
+		background-color: #6c757d;
+		color: white;
+		border: none;
+		border-radius: 4px;
+		cursor: pointer;
+		transition: background-color 0.3s;
+		margin-top: auto;
+		margin-bottom: 0px;
+	}
+
+	.btn-select:hover {
+		background-color: #5a6268;
+	}
+
+	.tool-categories {
+		margin-top: 8px;
+		margin-bottom: 14px;
+		padding-top: 8px;
+		border-top: 1px dashed #eee;
+		color: #6c757d;
+		font-size: 0.9em;
+	}
+
+	.message {
+		padding: 10px 15px;
+		margin-bottom: 20px;
+		border-radius: 4px;
+	}
+
+	.message.success {
+		background-color: #d4edda;
+		color: #155724;
+		border: 1px solid #c3e6cb;
+	}
+
+	.message.error {
+		background-color: #f8d7da;
+		color: #721c24;
+		border: 1px solid #f5c6cb;
+	}
+
+	.search-container input:focus {
+		border-color: #000;
+		box-shadow: 0 0 0 0.2rem rgba(0, 0, 0, 0.25);
+	}
+</style>
+
+<script>
+	document.addEventListener('DOMContentLoaded', function() {
+		// Initialize the category hierarchy when editing a tool
+		{% if selected_tool %}
+		const kitchenTools = JSON.parse('{{ kitchen_tools|escapejs }}');
+		const initialCategories = {{ selected_tool.categories.all|safe|default:"[]" }};
+		
+		const selectedCategories = new Set(initialCategories);
+		const container = document.getElementById('categories-container');
+		
+		function createCategoryButton(categoryData, parentElement) {
+			// Your existing createCategoryButton implementation
+		}
+		
+		// Create buttons for each root category
+		kitchenTools.children.forEach(category => {
+			createCategoryButton(category, container);
+		});
+		{% endif %}
+
+		// Focus the search input on page load
+		const searchInput = document.querySelector('input[name="q"]');
+		if (searchInput) {
+			searchInput.focus();
+		}
+	});
+</script>
 
 {% endblock %}

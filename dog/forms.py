@@ -227,9 +227,9 @@ class AddInstructionForm(forms.ModelForm):
 		model = TaskComponent
 		fields = ('task', 'text')
 		widgets = {
-			'task': forms.Select(attrs={'class': 'form-control'}),
-			'text': forms.TextInput(attrs={'class': 'form-control'}),
-		}		
+			'task': forms.HiddenInput(),
+			'text': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+		}
 
 class EditTaskComponentForm(forms.ModelForm):
 	class Meta:
