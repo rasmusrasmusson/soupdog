@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+
+# Environment variables — NEVER commit these
+.env.local
+.env.*.local
+
+# Build outputs
+dist/
+build/
+
+# Editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
