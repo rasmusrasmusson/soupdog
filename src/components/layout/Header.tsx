@@ -1,12 +1,46 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, LogOut, User } from 'lucide-react';
+import { Search, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 const unitOptions = ['Metric', 'Imperial', 'US Customary'];
 const langOptions = ['English', 'Svenska', 'Français', '中文', 'العربية'];
+
+function Avatar({ email }: { email: string }) {
+  const initials = email
+    .split('@')[0]
+    .replace(/[^a-zA-Z]/g, ' ')
+    .trim()
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w[0].toUpperCase())
+    .slice(0, 2)
+    .join('');
+
+  return (
+    <div
+      title={email}
+      style={{
+        width: 28, height: 28,
+        borderRadius: '50%',
+        background: 'var(--accent)',
+        color: '#fff',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: 'var(--font-mono)',
+        fontSize: 10, fontWeight: 600,
+        letterSpacing: '0.05em',
+        flexShrink: 0,
+        cursor: 'default',
+        userSelect: 'none',
+      }}
+    >
+      {initials || '?'}
+    </div>
+  );
+}
+
 
 export function Header() {
   const [unit, setUnit] = useState('Metric');
@@ -54,10 +88,7 @@ export function Header() {
         {!loading && (
           user ? (
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 text-[11px] font-mono text-[var(--muted)]">
-                <User size={12} strokeWidth={1.5} />
-                <span className="max-w-32 truncate">{user.email}</span>
-              </div>
+              <Avatar email={user.email ?? ''} />
               <button
                 onClick={signOut}
                 className="flex items-center gap-1.5 text-[11px] font-mono border border-[var(--border)] px-3 py-1.5 text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
