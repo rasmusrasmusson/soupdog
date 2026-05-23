@@ -1,9 +1,10 @@
 'use client';
 import React, { useState, use } from 'react';
+import { getRecipeBySlug } from '@/lib/recipes';
 import { sampleRecipes } from '@/data/sample-recipes';
 import { formatDuration } from '@/lib/utils';
 import { Bookmark, Printer } from 'lucide-react';
-import type { RecipeStep, RecipeIngredientRef } from '@/types';
+import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -11,18 +12,18 @@ function useChecklist(count: number) {
   return { checked, toggle };
 }
 
-export default function RecipePage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = use(params);
-  const recipe = sampleRecipes.find(r => r.slug === slug);
+const stepType: Record<string, { short: string; cls: string }> = {
+  human:   { short: 'MAN', cls: 'border-[#c5d0fa] bg-[#edf2ff] text-[#3451b2]' },
+  machine: { short: 'MCH', cls: 'border-[#d3c5fa] bg-[#f3f0ff] text-[#5c35b5]' },
+  passive: { short: 'PAS', cls: 'border-[#fde68a] bg-[#fffbeb] text-[#92400e]' },
+};
 
-  const ingChecks  = useChecklist(recipe?.ingredients.length ?? 0);
-  const stepChecks = useChecklist(recipe?.steps.length ?? 0);
-  const [servings, setServings] = useState(recipe?.servings ?? 4);
+// Client component that receives pre-fetched recipe
+function RecipeView({ recipe }: { recipe: Recipe }) {
+  const ingChecks  = useChecklist(recipe.ingredients.length);
+  const stepChecks = useChecklist(recipe.steps.length);
+  const [servings, setServings] = useState(recipe.servings);
 
-
-  if (!recipe) return <div className="p-8 text-[var(--muted)] font-mono text-[12px]">Recipe not found.</div>;
-
-  // Build ingredient lookup map for step rows
   const ingMap = Object.fromEntries(recipe.ingredients.map(i => [i.ingredientId, i]));
 
   // Group steps
@@ -34,24 +35,33 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
     g.steps.push({ ...step, globalIndex: i });
   });
 
+  const B   = '1px solid var(--border)';
+  const MONO = 'var(--font-mono)';
+  const MUT  = 'var(--muted)';
+  const tbl: React.CSSProperties = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
+  const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
+  const td: React.CSSProperties = { padding: '9px 14px', color: 'var(--fg)' };
+
   return (
     <div className="flex h-full">
       <div className="flex-1 min-w-0 overflow-y-auto">
-
-        {/* ── Title + meta ── */}
+        {/* Title + meta */}
         <div className="px-8 pt-6 pb-5 border-b border-[var(--border)]">
           <div className="flex items-start justify-between gap-4 mb-4">
             <h1 className="font-display text-[28px] font-normal leading-tight text-[var(--fg)]">{recipe.title}</h1>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <Btn icon={<Bookmark size={11} strokeWidth={1.5} />} label="Bookmark" />
-              <Btn icon={<Printer size={11} strokeWidth={1.5} />} label="Print" />
+              <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
+                <Bookmark size={11} strokeWidth={1.5} /> Bookmark
+              </button>
+              <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
+                <Printer size={11} strokeWidth={1.5} /> Print
+              </button>
             </div>
           </div>
 
-          {/* Meta strip */}
           <div className="border border-[var(--border)] grid grid-cols-7 text-[11px]">
             {([
-              ['RECIPE ID',   recipe.id.toUpperCase()],
+              ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
               ['YIELD',       `${servings} servings`],
               ['TOTAL TIME',  formatDuration(recipe.totalTimeSeconds)],
               ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
@@ -74,8 +84,7 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
         </div>
 
         <div className="px-8 py-6 space-y-8">
-
-          {/* ── INGREDIENTS ── */}
+          {/* Ingredients */}
           <section>
             <SectionHeader title="Ingredients" meta={`${recipe.ingredients.length} items · ${servings} servings`} />
             <table style={tbl}>
@@ -114,18 +123,12 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
             </table>
           </section>
 
-          {/* ── EQUIPMENT ── */}
+          {/* Equipment */}
           {recipe.equipment && recipe.equipment.length > 0 && (
             <section>
               <SectionHeader title="Equipment" />
               <table style={tbl}>
-                <thead>
-                  <tr style={thead}>
-                    <Th>Tool</Th>
-                    <Th w={90} center>Required</Th>
-                    <Th>Alternatives</Th>
-                  </tr>
-                </thead>
+                <thead><tr style={thead}><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
                 <tbody>
                   {recipe.equipment.map(eq => (
                     <tr key={eq.equipmentId} style={{ borderTop: B }}>
@@ -139,57 +142,34 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
             </section>
           )}
 
-          {/* ── PROCEDURE — grouped, Modernist columns ── */}
+          {/* Procedure */}
           <section>
             <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
             <table style={tbl}>
               <thead>
                 <tr style={thead}>
-                  <Th w={36} />
-                  <Th>Product</Th>
-                  <Th w={90} right>Mass</Th>
-                  <Th w={80} right>Volume</Th>
-                  <Th w={140}>Tool</Th>
-                  <Th w={100}>Setting</Th>
-                  <Th w={80} right>Time</Th>
-                  <Th>Instruction</Th>
+                  <Th w={36} /><Th>Product</Th><Th w={90} right>Mass</Th>
+                  <Th w={80} right>Volume</Th><Th w={140}>Tool</Th>
+                  <Th w={100}>Setting</Th><Th w={80} right>Time</Th><Th>Instruction</Th>
                 </tr>
               </thead>
-
               {groups.map((group, gi) => (
                 <React.Fragment key={group.label}>
-                  {/* Group header row */}
                   <tbody>
                     <tr>
-                      <td colSpan={8} style={{
-                        padding: '7px 14px',
-                        background: 'var(--surface-hover)',
-                        borderTop: gi === 0 ? B : `2px solid var(--border)`,
-                        borderBottom: B,
-                        fontFamily: MONO,
-                        fontSize: 10,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.15em',
-                        color: 'var(--fg)',
-                        fontWeight: 600,
-                      }}>
+                      <td colSpan={8} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
                         {group.label}
                       </td>
                     </tr>
-
                     {group.steps.map(step => {
                       const gi = step.globalIndex;
                       const done = stepChecks.checked[gi];
-                      // Collect ingredients used in this step
-                      const stepIngs = (step.ingredients ?? []).map(id => ingMap[id]).filter(Boolean);
+                      const stepIngs = (step.ingredients ?? []).map((id: string) => ingMap[id]).filter(Boolean);
                       const rowCount = Math.max(1, stepIngs.length);
 
                       return stepIngs.length === 0 ? (
-                        // No ingredients — single row
                         <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                          <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}>
-                            <Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} />
-                          </td>
+                          <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>
                           <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
@@ -203,50 +183,18 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
                           <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
                         </tr>
                       ) : (
-                        // One row per ingredient used, instruction spans all rows
-                        stepIngs.map((ing, rowIdx) => (
+                        stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
                           <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                            {/* Checkbox only on first row */}
-                            {rowIdx === 0 && (
-                              <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}>
-                                <Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} />
-                              </td>
-                            )}
-                            {/* Product */}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>}
                             <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
-                              <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }}
-                                className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
+                              <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
                             </td>
-                            {/* Mass */}
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                              {ing.quantity.value}{ing.quantity.unit}
-                            </td>
-                            {/* Volume */}
+                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.value}{ing.quantity.unit}</td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                            {/* Tool — only first row */}
-                            {rowIdx === 0 ? (
-                              <td rowSpan={rowCount} style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>
-                                {step.tools?.join(', ') || '—'}
-                              </td>
-                            ) : null}
-                            {/* Setting — only first row */}
-                            {rowIdx === 0 ? (
-                              <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>
-                                {step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}
-                              </td>
-                            ) : null}
-                            {/* Time — only first row */}
-                            {rowIdx === 0 ? (
-                              <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>
-                                {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
-                              </td>
-                            ) : null}
-                            {/* Instruction — only first row */}
-                            {rowIdx === 0 ? (
-                              <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55 }}>
-                                {step.instruction}
-                              </td>
-                            ) : null}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>{step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}</td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>}
                           </tr>
                         ))
                       );
@@ -254,7 +202,6 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
                   </tbody>
                 </React.Fragment>
               ))}
-
               <tfoot>
                 <tr style={{ borderTop: `2px solid var(--border)`, background: 'var(--surface-hover)' }}>
                   <td colSpan={7} style={{ ...td, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</td>
@@ -264,26 +211,17 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
             </table>
           </section>
 
-          {/* ── NUTRITION ── */}
+          {/* Nutrition */}
           {recipe.nutrition && (
             <section>
               <SectionHeader title="Nutrition" meta="per serving" />
               <table style={tbl}>
                 <thead><tr style={thead}><Th>Nutrient</Th><Th w={140} right>Per serving</Th><Th w={140} right>Per 100g</Th></tr></thead>
                 <tbody>
-                  {([
-                    ['Calories', recipe.nutrition.calories, 'kcal'],
-                    ['Protein', recipe.nutrition.protein, 'g'],
-                    ['Fat', recipe.nutrition.fat, 'g'],
-                    ['Carbohydrates', recipe.nutrition.carbohydrates, 'g'],
-                    ['Fiber', recipe.nutrition.fiber, 'g'],
-                    ['Sodium', recipe.nutrition.sodium, 'mg'],
-                  ] as [string, number|undefined, string][]).filter(([,v]) => v != null).map(([label, value, u]) => (
+                  {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbohydrates',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
                     <tr key={label} style={{ borderTop: B }}>
                       <td style={{ ...td, borderRight: B }}>{label}</td>
-                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                        {value} <span style={{ color: MUT }}>{u}</span>
-                      </td>
+                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value} <span style={{ color: MUT }}>{u}</span></td>
                       <td style={{ ...td, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                     </tr>
                   ))}
@@ -294,18 +232,12 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
         </div>
       </div>
 
-      {/* ── Right panel ── */}
+      {/* Right panel */}
       <aside className="w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
-
-        {/* Progress */}
         <PanelSection title="Progress">
-          <div className="space-y-2">
-            <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
-            <ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} />
-          </div>
+          <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
+          <div className="mt-2"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
         </PanelSection>
-
-        {/* Servings */}
         <PanelSection title="Servings">
           <div className="flex items-center border border-[var(--border)]">
             <button onClick={() => setServings(s => Math.max(1, s-1))} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">−</button>
@@ -313,42 +245,24 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
             <button onClick={() => setServings(s => s+1)} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">+</button>
           </div>
         </PanelSection>
-
-        {/* Nutrition */}
         {recipe.nutrition && (
           <PanelSection title="Nutrition · per serving">
             <table className="w-full text-[11px]">
               <tbody>
-                {([
-                  ['Calories', recipe.nutrition.calories, 'kcal'],
-                  ['Protein',  recipe.nutrition.protein,  'g'],
-                  ['Fat',      recipe.nutrition.fat,      'g'],
-                  ['Carbs',    recipe.nutrition.carbohydrates, 'g'],
-                  ['Fiber',    recipe.nutrition.fiber,    'g'],
-                  ['Sodium',   recipe.nutrition.sodium,   'mg'],
-                ] as [string, number|undefined, string][]).filter(([,v]) => v != null).map(([label, value, u]) => (
+                {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbs',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
                   <tr key={label} className="border-b border-[var(--border-subtle)] last:border-0">
                     <td className="py-1.5 text-[var(--muted)]">{label}</td>
-                    <td className="py-1.5 text-right font-mono tabular-nums text-[var(--fg)]">
-                      {value}<span className="text-[var(--muted)] ml-0.5">{u}</span>
-                    </td>
+                    <td className="py-1.5 text-right font-mono tabular-nums text-[var(--fg)]">{value}<span className="text-[var(--muted)] ml-0.5">{u}</span></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </PanelSection>
         )}
-
-        {/* Recipe info */}
         <PanelSection title="Recipe Information">
           <table className="w-full text-[11px]">
             <tbody>
-              {[
-                ['Version', `v${recipe.version}`],
-                ['Cuisine', recipe.cuisine ?? '—'],
-                ['Difficulty', recipe.difficulty],
-                ['Updated', new Date(recipe.updatedAt).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'})],
-              ].map(([k,v]) => (
+              {[['Version',`v${recipe.version}`],['Cuisine',recipe.cuisine??'—'],['Difficulty',recipe.difficulty],['Updated',new Date(recipe.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})]].map(([k,v])=>(
                 <tr key={k} className="border-b border-[var(--border-subtle)] last:border-0">
                   <td className="py-1.5 text-[var(--muted)] font-mono text-[10px]">{k}</td>
                   <td className="py-1.5 text-[var(--fg)] text-right">{v}</td>
@@ -356,30 +270,62 @@ export default function RecipePage({ params }: { params: Promise<{ slug: string 
               ))}
             </tbody>
           </table>
-          <p className="mt-3 text-[10px] text-[var(--muted)] leading-relaxed">
-            Every change creates a new version.
-          </p>
         </PanelSection>
       </aside>
     </div>
   );
 }
 
-// ── Style constants ───────────────────────────────────────────
-const B   = '1px solid var(--border)';
-const MONO = 'var(--font-mono)';
-const MUT  = 'var(--muted)';
-const tbl: React.CSSProperties = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
-const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
-const td: React.CSSProperties = { padding: '9px 14px', color: 'var(--fg)' };
+// Server component wrapper that fetches data
+export default function RecipePage({ params }: { params: Promise<{ slug: string }> }) {
+  return <RecipePageClient params={params} />;
+}
+
+function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
+  const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    async function load() {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('recipes')
+          .select(`*, recipe_ingredients(*, ingredients(id, slug, name)), recipe_steps(*), recipe_equipment(*, equipment(id, slug, name))`)
+          .eq('slug', slug)
+          .eq('is_published', true)
+          .single();
+        if (data && !error) {
+          const { mapRecipeFromDB } = await import('@/lib/recipe-mapper');
+          setRecipe(mapRecipeFromDB(data));
+          setLoading(false);
+          return;
+        }
+      } catch {}
+      // Fallback to sample data
+      const { sampleRecipes } = await import('@/data/sample-recipes');
+      const r = sampleRecipes.find(r => r.slug === slug) ?? null;
+      setRecipe(r);
+      setLoading(false);
+    }
+    load();
+  }, [slug]);
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-64">
+      <span className="font-mono text-[11px] text-[var(--muted)] uppercase tracking-widest">Loading…</span>
+    </div>
+  );
+  if (!recipe) return <div className="p-8 font-mono text-[12px] text-[var(--muted)]">Recipe not found.</div>;
+  return <RecipeView recipe={recipe} />;
+}
 
 // ── Shared components ─────────────────────────────────────────
 function Th({ children, w, right, center }: { children?: React.ReactNode; w?: number; right?: boolean; center?: boolean }) {
   return (
-    <th style={{ padding: '8px 14px', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, borderRight: B, textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }}
-      className="last:border-r-0">
-      {children}
-    </th>
+    <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">{children}</th>
   );
 }
 
@@ -388,15 +334,7 @@ function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => voi
     <button onClick={onChange} role="checkbox" aria-checked={checked}
       className="w-4 h-4 border border-[var(--border)] flex items-center justify-center hover:border-[var(--accent)] transition-colors"
       style={{ background: checked ? 'var(--accent)' : 'var(--surface)', flexShrink: 0 }}>
-      {checked && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1, fontFamily: MONO }}>✓</span>}
-    </button>
-  );
-}
-
-function Btn({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
-      {icon} {label}
+      {checked && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1, fontFamily: 'var(--font-mono)' }}>✓</span>}
     </button>
   );
 }
@@ -407,6 +345,17 @@ function SectionHeader({ title, meta }: { title: string; meta?: string }) {
       <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--muted)]">{title}</span>
       <div className="flex-1 h-px bg-[var(--border)]" />
       {meta && <span className="font-mono text-[9px] text-[var(--muted)]">{meta}</span>}
+    </div>
+  );
+}
+
+function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="border-b border-[var(--border)]">
+      <div className="px-4 py-2 bg-[var(--surface-hover)] border-b border-[var(--border)]">
+        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{title}</span>
+      </div>
+      <div className="px-4 py-3">{children}</div>
     </div>
   );
 }
@@ -422,17 +371,6 @@ function ProgressBar({ label, done, total }: { label: string; done: number; tota
       <div className="h-1 bg-[var(--border)] w-full">
         <div className="h-1 bg-[var(--accent)] transition-all duration-300" style={{ width: `${pct}%` }} />
       </div>
-    </div>
-  );
-}
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border-b border-[var(--border)]">
-      <div className="px-4 py-2 bg-[var(--surface-hover)] border-b border-[var(--border)]">
-        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{title}</span>
-      </div>
-      <div className="px-4 py-3">{children}</div>
     </div>
   );
 }
