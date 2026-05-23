@@ -1,15 +1,15 @@
 'use client';
+import type { Recipe } from '@/types';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Search, ArrowRight } from 'lucide-react';
-import { sampleRecipes } from '@/data/sample-recipes';
 import { formatDuration } from '@/lib/utils';
 
 const CUISINES   = ['All', 'Indian', 'European', 'Asian', 'American', 'Middle Eastern'];
 const DIETARY    = ['All', 'Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Halal'];
 const DIFFICULTY = ['All', 'Easy', 'Medium', 'Hard'];
 
-export function LoggedOutHome() {
+export function LoggedOutHome({ recipes }: { recipes: Recipe[] }) {
   const [query, setQuery]     = useState('');
   const [cuisine, setCuisine] = useState('All');
   const [dietary, setDietary] = useState('All');
@@ -62,7 +62,7 @@ export function LoggedOutHome() {
               View all →
             </Link>
           </div>
-          <RecipeTable recipes={sampleRecipes} />
+          <RecipeTable recipes={recipes} />
         </section>
 
         {/* ── Value props ── */}
@@ -125,7 +125,7 @@ function FilterGroup({ label, options, value, onChange }: {
   );
 }
 
-function RecipeTable({ recipes }: { recipes: typeof sampleRecipes }) {
+function RecipeTable({ recipes }: { recipes: Recipe[] }) {
   return (
     <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse', border: '1px solid var(--border)' }}>
       <thead>

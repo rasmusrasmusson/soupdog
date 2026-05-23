@@ -3,16 +3,5 @@
   "buildCommand": "npm run build",
   "devCommand": "npm run dev",
   "installCommand": "npm install",
-  "regions": ["syd1"],
-  "headers": [
-    {
-      "source": "/.well-known/microsoft-identity-association.json",
-      "headers": [
-        {
-          "key": "Content-Type",
-          "value": "application/json"
-        }
-      ]
-    }
-  ]
+  "regions": ["syd1"]
 }

@@ -1,8 +1,8 @@
 'use client';
+import type { Recipe } from '@/types';
 import { useState } from 'react';
 import Link from 'next/link';
 import { Search } from 'lucide-react';
-import { sampleRecipes } from '@/data/sample-recipes';
 import { formatDuration } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 
@@ -10,7 +10,7 @@ const CUISINES   = ['All', 'Indian', 'European', 'Asian', 'American', 'Middle Ea
 const DIETARY    = ['All', 'Vegetarian', 'Vegan', 'Gluten-free', 'Dairy-free', 'Halal'];
 const DIFFICULTY = ['All', 'Easy', 'Medium', 'Hard'];
 
-export function LoggedInHome() {
+export function LoggedInHome({ recipes }: { recipes: Recipe[] }) {
   const { user } = useAuth();
   const [query, setQuery]     = useState('');
   const [cuisine, setCuisine] = useState('All');
@@ -55,7 +55,7 @@ export function LoggedInHome() {
       {/* Content */}
       <div className="w-full max-w-2xl px-4 pb-16 space-y-8">
         {/* Placeholder for personalized sections — Phase 3+ */}
-        <RecipeSection title="Featured recipes" recipes={sampleRecipes} />
+        <RecipeSection title="Featured recipes" recipes={recipes} />
 
         {/* Placeholder cards for future features */}
         <div className="grid grid-cols-2 gap-4">
@@ -98,7 +98,7 @@ function FilterGroup({ label, options, value, onChange }: {
   );
 }
 
-function RecipeSection({ title, recipes }: { title: string; recipes: typeof sampleRecipes }) {
+function RecipeSection({ title, recipes }: { title: string; recipes: Recipe[] }) {
   return (
     <section>
       <div className="flex items-center gap-3 mb-3">

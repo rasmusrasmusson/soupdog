@@ -1,63 +1,67 @@
-import { RecipeCard } from '@/components/recipe/RecipeCard';
+import Link from 'next/link';
+import { getRecipes } from '@/lib/recipes';
 import { sampleRecipes } from '@/data/sample-recipes';
+import { formatDuration } from '@/lib/utils';
+import type { Recipe } from '@/types';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = { title: 'Recipes' };
 
-const DIFFICULTY_FILTERS = ['All', 'Easy', 'Medium', 'Hard', 'Expert'];
-const CUISINE_FILTERS = ['All', 'Indian', 'European', 'Asian', 'American', 'Middle Eastern'];
+export default async function RecipesPage() {
+  let recipes: Recipe[] = [];
+  try {
+    recipes = await getRecipes();
+  } catch {}
+  if (!recipes.length) recipes = sampleRecipes;
 
-export default function RecipesPage() {
   return (
-    <div className="max-w-5xl mx-auto px-8 py-12">
-      <header className="mb-10">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)] mb-2">Recipe Index</p>
-        <h1 className="font-display text-4xl font-light text-[var(--fg)] mb-3">Recipes</h1>
-        <p className="text-sm text-[var(--muted)] max-w-lg">
-          Structured execution graphs for home cooks, professional kitchens, and connected appliances. Every recipe is versioned and linked to its ingredients and equipment.
+    <div className="max-w-4xl mx-auto px-8 py-10">
+      <header className="mb-8">
+        <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--muted)] mb-2">Recipe Index</p>
+        <h1 className="font-display text-[32px] font-light text-[var(--fg)] mb-2">Recipes</h1>
+        <p className="text-[12px] text-[var(--muted)] max-w-lg">
+          Structured execution graphs for home cooks, professional kitchens, and connected appliances.
         </p>
       </header>
 
-      {/* Filters */}
-      <div className="mb-8 space-y-3">
-        <div>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)] mr-3">Difficulty</span>
-          <div className="inline-flex gap-1 mt-1">
-            {DIFFICULTY_FILTERS.map(f => (
-              <button key={f} className="text-xs px-3 py-1 border border-[var(--border)] rounded-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors first:bg-[var(--accent)] first:text-white first:border-[var(--accent)]">
-                {f}
-              </button>
+      <table className="w-full text-[12px]" style={{ borderCollapse: 'collapse', border: '1px solid var(--border)' }}>
+        <thead>
+          <tr style={{ background: 'var(--surface-hover)' }}>
+            {['Recipe', 'Cuisine', 'Time', 'Difficulty', 'Rating'].map((h, i, arr) => (
+              <th key={h} style={{
+                padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9,
+                textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)',
+                textAlign: h === 'Time' || h === 'Rating' ? 'right' : 'left',
+                borderRight: i < arr.length - 1 ? '1px solid var(--border)' : undefined,
+              }}>{h}</th>
             ))}
-          </div>
-        </div>
-        <div>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)] mr-3">Cuisine</span>
-          <div className="inline-flex flex-wrap gap-1 mt-1">
-            {CUISINE_FILTERS.map(f => (
-              <button key={f} className="text-xs px-3 py-1 border border-[var(--border)] rounded-sm text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors first:bg-[var(--surface-hover)] first:text-[var(--fg)]">
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Stats bar */}
-      <div className="flex items-center gap-6 text-[10px] font-mono text-[var(--muted)] border-t border-b border-[var(--border)] py-2.5 mb-8">
-        <span>{sampleRecipes.length} recipes</span>
-        <span>·</span>
-        <span>Sorted by: relevance</span>
-        <div className="ml-auto flex gap-3">
-          <span>Grid</span>
-          <span className="text-[var(--accent)]">List</span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {sampleRecipes.map(recipe => (
-          <RecipeCard key={recipe.id} recipe={recipe} />
-        ))}
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {recipes.map(r => (
+            <tr key={r.id} style={{ borderTop: '1px solid var(--border)' }}
+              className="hover:bg-[var(--surface-hover)] transition-colors">
+              <td style={{ padding: '11px 14px', borderRight: '1px solid var(--border)', fontWeight: 500 }}>
+                <Link href={`/recipes/${r.slug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }}
+                  className="hover:text-[var(--accent)] transition-colors">{r.title}</Link>
+                {r.tags && (
+                  <span style={{ marginLeft: 8, fontSize: 10, color: 'var(--muted)', fontFamily: 'var(--font-mono)' }}>
+                    {r.tags.slice(0, 2).join(' · ')}
+                  </span>
+                )}
+              </td>
+              <td style={{ padding: '11px 14px', borderRight: '1px solid var(--border)', color: 'var(--muted)' }}>{r.cuisine ?? '—'}</td>
+              <td style={{ padding: '11px 14px', borderRight: '1px solid var(--border)', fontFamily: 'var(--font-mono)', textAlign: 'right', color: 'var(--muted)' }}>
+                {formatDuration(r.totalTimeSeconds)}
+              </td>
+              <td style={{ padding: '11px 14px', borderRight: '1px solid var(--border)', color: 'var(--muted)' }}>{r.difficulty}</td>
+              <td style={{ padding: '11px 14px', fontFamily: 'var(--font-mono)', textAlign: 'right', color: 'var(--muted)' }}>
+                {r.ratings ? r.ratings.average.toFixed(1) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
