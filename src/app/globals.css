@@ -3,7 +3,6 @@
 @import "tailwindcss";
 
 :root {
-  /* ── Colors ── */
   --bg:             #f7f6f2;
   --surface:        #fafaf8;
   --surface-hover:  #f0efe9;
@@ -12,25 +11,17 @@
   --fg:             #1a1a1a;
   --fg-secondary:   #3d3d3d;
   --muted:          #6b6860;
-
-  /* Accent: dark olive green per spec */
   --accent:         #2e4638;
   --accent-mid:     #3b5249;
   --accent-subtle:  #edf2ef;
   --accent-text:    #2e4638;
-
-  /* Status */
   --warning:        #7a5c1e;
   --warning-bg:     #faf3e0;
   --error:          #7a2020;
   --error-bg:       #faeaea;
-  --success:        #2e4638;
-  --success-bg:     #edf2ef;
-
-  /* ── Typography ── */
-  --font-display: 'IBM Plex Serif', Georgia, serif;
-  --font-body:    'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono:    'IBM Plex Mono', 'Fira Code', monospace;
+  --font-display:   'IBM Plex Serif', Georgia, serif;
+  --font-body:      'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:      'IBM Plex Mono', 'Fira Code', monospace;
 }
 
 * { box-sizing: border-box; }
@@ -46,6 +37,13 @@ body {
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Extra bottom padding on mobile for the nav bar */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Mobile bottom nav spacing */
+@media (max-width: 767px) {
+  body { padding-bottom: 56px; }
 }
 
 /* Scrollbar */
@@ -56,10 +54,26 @@ body {
 /* Selection */
 ::selection { background: var(--accent); color: #fff; }
 
-/* Font utilities */
 .font-display { font-family: var(--font-display); }
 .font-mono    { font-family: var(--font-mono); }
 
-/* Table base styles */
-table { border-collapse: collapse; width: 100%; }
-th { text-align: left; }
+/* ── RTL support ── */
+/* Use logical properties throughout — these flip automatically with dir="rtl" */
+[dir="rtl"] {
+  font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
+}
+
+/* Tables scroll on small screens */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Ensure tables don't break layout on mobile */
+@media (max-width: 767px) {
+  table { min-width: 500px; }
+  .table-responsive { border: 1px solid var(--border); }
+}
+
+/* Safe area support for notched phones */
+.safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }

@@ -6,7 +6,6 @@ import { MarketingShell } from './MarketingShell';
 export function RootShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  // While loading, render nothing to avoid flash
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--bg)] flex items-center justify-center">
@@ -15,9 +14,6 @@ export function RootShell({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (user) {
-    return <AppShell>{children}</AppShell>;
-  }
-
+  if (user) return <AppShell>{children}</AppShell>;
   return <MarketingShell>{children}</MarketingShell>;
 }

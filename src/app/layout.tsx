@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { LocaleProvider } from '@/lib/locale-context';
 import { RootShell } from '@/components/layout/RootShell';
+import enMessages from '../../messages/en.json';
 
 export const metadata: Metadata = {
   title: { default: 'soup.dog', template: '%s — soup.dog' },
@@ -10,12 +12,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" dir="ltr">
       <body>
         <AuthProvider>
-          <RootShell>
-            {children}
-          </RootShell>
+          <LocaleProvider initialMessages={enMessages}>
+            <RootShell>
+              {children}
+            </RootShell>
+          </LocaleProvider>
         </AuthProvider>
       </body>
     </html>
