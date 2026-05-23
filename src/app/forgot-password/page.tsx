@@ -24,9 +24,9 @@ export default function ForgotPasswordPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
       <div className="w-full max-w-sm">
-        <Link href="/" className="flex items-center mb-10">
-          <Image src="/wordmark.svg" alt="Soupdog" width={180} height={54}
-            style={{ height: 36, width: 'auto' }} />
+        <Link href="/" className="flex items-center gap-2.5 mb-10">
+          <Image src="/logo.svg" alt="Soupdog" width={32} height={32} />
+          <span className="font-semibold text-[14px] tracking-tight text-[var(--fg)]">soupdog</span>
         </Link>
 
         <h1 className="font-display text-[28px] font-light text-[var(--fg)] mb-1">Reset password</h1>
