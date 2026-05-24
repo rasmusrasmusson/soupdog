@@ -1,7 +1,5 @@
 'use client';
 import React, { useState, use } from 'react';
-import { getRecipeBySlug } from '@/lib/recipes';
-import { sampleRecipes } from '@/data/sample-recipes';
 import { formatDuration } from '@/lib/utils';
 import { Bookmark, Printer } from 'lucide-react';
 import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
@@ -12,13 +10,6 @@ function useChecklist(count: number) {
   return { checked, toggle };
 }
 
-const stepType: Record<string, { short: string; cls: string }> = {
-  human:   { short: 'MAN', cls: 'border-[#c5d0fa] bg-[#edf2ff] text-[#3451b2]' },
-  machine: { short: 'MCH', cls: 'border-[#d3c5fa] bg-[#f3f0ff] text-[#5c35b5]' },
-  passive: { short: 'PAS', cls: 'border-[#fde68a] bg-[#fffbeb] text-[#92400e]' },
-};
-
-// Client component that receives pre-fetched recipe
 function RecipeView({ recipe }: { recipe: Recipe }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
@@ -26,7 +17,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
   const ingMap = Object.fromEntries(recipe.ingredients.map(i => [i.ingredientId, i]));
 
-  // Group steps
   const groups: { label: string; steps: (RecipeStep & { globalIndex: number })[] }[] = [];
   recipe.steps.forEach((step, i) => {
     const label = step.group ?? 'General';
@@ -35,12 +25,12 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     g.steps.push({ ...step, globalIndex: i });
   });
 
-  const B   = '1px solid var(--border)';
+  const B    = '1px solid var(--border)';
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
-  const tbl: React.CSSProperties = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
+  const tbl: React.CSSProperties  = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
-  const td: React.CSSProperties = { padding: '9px 14px', color: 'var(--fg)' };
+  const td: React.CSSProperties   = { padding: '9px 14px', color: 'var(--fg)' };
 
   const metaItems: [string, string][] = [
     ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
@@ -54,11 +44,15 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
   return (
     <div className="flex h-full">
-      <div className="flex-1 min-w-0 overflow-y-auto">
+      {/* ── Main scroll area ── */}
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
+
         {/* Title + meta */}
         <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
           <div className="flex items-start justify-between gap-4 mb-4">
-            <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">{recipe.title}</h1>
+            <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
+              {recipe.title}
+            </h1>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
                 <Bookmark size={11} strokeWidth={1.5} /> Bookmark
@@ -69,8 +63,11 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             </div>
           </div>
 
-          {/* Desktop: single-row 7-col grid */}
-          <div className="hidden md:grid border border-[var(--border)] text-[11px]" style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
+          {/* Desktop: single-row 7-col strip */}
+          <div
+            className="hidden md:grid border border-[var(--border)] text-[11px]"
+            style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}
+          >
             {metaItems.map(([label, value], i) => (
               <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
                 <div className="px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)]">
@@ -81,9 +78,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             ))}
           </div>
 
-          {/* Mobile: 2-col grid of label+value cells */}
+          {/* Mobile: 2-col grid */}
           <div
-            className="md:hidden border border-[var(--border)] text-[11px]"
+            className="md:hidden border border-[var(--border)]"
             style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}
           >
             {metaItems.map(([label, value]) => (
@@ -104,20 +101,17 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         </div>
 
         <div className="px-4 md:px-8 py-6 space-y-8">
+
           {/* Ingredients */}
           <section>
             <SectionHeader title="Ingredients" meta={`${recipe.ingredients.length} items · ${servings} servings`} />
-            <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+            <ScrollTable>
               <table style={{ ...tbl, minWidth: 480 }}>
                 <thead>
                   <tr style={thead}>
-                    <Th w={36} />
-                    <Th w={32}>#</Th>
-                    <Th>Product</Th>
-                    <Th w={100} right>Mass</Th>
-                    <Th w={100} right>Volume</Th>
-                    <Th>Prep / Notes</Th>
-                    <Th w={90} center>State</Th>
+                    <Th w={36} /><Th w={32}>#</Th><Th>Product</Th>
+                    <Th w={90} right>Mass</Th><Th w={90} right>Volume</Th>
+                    <Th>Prep / Notes</Th><Th w={80} center>State</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -142,15 +136,15 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollTable>
           </section>
 
           {/* Equipment */}
           {recipe.equipment && recipe.equipment.length > 0 && (
             <section>
               <SectionHeader title="Equipment" />
-              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-                <table style={{ ...tbl, minWidth: 360 }}>
+              <ScrollTable>
+                <table style={{ ...tbl, minWidth: 340 }}>
                   <thead><tr style={thead}><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
                   <tbody>
                     {recipe.equipment.map(eq => (
@@ -162,20 +156,20 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollTable>
             </section>
           )}
 
           {/* Procedure */}
           <section>
             <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
-            <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+            <ScrollTable>
               <table style={{ ...tbl, minWidth: 600 }}>
                 <thead>
                   <tr style={thead}>
-                    <Th w={36} /><Th>Product</Th><Th w={90} right>Mass</Th>
-                    <Th w={80} right>Volume</Th><Th w={140}>Tool</Th>
-                    <Th w={100}>Setting</Th><Th w={80} right>Time</Th><Th>Instruction</Th>
+                    <Th w={36} /><Th>Product</Th><Th w={80} right>Mass</Th>
+                    <Th w={70} right>Volume</Th><Th w={130}>Tool</Th>
+                    <Th w={90}>Setting</Th><Th w={70} right>Time</Th><Th>Instruction</Th>
                   </tr>
                 </thead>
                 {groups.map((group, gi) => (
@@ -187,14 +181,14 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                         </td>
                       </tr>
                       {group.steps.map(step => {
-                        const gi = step.globalIndex;
-                        const done = stepChecks.checked[gi];
+                        const gIdx = step.globalIndex;
+                        const done = stepChecks.checked[gIdx];
                         const stepIngs = (step.ingredients ?? []).map((id: string) => ingMap[id]).filter(Boolean);
                         const rowCount = Math.max(1, stepIngs.length);
 
                         return stepIngs.length === 0 ? (
                           <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                            <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>
+                            <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} /></td>
                             <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
@@ -210,7 +204,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                         ) : (
                           stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
                             <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>}
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} /></td>}
                               <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                                 <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
                               </td>
@@ -234,16 +228,16 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                   </tr>
                 </tfoot>
               </table>
-            </div>
+            </ScrollTable>
           </section>
 
           {/* Nutrition */}
           {recipe.nutrition && (
             <section>
               <SectionHeader title="Nutrition" meta="per serving" />
-              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
-                <table style={{ ...tbl, minWidth: 320 }}>
-                  <thead><tr style={thead}><Th>Nutrient</Th><Th w={140} right>Per serving</Th><Th w={140} right>Per 100g</Th></tr></thead>
+              <ScrollTable>
+                <table style={{ ...tbl, minWidth: 300 }}>
+                  <thead><tr style={thead}><Th>Nutrient</Th><Th w={130} right>Per serving</Th><Th w={130} right>Per 100g</Th></tr></thead>
                   <tbody>
                     {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbohydrates',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
                       <tr key={label} style={{ borderTop: B }}>
@@ -254,13 +248,16 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </ScrollTable>
             </section>
           )}
+
+          {/* Extra bottom padding on mobile so sticky bar doesn't cover last content */}
+          <div className="md:hidden h-16" />
         </div>
       </div>
 
-      {/* Right panel — hidden on mobile, shown on md+ */}
+      {/* Right panel — desktop only */}
       <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
         <PanelSection title="Progress">
           <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
@@ -301,7 +298,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         </PanelSection>
       </aside>
 
-      {/* Mobile bottom sticky panel — progress + servings */}
+      {/* Mobile sticky bar — progress + servings, sits above bottom nav */}
       <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4">
         <div className="flex-1 min-w-0">
           <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
@@ -319,37 +316,67 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   );
 }
 
-// Server component wrapper that fetches data
+// ── Data loading ───────────────────────────────────────────────
 export default function RecipePage({ params }: { params: Promise<{ slug: string }> }) {
   return <RecipePageClient params={params} />;
 }
 
 function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [recipe, setRecipe]   = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
 
   React.useEffect(() => {
     async function load() {
+      setLoading(true);
+      setError(null);
+
       try {
         const { createClient } = await import('@/lib/supabase/client');
         const supabase = createClient();
-        const { data, error } = await supabase
+
+        // Explicit FK hints so Supabase resolves the joins correctly:
+        //   ingredients!ingredient_id  — tells postgrest which FK to use
+        //   equipment!equipment_id     — same for equipment join
+        const { data, error: dbError } = await supabase
           .from('recipes')
-          .select(`*, recipe_ingredients(*, ingredients(id, slug, name)), recipe_steps(*), recipe_equipment(*, equipment(id, slug, name))`)
+          .select(`
+            *,
+            recipe_ingredients (
+              *,
+              ingredients!ingredient_id ( id, slug, name )
+            ),
+            recipe_steps ( * ),
+            recipe_equipment (
+              *,
+              equipment!equipment_id ( id, slug, name )
+            )
+          `)
           .eq('slug', slug)
           .eq('is_published', true)
           .single();
-        if (data && !error) {
+
+        if (dbError) {
+          // Surface the actual error in dev so it's visible
+          console.error('[RecipePage] Supabase error:', dbError);
+          throw dbError;
+        }
+
+        if (data) {
           const { mapRecipeFromDB } = await import('@/lib/recipe-mapper');
           setRecipe(mapRecipeFromDB(data));
           setLoading(false);
           return;
         }
-      } catch {}
-      // Fallback to sample data
+      } catch (err) {
+        console.error('[RecipePage] Failed to load from DB, falling back to sample data:', err);
+      }
+
+      // Fallback to bundled sample data
       const { sampleRecipes } = await import('@/data/sample-recipes');
       const r = sampleRecipes.find(r => r.slug === slug) ?? null;
+      if (!r) setError('Recipe not found.');
       setRecipe(r);
       setLoading(false);
     }
@@ -361,14 +388,26 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
       <span className="font-mono text-[11px] text-[var(--muted)] uppercase tracking-widest">Loading…</span>
     </div>
   );
-  if (!recipe) return <div className="p-8 font-mono text-[12px] text-[var(--muted)]">Recipe not found.</div>;
+  if (error || !recipe) return (
+    <div className="p-8 font-mono text-[12px] text-[var(--muted)]">{error ?? 'Recipe not found.'}</div>
+  );
   return <RecipeView recipe={recipe} />;
 }
 
-// ── Shared components ─────────────────────────────────────────
+// ── Shared sub-components ──────────────────────────────────────
+function ScrollTable({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', marginInline: 0 }}>
+      {children}
+    </div>
+  );
+}
+
 function Th({ children, w, right, center }: { children?: React.ReactNode; w?: number; right?: boolean; center?: boolean }) {
   return (
-    <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">{children}</th>
+    <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">
+      {children}
+    </th>
   );
 }
 
