@@ -1,12 +1,21 @@
 import type { Recipe, RecipeIngredientRef, RecipeStep, EquipmentRef } from '@/types';
 
 export function mapRecipeFromDB(row: any): Recipe {
-  // Build a map of equipment id -> name from recipe_equipment joins
   const equipmentNameMap: Record<string, string> = {};
   (row.recipe_equipment ?? []).forEach((re: any) => {
     const id = re.equipment?.id ?? re.equipment_id;
     const name = re.equipment?.name ?? '';
     if (id) equipmentNameMap[id] = name;
+  });
+
+  // Build ingredient map by id for step ref lookups
+  const ingredientMap: Record<string, { slug: string; name: string }> = {};
+  (row.recipe_ingredients ?? []).forEach((ri: any) => {
+    const id = ri.ingredients?.id ?? ri.ingredient_id;
+    if (id) ingredientMap[id] = {
+      slug: ri.ingredients?.slug ?? '',
+      name: ri.ingredients?.name ?? '',
+    };
   });
 
   const ingredients: RecipeIngredientRef[] = (row.recipe_ingredients ?? [])
@@ -33,12 +42,14 @@ export function mapRecipeFromDB(row: any): Recipe {
       temperature: s.temperature_celsius
         ? { value: s.temperature_celsius, unit: 'celsius' }
         : undefined,
-      // Resolve equipment_ids array to tool name strings
       tools: (s.equipment_ids ?? [])
         .map((id: string) => equipmentNameMap[id])
         .filter(Boolean),
-      // DB doesn't store per-step ingredient refs yet — leave empty
-      ingredients: [],
+      // Resolve step_ingredient_refs -> ingredient IDs
+      ingredients: (s.step_ingredient_refs ?? [])
+        .sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((ref: any) => ref.ingredient_id)
+        .filter(Boolean),
     }));
 
   const equipment: EquipmentRef[] = (row.recipe_equipment ?? [])

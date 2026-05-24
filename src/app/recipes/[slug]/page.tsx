@@ -399,7 +399,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
         const supabase = createClient();
         const { data, error: dbError } = await supabase
           .from('recipes')
-          .select(`*, recipe_ingredients(*, ingredients!ingredient_id(id, slug, name)), recipe_steps(*), recipe_equipment(*, equipment!equipment_id(id, slug, name))`)
+          .select(`*, recipe_ingredients(*, ingredients!ingredient_id(id, slug, name)), recipe_steps(*, step_ingredient_refs(ingredient_id, order_index)), recipe_equipment(*, equipment!equipment_id(id, slug, name))`)
           .eq('slug', slug).eq('is_published', true).single();
         if (dbError) { console.error('[RecipePage]', dbError); throw dbError; }
         if (data) {

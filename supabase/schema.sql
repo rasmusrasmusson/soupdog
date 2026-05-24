@@ -269,3 +269,14 @@ $$;
 create trigger recipes_updated_at     before update on recipes     for each row execute procedure update_updated_at();
 create trigger ingredients_updated_at before update on ingredients for each row execute procedure update_updated_at();
 create trigger profiles_updated_at    before update on user_profiles for each row execute procedure update_updated_at();
+
+-- ── Step Ingredient Refs ────────────────────────────────────────
+create table if not exists step_ingredient_refs (
+  id            uuid primary key default gen_random_uuid(),
+  step_id       uuid not null references recipe_steps(id) on delete cascade,
+  ingredient_id uuid not null references ingredients(id),
+  order_index   int  not null default 0
+);
+create index step_ingredient_refs_step_idx on step_ingredient_refs(step_id);
+alter table step_ingredient_refs enable row level security;
+create policy "Public read step_ingredient_refs" on step_ingredient_refs for select using (true);
