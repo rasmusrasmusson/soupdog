@@ -577,5 +577,3 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     </div>
   );
 }
-ENDTS
-echo "RecipeEditor.tsx written"
