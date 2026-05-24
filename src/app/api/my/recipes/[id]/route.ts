@@ -13,8 +13,10 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
 
-  const { data: canonical, error } = await supabase
+  const { data: canonical, error } = await db
     .from('recipe_canonicals')
     .select(`
       id, slug, is_published,
@@ -40,21 +42,23 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
 
   if (error || !canonical) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const v = Array.isArray(canonical.recipe_versions) ? canonical.recipe_versions[0] : canonical.recipe_versions;
+  const v = Array.isArray(canonical.recipe_versions)
+    ? canonical.recipe_versions[0]
+    : canonical.recipe_versions;
   if (!v) return NextResponse.json({ error: 'No version found' }, { status: 404 });
 
   return NextResponse.json({
-    canonicalId:        canonical.id,
-    versionId:          v.id,
-    title:              v.title,
-    description:        v.description ?? '',
-    cuisine:            v.cuisine ?? '',
-    tags:               (v.tags ?? []).join(', '),
-    servings:           v.base_servings,
-    difficulty:         v.difficulty,
-    totalTimeMinutes:   Math.round((v.total_time_seconds ?? 0) / 60),
-    activeTimeMinutes:  Math.round((v.active_time_seconds ?? 0) / 60),
-    isPublished:        canonical.is_published,
+    canonicalId:       canonical.id,
+    versionId:         v.id,
+    title:             v.title,
+    description:       v.description ?? '',
+    cuisine:           v.cuisine ?? '',
+    tags:              (v.tags ?? []).join(', '),
+    servings:          v.base_servings,
+    difficulty:        v.difficulty,
+    totalTimeMinutes:  Math.round((v.total_time_seconds ?? 0) / 60),
+    activeTimeMinutes: Math.round((v.active_time_seconds ?? 0) / 60),
+    isPublished:       canonical.is_published,
     ingredients: (v.version_ingredients ?? [])
       .sort((a: any, b: any) => a.order_index - b.order_index)
       .map((i: any) => ({
@@ -80,15 +84,17 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   });
 }
 
-// PUT /api/my/recipes/[id] — create new version
+// PUT /api/my/recipes/[id] — save new version
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
 
-  const { data: canonical } = await supabase
+  const { data: canonical } = await db
     .from('recipe_canonicals')
     .select('id, current_version_id')
     .eq('id', id)
@@ -99,7 +105,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const data = await req.json();
 
-  const { data: currentVersion } = await supabase
+  const { data: currentVersion } = await db
     .from('recipe_versions')
     .select('version_number')
     .eq('id', canonical.current_version_id)
@@ -107,7 +113,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const newVersionNumber = (currentVersion?.version_number ?? 1) + 1;
 
-  const { data: version, error: ve } = await supabase
+  const { data: version, error: ve } = await db
     .from('recipe_versions')
     .insert({
       canonical_id:         canonical.id,
@@ -129,23 +135,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   if (ve || !version) return NextResponse.json({ error: ve?.message }, { status: 500 });
 
-  await supabase.from('recipe_versions').update({ is_canonical_version: false }).eq('id', canonical.current_version_id);
-  await supabase.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
+  await db.from('recipe_versions').update({ is_canonical_version: false }).eq('id', canonical.current_version_id);
+  await db.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
 
-  // Re-insert ingredients, steps, equipment
   for (let i = 0; i < (data.ingredients ?? []).length; i++) {
     const ing = data.ingredients[i];
     if (!ing.name?.trim() && !ing.ingredientId) continue;
     let ingredientId = ing.ingredientId;
     if (!ingredientId && ing.name?.trim()) {
-      const { data: newIng } = await supabase
+      const { data: newIng } = await db
         .from('ingredients')
         .insert({ slug: slugify(ing.name) + '-' + Date.now().toString(36).slice(-4), name: ing.name.trim(), category: 'other' })
         .select().single();
       ingredientId = newIng?.id;
     }
     if (!ingredientId) continue;
-    await supabase.from('version_ingredients').insert({
+    await db.from('version_ingredients').insert({
       version_id: version.id, ingredient_id: ingredientId,
       quantity_value: ing.quantityValue ?? 0, quantity_unit: ing.quantityUnit ?? 'g',
       prep_note: ing.prepNote?.trim() || null, optional: ing.optional ?? false, order_index: i + 1,
@@ -155,7 +160,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   for (let i = 0; i < (data.steps ?? []).length; i++) {
     const step = data.steps[i];
     if (!step.instruction?.trim()) continue;
-    await supabase.from('version_steps').insert({
+    await db.from('version_steps').insert({
       version_id: version.id, order_index: i + 1,
       step_type: step.stepType ?? 'human', instruction: step.instruction.trim(),
       group_label: step.groupLabel?.trim() || null,
@@ -166,7 +171,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   for (const equipmentId of (data.equipmentIds ?? [])) {
     if (!equipmentId) continue;
-    await supabase.from('version_equipment').insert({ version_id: version.id, equipment_id: equipmentId, required: true });
+    await db.from('version_equipment').insert({ version_id: version.id, equipment_id: equipmentId, required: true });
   }
 
   return NextResponse.json({ id: canonical.id }, { status: 200 });
@@ -179,7 +184,7 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-
-  await supabase.from('recipe_canonicals').delete().eq('id', id).eq('author_id', user.id);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any).from('recipe_canonicals').delete().eq('id', id).eq('author_id', user.id);
   return NextResponse.json({ ok: true });
 }

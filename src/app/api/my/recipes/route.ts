@@ -6,13 +6,16 @@ function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 }
 
-// GET /api/my/recipes — list current user's recipes
+// GET /api/my/recipes
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { data, error } = await supabase
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+
+  const { data, error } = await db
     .from('recipe_canonicals')
     .select(`
       id, slug, is_published, created_at,
@@ -43,7 +46,7 @@ export async function GET() {
   return NextResponse.json(recipes);
 }
 
-// POST /api/my/recipes — create new recipe
+// POST /api/my/recipes
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -52,16 +55,17 @@ export async function POST(req: NextRequest) {
   const data = await req.json();
   const slug = slugify(data.title) + '-' + Date.now().toString(36);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+
   try {
-    // 1. Canonical
-    const { data: canonical, error: ce } = await supabase
+    const { data: canonical, error: ce } = await db
       .from('recipe_canonicals')
       .insert({ slug, author_id: user.id, is_published: false, source: 'human_authored' })
       .select().single();
     if (ce) throw ce;
 
-    // 2. Version
-    const { data: version, error: ve } = await supabase
+    const { data: version, error: ve } = await db
       .from('recipe_versions')
       .insert({
         canonical_id:         canonical.id,
@@ -80,34 +84,31 @@ export async function POST(req: NextRequest) {
       .select().single();
     if (ve) throw ve;
 
-    // 3. Update pointer
-    await supabase.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
+    await db.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
 
-    // 4. Ingredients
     for (let i = 0; i < (data.ingredients ?? []).length; i++) {
       const ing = data.ingredients[i];
       if (!ing.name?.trim() && !ing.ingredientId) continue;
       let ingredientId = ing.ingredientId;
       if (!ingredientId && ing.name?.trim()) {
-        const { data: newIng } = await supabase
+        const { data: newIng } = await db
           .from('ingredients')
           .insert({ slug: slugify(ing.name) + '-' + Date.now().toString(36).slice(-4), name: ing.name.trim(), category: 'other' })
           .select().single();
         ingredientId = newIng?.id;
       }
       if (!ingredientId) continue;
-      await supabase.from('version_ingredients').insert({
+      await db.from('version_ingredients').insert({
         version_id: version.id, ingredient_id: ingredientId,
         quantity_value: ing.quantityValue ?? 0, quantity_unit: ing.quantityUnit ?? 'g',
         prep_note: ing.prepNote?.trim() || null, optional: ing.optional ?? false, order_index: i + 1,
       });
     }
 
-    // 5. Steps
     for (let i = 0; i < (data.steps ?? []).length; i++) {
       const step = data.steps[i];
       if (!step.instruction?.trim()) continue;
-      await supabase.from('version_steps').insert({
+      await db.from('version_steps').insert({
         version_id: version.id, order_index: i + 1,
         step_type: step.stepType ?? 'human', instruction: step.instruction.trim(),
         group_label: step.groupLabel?.trim() || null,
@@ -116,14 +117,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 6. Equipment
     for (const equipmentId of (data.equipmentIds ?? [])) {
       if (!equipmentId) continue;
-      await supabase.from('version_equipment').insert({ version_id: version.id, equipment_id: equipmentId, required: true });
+      await db.from('version_equipment').insert({ version_id: version.id, equipment_id: equipmentId, required: true });
     }
 
-    // 7. Execution variant
-    await supabase.from('execution_variants').insert({
+    await db.from('execution_variants').insert({
       version_id: version.id, servings: data.servings ?? 4,
       unit_system: 'si', is_canonical_variant: true, author_id: user.id,
     });
