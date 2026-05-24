@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search, ArrowRight } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 import { useLocale } from '@/lib/locale-context';
@@ -8,10 +9,17 @@ import type { Recipe } from '@/types';
 
 export function LoggedOutHome({ recipes }: { recipes: Recipe[] }) {
   const { t } = useLocale();
+  const router = useRouter();
   const [query, setQuery] = useState('');
   const [cuisine, setCuisine] = useState('All');
   const [dietary, setDietary] = useState('All');
   const [diff, setDiff] = useState('All');
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && query.trim()) {
+      router.push(`/search?q=${encodeURIComponent(query)}`);
+    }
+  };
 
   const all = t('home.all');
   const CUISINES   = [all, 'Indian', 'European', 'Asian', 'American', 'Middle Eastern'];
@@ -36,7 +44,7 @@ export function LoggedOutHome({ recipes }: { recipes: Recipe[] }) {
         <div className="w-full max-w-xl px-4 md:px-0">
           <div className="flex items-center gap-3 border border-[var(--border)] bg-[var(--surface)] px-4 py-3 focus-within:border-[var(--accent)] transition-colors shadow-sm">
             <Search size={15} strokeWidth={1.5} className="text-[var(--muted)] flex-shrink-0" />
-            <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+            <input autoFocus value={query} onChange={e => setQuery(e.target.value)} onKeyDown={handleSearchKeyDown}
               placeholder={t('home.searchPlaceholder')}
               className="flex-1 bg-transparent text-[14px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none" />
           </div>

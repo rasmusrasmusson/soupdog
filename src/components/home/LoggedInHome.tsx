@@ -2,6 +2,7 @@
 import type { Recipe } from '@/types';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Search } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -12,12 +13,19 @@ const DIFFICULTY = ['All', 'Easy', 'Medium', 'Hard'];
 
 export function LoggedInHome({ recipes }: { recipes: Recipe[] }) {
   const { user } = useAuth();
+  const router = useRouter();
   const [query, setQuery]     = useState('');
   const [cuisine, setCuisine] = useState('All');
   const [dietary, setDietary] = useState('All');
   const [diff, setDiff]       = useState('All');
 
   const firstName = user?.email?.split('@')[0] ?? 'there';
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && query.trim()) {
+      router.push(`/search?q=${encodeURIComponent(query.trim())}`);
+    }
+  };
 
   return (
     <div className="flex flex-col items-center min-h-full bg-[var(--bg)]">
@@ -37,6 +45,7 @@ export function LoggedInHome({ recipes }: { recipes: Recipe[] }) {
               autoFocus
               value={query}
               onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
               placeholder="Recipe, ingredient, technique..."
               className="flex-1 bg-transparent text-[14px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
             />

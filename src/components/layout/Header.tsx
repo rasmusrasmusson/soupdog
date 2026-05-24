@@ -2,7 +2,8 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Search, LogOut } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useLocale } from '@/lib/locale-context';
 import type { Locale } from '@/i18n/config';
@@ -34,12 +35,38 @@ function Avatar({ email }: { email: string }) {
 
 export function Header() {
   const [unit, setUnit] = useState<typeof unitOptions[number]>('metric');
+  const [searchQuery, setSearchQuery] = useState('');
   const { user, loading, signOut } = useAuth();
   const { locale, setLocale, t, messages } = useLocale();
+  const router = useRouter();
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const langOptions = Object.entries(messages?.languages ?? {
     en: 'English', sv: 'Svenska', zh: '中文', ar: 'العربية'
   });
+
+  // Wire '/' key to focus search
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  const navigateSearch = () => {
+    if (searchQuery.trim()) {
+      router.push(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
+    }
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') navigateSearch();
+    if (e.key === 'Escape') searchRef.current?.blur();
+  };
 
   return (
     <header className="h-12 border-b border-[var(--border)] bg-[var(--surface)] flex items-center px-5 gap-5 sticky top-0 z-50">
@@ -52,8 +79,14 @@ export function Header() {
       {/* Search — hidden on mobile */}
       <div className="flex-1 max-w-2xl hidden md:block">
         <div className="flex items-center gap-2 border border-[var(--border)] bg-[var(--bg)] px-3 py-1.5 hover:border-[var(--accent)] transition-colors">
-          <Search size={12} strokeWidth={1.5} className="text-[var(--muted)]" />
+          <button onClick={navigateSearch} className="flex-shrink-0 text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
+            <Search size={12} strokeWidth={1.5} />
+          </button>
           <input
+            ref={searchRef}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
             placeholder={t('header.search')}
             className="flex-1 bg-transparent text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
           />
