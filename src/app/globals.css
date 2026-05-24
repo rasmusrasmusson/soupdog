@@ -69,9 +69,9 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 
-/* Ensure tables don't break layout on mobile */
+/* Tables inside .table-responsive scroll horizontally on mobile.
+   min-width is set per-table in the component, not globally. */
 @media (max-width: 767px) {
-  table { min-width: 500px; }
   .table-responsive { border: 1px solid var(--border); }
 }
 

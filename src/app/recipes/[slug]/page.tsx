@@ -42,38 +42,58 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
   const td: React.CSSProperties = { padding: '9px 14px', color: 'var(--fg)' };
 
+  const metaItems: [string, string][] = [
+    ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
+    ['YIELD',       `${servings} servings`],
+    ['TOTAL TIME',  formatDuration(recipe.totalTimeSeconds)],
+    ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
+    ['DIFFICULTY',  recipe.difficulty],
+    ['RATING',      recipe.ratings ? `${recipe.ratings.average.toFixed(1)} / 5` : '—'],
+    ['CUISINE',     recipe.cuisine ?? '—'],
+  ];
+
   return (
     <div className="flex h-full">
       <div className="flex-1 min-w-0 overflow-y-auto">
         {/* Title + meta */}
-        <div className="px-8 pt-6 pb-5 border-b border-[var(--border)]">
+        <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
           <div className="flex items-start justify-between gap-4 mb-4">
-            <h1 className="font-display text-[28px] font-normal leading-tight text-[var(--fg)]">{recipe.title}</h1>
+            <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">{recipe.title}</h1>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
                 <Bookmark size={11} strokeWidth={1.5} /> Bookmark
               </button>
-              <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
+              <button className="hidden md:flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
                 <Printer size={11} strokeWidth={1.5} /> Print
               </button>
             </div>
           </div>
 
-          <div className="border border-[var(--border)] grid grid-cols-7 text-[11px]">
-            {([
-              ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
-              ['YIELD',       `${servings} servings`],
-              ['TOTAL TIME',  formatDuration(recipe.totalTimeSeconds)],
-              ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
-              ['DIFFICULTY',  recipe.difficulty],
-              ['RATING',      recipe.ratings ? `${recipe.ratings.average.toFixed(1)} / 5` : '—'],
-              ['CUISINE',     recipe.cuisine ?? '—'],
-            ] as [string,string][]).map(([label, value], i) => (
-              <div key={label} className={i < 6 ? 'border-r border-[var(--border)]' : ''}>
+          {/* Desktop: single-row 7-col grid */}
+          <div className="hidden md:grid border border-[var(--border)] text-[11px]" style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
+            {metaItems.map(([label, value], i) => (
+              <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
                 <div className="px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)]">
                   <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</span>
                 </div>
                 <div className="px-3 py-2 font-mono text-[11px] text-[var(--fg)]">{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Mobile: 2-col grid of label+value cells */}
+          <div
+            className="md:hidden border border-[var(--border)] text-[11px]"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}
+          >
+            {metaItems.map(([label, value]) => (
+              <div key={label} style={{ background: 'var(--surface)', padding: '8px 12px' }}>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 3 }}>
+                  {label}
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>
+                  {value}
+                </div>
               </div>
             ))}
           </div>
@@ -83,157 +103,165 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           )}
         </div>
 
-        <div className="px-8 py-6 space-y-8">
+        <div className="px-4 md:px-8 py-6 space-y-8">
           {/* Ingredients */}
           <section>
             <SectionHeader title="Ingredients" meta={`${recipe.ingredients.length} items · ${servings} servings`} />
-            <table style={tbl}>
-              <thead>
-                <tr style={thead}>
-                  <Th w={36} />
-                  <Th w={32}>#</Th>
-                  <Th>Product</Th>
-                  <Th w={100} right>Mass</Th>
-                  <Th w={100} right>Volume</Th>
-                  <Th>Prep / Notes</Th>
-                  <Th w={90} center>State</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {recipe.ingredients.map((ing, i) => (
-                  <tr key={ing.ingredientId} style={{ borderTop: B, opacity: ingChecks.checked[i] ? 0.4 : 1, background: ingChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
-                    <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}>
-                      <Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} />
-                    </td>
-                    <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
-                    <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
-                      <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }}
-                        className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                      {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
-                    </td>
-                    <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                      {ing.quantity.value}{ing.quantity.unit}
-                    </td>
-                    <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                    <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
-                    <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
+            <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+              <table style={{ ...tbl, minWidth: 480 }}>
+                <thead>
+                  <tr style={thead}>
+                    <Th w={36} />
+                    <Th w={32}>#</Th>
+                    <Th>Product</Th>
+                    <Th w={100} right>Mass</Th>
+                    <Th w={100} right>Volume</Th>
+                    <Th>Prep / Notes</Th>
+                    <Th w={90} center>State</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {recipe.ingredients.map((ing, i) => (
+                    <tr key={ing.ingredientId} style={{ borderTop: B, opacity: ingChecks.checked[i] ? 0.4 : 1, background: ingChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
+                      <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}>
+                        <Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} />
+                      </td>
+                      <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
+                      <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
+                        <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }}
+                          className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
+                        {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
+                      </td>
+                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                        {ing.quantity.value}{ing.quantity.unit}
+                      </td>
+                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
+                      <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
+                      <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Equipment */}
           {recipe.equipment && recipe.equipment.length > 0 && (
             <section>
               <SectionHeader title="Equipment" />
-              <table style={tbl}>
-                <thead><tr style={thead}><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
-                <tbody>
-                  {recipe.equipment.map(eq => (
-                    <tr key={eq.equipmentId} style={{ borderTop: B }}>
-                      <td style={{ ...td, borderRight: B, fontWeight: 500 }}>{eq.name}</td>
-                      <td style={{ ...td, borderRight: B, textAlign: 'center', fontFamily: MONO, fontSize: 10, color: MUT }}>{eq.required ? '✓' : '—'}</td>
-                      <td style={{ ...td, color: MUT }}>{eq.alternatives?.join(', ') ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+                <table style={{ ...tbl, minWidth: 360 }}>
+                  <thead><tr style={thead}><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
+                  <tbody>
+                    {recipe.equipment.map(eq => (
+                      <tr key={eq.equipmentId} style={{ borderTop: B }}>
+                        <td style={{ ...td, borderRight: B, fontWeight: 500 }}>{eq.name}</td>
+                        <td style={{ ...td, borderRight: B, textAlign: 'center', fontFamily: MONO, fontSize: 10, color: MUT }}>{eq.required ? '✓' : '—'}</td>
+                        <td style={{ ...td, color: MUT }}>{eq.alternatives?.join(', ') ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
 
           {/* Procedure */}
           <section>
             <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
-            <table style={tbl}>
-              <thead>
-                <tr style={thead}>
-                  <Th w={36} /><Th>Product</Th><Th w={90} right>Mass</Th>
-                  <Th w={80} right>Volume</Th><Th w={140}>Tool</Th>
-                  <Th w={100}>Setting</Th><Th w={80} right>Time</Th><Th>Instruction</Th>
-                </tr>
-              </thead>
-              {groups.map((group, gi) => (
-                <React.Fragment key={group.label}>
-                  <tbody>
-                    <tr>
-                      <td colSpan={8} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
-                        {group.label}
-                      </td>
-                    </tr>
-                    {group.steps.map(step => {
-                      const gi = step.globalIndex;
-                      const done = stepChecks.checked[gi];
-                      const stepIngs = (step.ingredients ?? []).map((id: string) => ingMap[id]).filter(Boolean);
-                      const rowCount = Math.max(1, stepIngs.length);
+            <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+              <table style={{ ...tbl, minWidth: 600 }}>
+                <thead>
+                  <tr style={thead}>
+                    <Th w={36} /><Th>Product</Th><Th w={90} right>Mass</Th>
+                    <Th w={80} right>Volume</Th><Th w={140}>Tool</Th>
+                    <Th w={100}>Setting</Th><Th w={80} right>Time</Th><Th>Instruction</Th>
+                  </tr>
+                </thead>
+                {groups.map((group, gi) => (
+                  <React.Fragment key={group.label}>
+                    <tbody>
+                      <tr>
+                        <td colSpan={8} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
+                          {group.label}
+                        </td>
+                      </tr>
+                      {group.steps.map(step => {
+                        const gi = step.globalIndex;
+                        const done = stepChecks.checked[gi];
+                        const stepIngs = (step.ingredients ?? []).map((id: string) => ingMap[id]).filter(Boolean);
+                        const rowCount = Math.max(1, stepIngs.length);
 
-                      return stepIngs.length === 0 ? (
-                        <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                          <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>
-                          <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
-                          <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                          <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                          <td style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>
-                          <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>
-                            {step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}
-                          </td>
-                          <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>
-                            {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
-                          </td>
-                          <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
-                        </tr>
-                      ) : (
-                        stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
-                          <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>}
-                            <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
-                              <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                            </td>
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.value}{ing.quantity.unit}</td>
+                        return stepIngs.length === 0 ? (
+                          <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
+                            <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>
+                            <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>{step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>}
+                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
+                            <td style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>
+                            <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>
+                              {step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}
+                            </td>
+                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>
+                              {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
+                            </td>
+                            <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
                           </tr>
-                        ))
-                      );
-                    })}
-                  </tbody>
-                </React.Fragment>
-              ))}
-              <tfoot>
-                <tr style={{ borderTop: `2px solid var(--border)`, background: 'var(--surface-hover)' }}>
-                  <td colSpan={7} style={{ ...td, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</td>
-                  <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: 'var(--fg)' }}>{formatDuration(recipe.totalTimeSeconds)}</td>
-                </tr>
-              </tfoot>
-            </table>
+                        ) : (
+                          stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
+                            <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gi)} /></td>}
+                              <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
+                                <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
+                              </td>
+                              <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.value}{ing.quantity.unit}</td>
+                              <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>}
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>{step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}</td>}
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>}
+                            </tr>
+                          ))
+                        );
+                      })}
+                    </tbody>
+                  </React.Fragment>
+                ))}
+                <tfoot>
+                  <tr style={{ borderTop: `2px solid var(--border)`, background: 'var(--surface-hover)' }}>
+                    <td colSpan={7} style={{ ...td, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</td>
+                    <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: 'var(--fg)' }}>{formatDuration(recipe.totalTimeSeconds)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
           </section>
 
           {/* Nutrition */}
           {recipe.nutrition && (
             <section>
               <SectionHeader title="Nutrition" meta="per serving" />
-              <table style={tbl}>
-                <thead><tr style={thead}><Th>Nutrient</Th><Th w={140} right>Per serving</Th><Th w={140} right>Per 100g</Th></tr></thead>
-                <tbody>
-                  {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbohydrates',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
-                    <tr key={label} style={{ borderTop: B }}>
-                      <td style={{ ...td, borderRight: B }}>{label}</td>
-                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value} <span style={{ color: MUT }}>{u}</span></td>
-                      <td style={{ ...td, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="overflow-x-auto -mx-4 md:mx-0 px-4 md:px-0">
+                <table style={{ ...tbl, minWidth: 320 }}>
+                  <thead><tr style={thead}><Th>Nutrient</Th><Th w={140} right>Per serving</Th><Th w={140} right>Per 100g</Th></tr></thead>
+                  <tbody>
+                    {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbohydrates',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
+                      <tr key={label} style={{ borderTop: B }}>
+                        <td style={{ ...td, borderRight: B }}>{label}</td>
+                        <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value} <span style={{ color: MUT }}>{u}</span></td>
+                        <td style={{ ...td, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
         </div>
       </div>
 
-      {/* Right panel */}
-      <aside className="w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
+      {/* Right panel — hidden on mobile, shown on md+ */}
+      <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
         <PanelSection title="Progress">
           <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
           <div className="mt-2"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
@@ -272,6 +300,21 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           </table>
         </PanelSection>
       </aside>
+
+      {/* Mobile bottom sticky panel — progress + servings */}
+      <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} />
+        </div>
+        <div className="flex items-center border border-[var(--border)] flex-shrink-0">
+          <button onClick={() => setServings(s => Math.max(1, s-1))} className="w-7 h-7 font-mono text-[var(--muted)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">−</button>
+          <span className="px-2 font-mono tabular-nums text-[12px]">{servings}</span>
+          <button onClick={() => setServings(s => s+1)} className="w-7 h-7 font-mono text-[var(--muted)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">+</button>
+        </div>
+      </div>
     </div>
   );
 }
