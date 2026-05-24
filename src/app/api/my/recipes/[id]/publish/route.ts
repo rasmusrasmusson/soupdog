@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   await supabase
     .from('recipe_canonicals')
-    .update({ is_published: publish })
+    .update({ is_published: publish as boolean })
     .eq('id', id)
     .eq('author_id', user.id);
 
