@@ -14,6 +14,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
   const [servings, setServings] = useState(recipe.servings);
+  // Track which ingredient pills are "added" per step (keyed by "stepId-ingId")
+  const [addedIngs, setAddedIngs] = useState<Record<string, boolean>>({});
+  const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
 
   const ingMap = Object.fromEntries(recipe.ingredients.map(i => [i.ingredientId, i]));
 
@@ -52,11 +55,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
               {recipe.title}
             </h1>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors">
-                <Bookmark size={11} strokeWidth={1.5} /> Bookmark
-              </button>
-            </div>
+            <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors flex-shrink-0">
+              <Bookmark size={11} strokeWidth={1.5} /> Bookmark
+            </button>
           </div>
 
           {/* Desktop meta strip */}
@@ -94,7 +95,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           <section>
             <SectionHeader title="Ingredients" meta={`${recipe.ingredients.length} items · ${servings} servings`} />
 
-            {/* Mobile: simple list */}
+            {/* Mobile: flat list */}
             <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
               {recipe.ingredients.map((ing, i) => (
                 <div key={ing.ingredientId}
@@ -102,9 +103,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                   style={{ opacity: ingChecks.checked[i] ? 0.4 : 1, background: ingChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
                   <Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} />
                   <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                  <span style={{ fontWeight: 500, fontSize: 13, flex: 1 }}>{ing.name}</span>
+                  <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
                   <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{ing.quantity.value}{ing.quantity.unit}</span>
-                  {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0 }}>{ing.prep}</span>}
+                  {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.prep}</span>}
                 </div>
               ))}
             </div>
@@ -165,8 +166,8 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           <section>
             <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
 
-            {/* Mobile: card-style steps */}
-            <div className="md:hidden space-y-0 border border-[var(--border)] divide-y divide-[var(--border)]">
+            {/* Mobile: card steps with tappable ingredient pills */}
+            <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
               {groups.map((group, gi) => (
                 <React.Fragment key={group.label}>
                   <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined }}>
@@ -175,13 +176,38 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                   {group.steps.map(step => {
                     const gIdx = step.globalIndex;
                     const done = stepChecks.checked[gIdx];
+                    const stepIngs = (step.ingredients ?? []).map((id: string) => ingMap[id]).filter(Boolean);
                     return (
                       <div key={step.id} style={{ padding: '10px 12px', opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined }}>
                         <div className="flex items-start gap-3">
                           <Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} />
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}>{step.instruction}</p>
-                            <div className="flex flex-wrap gap-2 mt-1.5">
+                            {/* Tappable ingredient pills */}
+                            {stepIngs.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-2">
+                                {stepIngs.map((ing: RecipeIngredientRef) => {
+                                  const key = `${step.id}-${ing.ingredientId}`;
+                                  const added = addedIngs[key];
+                                  return (
+                                    <button key={key} onClick={() => toggleAddedIng(key)}
+                                      style={{
+                                        fontFamily: MONO, fontSize: 10,
+                                        padding: '2px 8px', borderRadius: 3,
+                                        border: `1px solid ${added ? 'var(--accent)' : 'var(--border)'}`,
+                                        background: added ? 'var(--accent-subtle)' : 'var(--surface)',
+                                        color: added ? 'var(--accent-text)' : 'var(--fg)',
+                                        cursor: 'pointer', transition: 'all 0.15s',
+                                        textDecoration: added ? 'line-through' : 'none',
+                                      }}>
+                                      {ing.name} · {ing.quantity.value}{ing.quantity.unit}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {/* Meta tags: time, temp, tools */}
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {step.durationSeconds && (
                                 <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>⏱ {formatDuration(step.durationSeconds)}</span>
                               )}
@@ -191,7 +217,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                 </span>
                               )}
                               {step.tools && step.tools.length > 0 && (
-                                <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>{step.tools.join(', ')}</span>
+                                <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>{step.tools.join(' · ')}</span>
                               )}
                             </div>
                           </div>
@@ -240,7 +266,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>
                               {step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}
                             </td>
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>
+                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>
                               {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
                             </td>
                             <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
@@ -256,7 +282,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                               <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                               {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, color: MUT, fontSize: 11 }}>{step.tools?.join(', ') || '—'}</td>}
                               {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: step.temperature ? 'var(--fg)' : MUT }}>{step.temperature ? `${step.temperature.value}°${step.temperature.unit === 'celsius' ? 'C' : 'F'}` : '—'}</td>}
-                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, color: step.durationSeconds ? 'var(--fg)' : MUT, fontVariantNumeric: 'tabular-nums' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
+                              {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
                               {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>}
                             </tr>
                           ))
@@ -286,7 +312,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                     {([['Calories',recipe.nutrition.calories,'kcal'],['Protein',recipe.nutrition.protein,'g'],['Fat',recipe.nutrition.fat,'g'],['Carbohydrates',recipe.nutrition.carbohydrates,'g'],['Fiber',recipe.nutrition.fiber,'g'],['Sodium',recipe.nutrition.sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
                       <tr key={label} style={{ borderTop: B }}>
                         <td style={{ ...td, borderRight: B }}>{label}</td>
-                        <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value} <span style={{ color: MUT }}>{u}</span></td>
+                        <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value}<span style={{ color: MUT, marginLeft: 3 }}>{u}</span></td>
                         <td style={{ ...td, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                       </tr>
                     ))}
@@ -343,12 +369,8 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
       {/* Mobile sticky bar */}
       <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4">
-        <div className="flex-1 min-w-0">
-          <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} />
-        </div>
+        <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
+        <div className="flex-1 min-w-0"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
         <div className="flex items-center border border-[var(--border)] flex-shrink-0">
           <button onClick={() => setServings(s => Math.max(1, s-1))} className="w-7 h-7 font-mono text-[var(--muted)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">−</button>
           <span className="px-2 font-mono tabular-nums text-[12px]">{servings}</span>
@@ -371,62 +393,35 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
 
   React.useEffect(() => {
     async function load() {
-      setLoading(true);
-      setError(null);
+      setLoading(true); setError(null);
       try {
         const { createClient } = await import('@/lib/supabase/client');
         const supabase = createClient();
         const { data, error: dbError } = await supabase
           .from('recipes')
-          .select(`
-            *,
-            recipe_ingredients (
-              *,
-              ingredients!ingredient_id ( id, slug, name )
-            ),
-            recipe_steps ( * ),
-            recipe_equipment (
-              *,
-              equipment!equipment_id ( id, slug, name )
-            )
-          `)
-          .eq('slug', slug)
-          .eq('is_published', true)
-          .single();
-        if (dbError) { console.error('[RecipePage] Supabase error:', dbError); throw dbError; }
+          .select(`*, recipe_ingredients(*, ingredients!ingredient_id(id, slug, name)), recipe_steps(*), recipe_equipment(*, equipment!equipment_id(id, slug, name))`)
+          .eq('slug', slug).eq('is_published', true).single();
+        if (dbError) { console.error('[RecipePage]', dbError); throw dbError; }
         if (data) {
           const { mapRecipeFromDB } = await import('@/lib/recipe-mapper');
-          setRecipe(mapRecipeFromDB(data));
-          setLoading(false);
-          return;
+          setRecipe(mapRecipeFromDB(data)); setLoading(false); return;
         }
-      } catch (err) {
-        console.error('[RecipePage] Falling back to sample data:', err);
-      }
+      } catch (err) { console.error('[RecipePage] Falling back to sample data:', err); }
       const { sampleRecipes } = await import('@/data/sample-recipes');
       const r = sampleRecipes.find(r => r.slug === slug) ?? null;
       if (!r) setError('Recipe not found.');
-      setRecipe(r);
-      setLoading(false);
+      setRecipe(r); setLoading(false);
     }
     load();
   }, [slug]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-64">
-      <span className="font-mono text-[11px] text-[var(--muted)] uppercase tracking-widest">Loading…</span>
-    </div>
-  );
+  if (loading) return <div className="flex items-center justify-center h-64"><span className="font-mono text-[11px] text-[var(--muted)] uppercase tracking-widest">Loading…</span></div>;
   if (error || !recipe) return <div className="p-8 font-mono text-[12px] text-[var(--muted)]">{error ?? 'Recipe not found.'}</div>;
   return <RecipeView recipe={recipe} />;
 }
 
 function Th({ children, w, right, center }: { children?: React.ReactNode; w?: number; right?: boolean; center?: boolean }) {
-  return (
-    <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">
-      {children}
-    </th>
-  );
+  return <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">{children}</th>;
 }
 
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {

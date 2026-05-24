@@ -1,6 +1,14 @@
 import type { Recipe, RecipeIngredientRef, RecipeStep, EquipmentRef } from '@/types';
 
 export function mapRecipeFromDB(row: any): Recipe {
+  // Build a map of equipment id -> name from recipe_equipment joins
+  const equipmentNameMap: Record<string, string> = {};
+  (row.recipe_equipment ?? []).forEach((re: any) => {
+    const id = re.equipment?.id ?? re.equipment_id;
+    const name = re.equipment?.name ?? '';
+    if (id) equipmentNameMap[id] = name;
+  });
+
   const ingredients: RecipeIngredientRef[] = (row.recipe_ingredients ?? [])
     .sort((a: any, b: any) => a.order_index - b.order_index)
     .map((ri: any) => ({
@@ -25,6 +33,12 @@ export function mapRecipeFromDB(row: any): Recipe {
       temperature: s.temperature_celsius
         ? { value: s.temperature_celsius, unit: 'celsius' }
         : undefined,
+      // Resolve equipment_ids array to tool name strings
+      tools: (s.equipment_ids ?? [])
+        .map((id: string) => equipmentNameMap[id])
+        .filter(Boolean),
+      // DB doesn't store per-step ingredient refs yet — leave empty
+      ingredients: [],
     }));
 
   const equipment: EquipmentRef[] = (row.recipe_equipment ?? [])
