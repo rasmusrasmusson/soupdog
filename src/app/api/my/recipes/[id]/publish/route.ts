@@ -8,11 +8,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  const { publish } = await req.json();
+  const body = await req.json();
+  const publish: boolean = body.publish;
 
-  await supabase
+  // Cast to any to bypass Supabase generated types for new schema tables
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const db = supabase as any;
+  await db
     .from('recipe_canonicals')
-    .update({ is_published: publish as boolean })
+    .update({ is_published: publish })
     .eq('id', id)
     .eq('author_id', user.id);
 
