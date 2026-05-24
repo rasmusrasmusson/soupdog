@@ -9,7 +9,6 @@
     .wordmark{font-family: Canela, 'Cormorant Garamond', 'Times New Roman', Georgia, serif; font-size: 160px; font-weight: 500; letter-spacing: -3px; fill:#000000;}
     .tagline{font-family: Inter, 'IBM Plex Sans', Arial, sans-serif; font-size: 28px; font-weight: 500; letter-spacing: 13px; fill:#000000;}
   ]]></style>
-  <rect width="1200" height="360" fill="#fff"/>
   <g id="soupdog-chef-dog-original" transform="translate(38 34) scale(0.92)">
     <path id="Ear" d="M110.24,113.04c4.93,20.91-28.5,33.16-43.3,25.42s-15.13-30.07-10.29-53.43c4.84-23.36,49.1-82.36,63.9-74.63
 	S101.59,76.36,110.24,113.04z"/>
