@@ -7,10 +7,12 @@ function slugify(text: string) {
 }
 
 // GET /api/my/recipes/[id] — load recipe for editing
-export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await params;
 
   const { data: canonical, error } = await supabase
     .from('recipe_canonicals')
@@ -32,7 +34,7 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
         version_equipment ( equipment_id )
       )
     `)
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('author_id', user.id)
     .single();
 
@@ -79,15 +81,17 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 // PUT /api/my/recipes/[id] — create new version
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
+  const { id } = await params;
+
   const { data: canonical } = await supabase
     .from('recipe_canonicals')
     .select('id, current_version_id')
-    .eq('id', params.id)
+    .eq('id', id)
     .eq('author_id', user.id)
     .single();
 
@@ -169,11 +173,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/my/recipes/[id]
-export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  await supabase.from('recipe_canonicals').delete().eq('id', params.id).eq('author_id', user.id);
+  const { id } = await params;
+
+  await supabase.from('recipe_canonicals').delete().eq('id', id).eq('author_id', user.id);
   return NextResponse.json({ ok: true });
 }
