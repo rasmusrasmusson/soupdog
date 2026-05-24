@@ -245,6 +245,9 @@ alter table equipment          enable row level security;
 create policy "Public read recipes"     on recipes     for select using (is_published = true);
 create policy "Public read ingredients" on ingredients for select using (true);
 create policy "Public read equipment"   on equipment   for select using (true);
+create policy "Public read recipe_ingredients" on recipe_ingredients for select using (true);
+create policy "Public read recipe_steps"       on recipe_steps       for select using (true);
+create policy "Public read recipe_equipment"   on recipe_equipment   for select using (true);
 
 -- Users own their data
 create policy "Users manage own profile"   on user_profiles     for all using (auth.uid() = id);
