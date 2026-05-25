@@ -53,7 +53,7 @@ export async function createRecipe(data: RecipeFormData) {
 
   // 1. Create canonical
   const { data: canonical, error: canonicalError } = await supabase
-    .from('recipe_canonicals')
+    .from('recipe_canonicals' as any)
     .insert({
       slug,
       author_id:    user.id,
@@ -67,7 +67,7 @@ export async function createRecipe(data: RecipeFormData) {
 
   // 2. Create version
   const { data: version, error: versionError } = await supabase
-    .from('recipe_versions')
+    .from('recipe_versions' as any)
     .insert({
       canonical_id:          canonical.id,
       version_number:        1,
@@ -86,13 +86,13 @@ export async function createRecipe(data: RecipeFormData) {
     .single();
 
   if (versionError || !version) {
-    await supabase.from('recipe_canonicals').delete().eq('id', canonical.id);
+    await supabase.from('recipe_canonicals' as any).delete().eq('id', canonical.id);
     throw versionError;
   }
 
   // 3. Update canonical to point at version
   await supabase
-    .from('recipe_canonicals')
+    .from('recipe_canonicals' as any)
     .update({ current_version_id: version.id })
     .eq('id', canonical.id);
 
@@ -107,7 +107,7 @@ export async function createRecipe(data: RecipeFormData) {
     if (!ingredientId && ing.name.trim()) {
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
       const { data: newIng } = await supabase
-        .from('ingredients')
+        .from('ingredients' as any)
         .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
  .select()
         .single();
@@ -116,7 +116,7 @@ export async function createRecipe(data: RecipeFormData) {
 
     if (!ingredientId) continue;
 
-    await supabase.from('version_ingredients').insert({
+    await supabase.from('version_ingredients' as any).insert({
       version_id:     version.id,
       ingredient_id:  ingredientId,
       quantity_value: ing.quantityValue || 0,
@@ -129,7 +129,7 @@ export async function createRecipe(data: RecipeFormData) {
     const step = data.steps[i];
     if (!step.instruction.trim()) continue;
 
-    await supabase.from('version_steps').insert({
+    await supabase.from('version_steps' as any).insert({
       version_id:          version.id,
       order_index:         i + 1,
       step_type:           step.stepType || 'human',
@@ -140,12 +140,12 @@ export async function createRecipe(data: RecipeFormData) {
     } as any); // 6. Insert equipment links
   for (const equipmentId of data.equipmentIds) {
     if (!equipmentId) continue;
-    await supabase.from('version_equipment').insert({
+    await supabase.from('version_equipment' as any).insert({
       version_id:   version.id,
       equipment_id: equipmentId,
       required:     true,
     } as any); // 7. Create canonical execution variant
-  await supabase.from('execution_variants').insert({
+  await supabase.from('execution_variants' as any).insert({
     version_id:           version.id,
     servings:             data.servings,
     unit_system:          'si',
@@ -181,7 +181,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
 
   // Get current version number
   const { data: currentVersion } = await supabase
-    .from('recipe_versions')
+    .from('recipe_versions' as any)
     .select('version_number')
     .eq('id', versionId)
     .single();
@@ -190,7 +190,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
 
   // Create new version
   const { data: version, error: versionError } = await supabase
-    .from('recipe_versions')
+    .from('recipe_versions' as any)
     .insert({
       canonical_id:          canonicalId,
       parent_version_id:     versionId,
@@ -214,13 +214,13 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
 
   // Mark previous version as non-canonical
   await supabase
-    .from('recipe_versions')
+    .from('recipe_versions' as any)
     .update({ is_canonical_version: false })
     .eq('id', versionId);
 
   // Update canonical pointer
   await supabase
-    .from('recipe_canonicals')
+    .from('recipe_canonicals' as any)
     .update({ current_version_id: version.id })
     .eq('id', canonicalId);
 
@@ -233,7 +233,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
     if (!ingredientId && ing.name.trim()) {
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
       const { data: newIng } = await supabase
-        .from('ingredients')
+        .from('ingredients' as any)
         .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
  .select()
         .single();
@@ -241,14 +241,14 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
     }
     if (!ingredientId) continue;
 
-    await supabase.from('version_ingredients').insert({
+    await supabase.from('version_ingredients' as any).insert({
       version_id: version.id, ingredient_id: ingredientId,
       quantity_value: ing.quantityValue || 0, quantity_unit: ing.quantityUnit || 'g',
       prep_note: ing.prepNote.trim() || null, optional: ing.optional, order_index: i + 1,
     } as any); for (let i = 0; i < data.steps.length; i++) {
     const step = data.steps[i];
     if (!step.instruction.trim()) continue;
-    await supabase.from('version_steps').insert({
+    await supabase.from('version_steps' as any).insert({
       version_id: version.id, order_index: i + 1,
       step_type: step.stepType || 'human', instruction: step.instruction.trim(),
       group_label: step.groupLabel.trim() || null,
@@ -256,7 +256,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
       temperature_celsius: step.temperatureCelsius || null,
     } as any); for (const equipmentId of data.equipmentIds) {
     if (!equipmentId) continue;
-    await supabase.from('version_equipment').insert({
+    await supabase.from('version_equipment' as any).insert({
       version_id: version.id, equipment_id: equipmentId, required: true,
     } as any); redirect(`/my/recipes`);
 }
@@ -268,7 +268,7 @@ export async function togglePublishRecipe(canonicalId: string, publish: boolean)
   if (!user) throw new Error('Not authenticated');
 
   await supabase
-    .from('recipe_canonicals')
+    .from('recipe_canonicals' as any)
     .update({ is_published: publish })
     .eq('id', canonicalId)
     .eq('author_id', user.id);
@@ -281,7 +281,7 @@ export async function deleteRecipe(canonicalId: string) {
   if (!user) throw new Error('Not authenticated');
 
   await supabase
-    .from('recipe_canonicals')
+    .from('recipe_canonicals' as any)
     .delete()
     .eq('id', canonicalId)
     .eq('author_id', user.id);
