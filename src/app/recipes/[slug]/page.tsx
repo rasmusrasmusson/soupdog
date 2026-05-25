@@ -478,7 +478,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,
                 food_state, prep_note, optional,
-                ingredients ( id, slug, name )
+                ingredients!ingredient_id ( id, slug, name )
               ),
               version_steps (
                 id, order_index, step_type, group_label, instruction,
