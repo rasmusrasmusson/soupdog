@@ -30,14 +30,14 @@ export default function SearchPage() {
   const searchParams = useSearchParams();
 
   const [query,       setQuery]       = useState('');
-  const [contentType, setContentType] = useState<ContentType>('All');
+  const [contentType, setContentType] = useState<ContentType>('Recipes');
   const [results,     setResults]     = useState<SearchResult[]>([]);
   const [loading,     setLoading]     = useState(false);
 
   // Sync state from URL params on load
   useEffect(() => {
     setQuery(searchParams.get('q') ?? '');
-    setContentType((searchParams.get('type') as ContentType) ?? 'All');
+    setContentType((searchParams.get('type') as ContentType) ?? 'Recipes');
   }, [searchParams]);
 
   // Run search against Supabase search_index
