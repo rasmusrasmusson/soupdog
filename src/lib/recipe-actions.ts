@@ -49,7 +49,7 @@ export async function createRecipe(data: RecipeFormData) {
       author_id:    user.id,
       is_published: false,  // drafts until explicitly published
       source:       'human_authored',
-    })
+    } as any)
     .select()
     .single();
 
@@ -71,7 +71,7 @@ export async function createRecipe(data: RecipeFormData) {
       active_time_seconds:   (data.activeTimeMinutes || 0) * 60,
       passive_time_seconds:  Math.max(0, ((data.totalTimeMinutes || 0) - (data.activeTimeMinutes || 0))) * 60,
       is_canonical_version:  true,
-    })
+    } as any)
     .select()
     .single();
 
@@ -98,8 +98,8 @@ export async function createRecipe(data: RecipeFormData) {
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
       const { data: newIng } = await supabase
         .from('ingredients')
-        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' })
-        .select()
+        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
+ .select()
         .single();
       ingredientId = newIng?.id;
     }
@@ -114,10 +114,7 @@ export async function createRecipe(data: RecipeFormData) {
       prep_note:      ing.prepNote.trim() || null,
       optional:       ing.optional,
       order_index:    i + 1,
-    });
-  }
-
-  // 5. Insert steps
+    } as any); // 5. Insert steps
   for (let i = 0; i < data.steps.length; i++) {
     const step = data.steps[i];
     if (!step.instruction.trim()) continue;
@@ -130,29 +127,21 @@ export async function createRecipe(data: RecipeFormData) {
       group_label:         step.groupLabel.trim() || null,
       duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
       temperature_celsius: step.temperatureCelsius || null,
-    });
-  }
-
-  // 6. Insert equipment links
+    } as any); // 6. Insert equipment links
   for (const equipmentId of data.equipmentIds) {
     if (!equipmentId) continue;
     await supabase.from('version_equipment').insert({
       version_id:   version.id,
       equipment_id: equipmentId,
       required:     true,
-    });
-  }
-
-  // 7. Create canonical execution variant
+    } as any); // 7. Create canonical execution variant
   await supabase.from('execution_variants').insert({
     version_id:           version.id,
     servings:             data.servings,
     unit_system:          'si',
     is_canonical_variant: true,
     author_id:            user.id,
-  });
-
-  // 8. Mirror to legacy recipes table for compatibility
+  } as any);8. Mirror to legacy recipes table for compatibility
   await supabase.from('recipes').insert({
     slug,
     version:           1,
@@ -207,7 +196,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
       active_time_seconds:   (data.activeTimeMinutes || 0) * 60,
       passive_time_seconds:  Math.max(0, ((data.totalTimeMinutes || 0) - (data.activeTimeMinutes || 0))) * 60,
       is_canonical_version:  true,
-    })
+    } as any)
     .select()
     .single();
 
@@ -235,8 +224,8 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
       const { data: newIng } = await supabase
         .from('ingredients')
-        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' })
-        .select()
+        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
+ .select()
         .single();
       ingredientId = newIng?.id;
     }
@@ -246,10 +235,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
       version_id: version.id, ingredient_id: ingredientId,
       quantity_value: ing.quantityValue || 0, quantity_unit: ing.quantityUnit || 'g',
       prep_note: ing.prepNote.trim() || null, optional: ing.optional, order_index: i + 1,
-    });
-  }
-
-  for (let i = 0; i < data.steps.length; i++) {
+    } as any); for (let i = 0; i < data.steps.length; i++) {
     const step = data.steps[i];
     if (!step.instruction.trim()) continue;
     await supabase.from('version_steps').insert({
@@ -258,17 +244,11 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
       group_label: step.groupLabel.trim() || null,
       duration_seconds: step.durationMinutes ? step.durationMinutes * 60 : null,
       temperature_celsius: step.temperatureCelsius || null,
-    });
-  }
-
-  for (const equipmentId of data.equipmentIds) {
+    } as any); for (const equipmentId of data.equipmentIds) {
     if (!equipmentId) continue;
     await supabase.from('version_equipment').insert({
       version_id: version.id, equipment_id: equipmentId, required: true,
-    });
-  }
-
-  redirect(`/my/recipes`);
+    } as any); redirect(`/my/recipes`);
 }
 
 // ── Publish / unpublish ───────────────────────────────────────
