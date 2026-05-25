@@ -5,6 +5,16 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
+// ── Helpers ───────────────────────────────────────────────────
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 60);
+}
+
+
 export interface RecipeFormData {
   title:              string;
   description:        string;
@@ -279,11 +289,3 @@ export async function deleteRecipe(canonicalId: string) {
   redirect('/my/recipes');
 }
 
-// ── Helpers ───────────────────────────────────────────────────
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 60);
-}
