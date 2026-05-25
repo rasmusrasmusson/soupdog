@@ -127,6 +127,7 @@ export async function createRecipe(data: RecipeFormData) {
       optional:       ing.optional,
       order_index:    i + 1,
     } as any);
+  }
 
   // 5. Insert steps
   for (let i = 0; i < data.steps.length; i++) {
@@ -310,4 +311,3 @@ export async function deleteRecipe(canonicalId: string) {
 
   redirect('/my/recipes');
 }
-
