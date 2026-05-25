@@ -108,12 +108,12 @@ export async function createRecipe(data: RecipeFormData) {
     // If no existing ingredient matched, create one
     if (!ingredientId && ing.name.trim()) {
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
-      const { data: newIng } = await supabase
+      const { data: newIngRaw } = await (supabase as any)
         .from('ingredients')
-        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
- .select()
+        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' })
+        .select()
         .single();
-      ingredientId = newIng?.id;
+      ingredientId = (newIngRaw as any)?.id;
     }
 
     if (!ingredientId) continue;
@@ -235,12 +235,12 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
     let ingredientId = ing.ingredientId;
     if (!ingredientId && ing.name.trim()) {
       const ingSlug = slugify(ing.name) + '-' + Date.now().toString(36).slice(-4);
-      const { data: newIng } = await supabase
+      const { data: newIngRaw } = await (supabase as any)
         .from('ingredients')
-        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' } as any)
- .select()
+        .insert({ slug: ingSlug, name: ing.name.trim(), category: 'other' })
+        .select()
         .single();
-      ingredientId = newIng?.id;
+      ingredientId = (newIngRaw as any)?.id;
     }
     if (!ingredientId) continue;
 
