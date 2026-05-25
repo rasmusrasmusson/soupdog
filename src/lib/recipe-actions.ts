@@ -52,7 +52,7 @@ export async function createRecipe(data: RecipeFormData) {
   const slug = slugify(data.title) + '-' + Date.now().toString(36);
 
   // 1. Create canonical
-  const { data: canonical, error: canonicalError } = await supabase
+  const { data: canonicalRaw, error: canonicalError } = await supabase
     .from('recipe_canonicals' as any)
     .insert({
       slug,
@@ -63,10 +63,11 @@ export async function createRecipe(data: RecipeFormData) {
     .select()
     .single();
 
-  if (canonicalError || !canonical) throw canonicalError;
+  if (canonicalError || !canonicalRaw) throw canonicalError;
+  const canonical = canonicalRaw as any;
 
   // 2. Create version
-  const { data: version, error: versionError } = await supabase
+  const { data: versionRaw, error: versionError } = await supabase
     .from('recipe_versions' as any)
     .insert({
       canonical_id:          canonical.id,
@@ -85,10 +86,11 @@ export async function createRecipe(data: RecipeFormData) {
     .select()
     .single();
 
-  if (versionError || !version) {
+  if (versionError || !versionRaw) {
     await supabase.from('recipe_canonicals' as any).delete().eq('id', canonical.id);
     throw versionError;
   }
+  const version = versionRaw as any;
 
   // 3. Update canonical to point at version
   await supabase
@@ -189,7 +191,7 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
   const newVersionNumber = (currentVersion?.version_number ?? 1) + 1;
 
   // Create new version
-  const { data: version, error: versionError } = await supabase
+  const { data: versionRaw2, error: versionError } = await supabase
     .from('recipe_versions' as any)
     .insert({
       canonical_id:          canonicalId,
@@ -210,7 +212,8 @@ export async function updateRecipe(canonicalId: string, versionId: string, data:
     .select()
     .single();
 
-  if (versionError || !version) throw versionError;
+  if (versionError || !versionRaw2) throw versionError;
+  const version = versionRaw2 as any;
 
   // Mark previous version as non-canonical
   await supabase
