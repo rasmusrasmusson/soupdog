@@ -13,7 +13,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
   const { data: canonical, error } = await db
@@ -47,6 +46,44 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     : canonical.recipe_versions;
   if (!v) return NextResponse.json({ error: 'No version found' }, { status: 404 });
 
+  const ingredients = (v.version_ingredients ?? [])
+    .sort((a: any, b: any) => a.order_index - b.order_index)
+    .map((i: any) => ({
+      id:            i.id,
+      ingredientId:  i.ingredient_id,
+      name:          i.ingredients?.name ?? '',
+      quantityValue: i.quantity_value,
+      quantityUnit:  i.quantity_unit,
+      prepNote:      i.prep_note ?? '',
+      optional:      i.optional,
+    }));
+
+  const steps = (v.version_steps ?? [])
+    .sort((a: any, b: any) => a.order_index - b.order_index)
+    .map((s: any) => ({
+      id:                 s.id,
+      stepType:           s.step_type,
+      instruction:        s.instruction,
+      groupLabel:         s.group_label ?? '',
+      durationMinutes:    s.duration_seconds ? Math.round(s.duration_seconds / 60) : 0,
+      temperatureCelsius: s.temperature_celsius ?? 0,
+      stepIngredients:    [], // populated below
+    }));
+
+  // Since we don't have step-ingredient linking yet, put all ingredients
+  // on the first step as a fallback so the editor shows them
+  // In future this will be per-step via a step_id FK
+  if (steps.length > 0 && ingredients.length > 0) {
+    steps[0].stepIngredients = ingredients.map((ing: any) => ({
+      id:            ing.id,
+      ingredientId:  ing.ingredientId,
+      name:          ing.name,
+      quantityValue: ing.quantityValue,
+      quantityUnit:  ing.quantityUnit,
+      prepNote:      ing.prepNote,
+    }));
+  }
+
   return NextResponse.json({
     canonicalId:       canonical.id,
     versionId:         v.id,
@@ -59,27 +96,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     totalTimeMinutes:  Math.round((v.total_time_seconds ?? 0) / 60),
     activeTimeMinutes: Math.round((v.active_time_seconds ?? 0) / 60),
     isPublished:       canonical.is_published,
-    ingredients: (v.version_ingredients ?? [])
-      .sort((a: any, b: any) => a.order_index - b.order_index)
-      .map((i: any) => ({
-        id:            i.id,
-        ingredientId:  i.ingredient_id,
-        name:          i.ingredients?.name ?? '',
-        quantityValue: i.quantity_value,
-        quantityUnit:  i.quantity_unit,
-        prepNote:      i.prep_note ?? '',
-        optional:      i.optional,
-      })),
-    steps: (v.version_steps ?? [])
-      .sort((a: any, b: any) => a.order_index - b.order_index)
-      .map((s: any) => ({
-        id:                 s.id,
-        stepType:           s.step_type,
-        instruction:        s.instruction,
-        groupLabel:         s.group_label ?? '',
-        durationMinutes:    s.duration_seconds ? Math.round(s.duration_seconds / 60) : 0,
-        temperatureCelsius: s.temperature_celsius ?? 0,
-      })),
+    ingredients,
+    steps,
     equipmentIds: (v.version_equipment ?? []).map((e: any) => e.equipment_id),
   });
 }
@@ -91,7 +109,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
   const { data: canonical } = await db
@@ -138,6 +155,49 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   await db.from('recipe_versions').update({ is_canonical_version: false }).eq('id', canonical.current_version_id);
   await db.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
 
+  const stepIngredientIds = new Set<string>();
+
+  // Insert steps + their stepIngredients
+  for (let i = 0; i < (data.steps ?? []).length; i++) {
+    const step = data.steps[i];
+    if (!step.instruction?.trim()) continue;
+
+    await db.from('version_steps').insert({
+      version_id:          version.id,
+      order_index:         i + 1,
+      step_type:           step.stepType ?? 'human',
+      instruction:         step.instruction.trim(),
+      group_label:         step.groupLabel?.trim() || null,
+      duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
+      temperature_celsius: step.temperatureCelsius || null,
+    });
+
+    for (let j = 0; j < (step.stepIngredients ?? []).length; j++) {
+      const si = step.stepIngredients[j];
+      if (!si.name?.trim() && !si.ingredientId) continue;
+      let ingredientId = si.ingredientId;
+      if (!ingredientId && si.name?.trim()) {
+        const { data: newIng } = await db
+          .from('ingredients')
+          .insert({ slug: slugify(si.name) + '-' + Date.now().toString(36).slice(-4), name: si.name.trim(), category: 'other' })
+          .select('id').single();
+        ingredientId = newIng?.id;
+      }
+      if (!ingredientId) continue;
+      stepIngredientIds.add(ingredientId);
+      await db.from('version_ingredients').insert({
+        version_id:     version.id,
+        ingredient_id:  ingredientId,
+        quantity_value: si.quantityValue ?? 0,
+        quantity_unit:  si.quantityUnit ?? 'g',
+        prep_note:      si.prepNote?.trim() || null,
+        optional:       false,
+        order_index:    j + 1,
+      });
+    }
+  }
+
+  // Top-level ingredients not already in steps
   for (let i = 0; i < (data.ingredients ?? []).length; i++) {
     const ing = data.ingredients[i];
     if (!ing.name?.trim() && !ing.ingredientId) continue;
@@ -146,26 +206,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const { data: newIng } = await db
         .from('ingredients')
         .insert({ slug: slugify(ing.name) + '-' + Date.now().toString(36).slice(-4), name: ing.name.trim(), category: 'other' })
-        .select().single();
+        .select('id').single();
       ingredientId = newIng?.id;
     }
-    if (!ingredientId) continue;
+    if (!ingredientId || stepIngredientIds.has(ingredientId)) continue;
     await db.from('version_ingredients').insert({
-      version_id: version.id, ingredient_id: ingredientId,
-      quantity_value: ing.quantityValue ?? 0, quantity_unit: ing.quantityUnit ?? 'g',
-      prep_note: ing.prepNote?.trim() || null, optional: ing.optional ?? false, order_index: i + 1,
-    });
-  }
-
-  for (let i = 0; i < (data.steps ?? []).length; i++) {
-    const step = data.steps[i];
-    if (!step.instruction?.trim()) continue;
-    await db.from('version_steps').insert({
-      version_id: version.id, order_index: i + 1,
-      step_type: step.stepType ?? 'human', instruction: step.instruction.trim(),
-      group_label: step.groupLabel?.trim() || null,
-      duration_seconds: step.durationMinutes ? step.durationMinutes * 60 : null,
-      temperature_celsius: step.temperatureCelsius || null,
+      version_id:     version.id,
+      ingredient_id:  ingredientId,
+      quantity_value: ing.quantityValue ?? 0,
+      quantity_unit:  ing.quantityUnit ?? 'g',
+      prep_note:      ing.prepNote?.trim() || null,
+      optional:       ing.optional ?? false,
+      order_index:    1000 + i,
     });
   }
 
@@ -173,6 +225,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!equipmentId) continue;
     await db.from('version_equipment').insert({ version_id: version.id, equipment_id: equipmentId, required: true });
   }
+
+  // Update legacy mirror
+  await db.from('recipes').update({
+    title:                data.title?.trim(),
+    description:          data.description?.trim() || null,
+    cuisine:              data.cuisine?.trim() || null,
+    tags:                 data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+    servings:             data.servings ?? 4,
+    difficulty:           data.difficulty ?? 'medium',
+    total_time_seconds:   (data.totalTimeMinutes ?? 0) * 60,
+    active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
+    passive_time_seconds: Math.max(0, ((data.totalTimeMinutes ?? 0) - (data.activeTimeMinutes ?? 0))) * 60,
+    recipe_version_id:    version.id,
+    version:              newVersionNumber,
+  }).eq('recipe_version_id', canonical.current_version_id);
 
   return NextResponse.json({ id: canonical.id }, { status: 200 });
 }
@@ -184,7 +251,6 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id:
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { id } = await params;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   await (supabase as any).from('recipe_canonicals').delete().eq('id', id).eq('author_id', user.id);
   return NextResponse.json({ ok: true });
 }
