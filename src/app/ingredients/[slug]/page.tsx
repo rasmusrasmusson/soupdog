@@ -67,6 +67,8 @@ interface Ingredient {
   is_gluten_free?:      boolean;
   brand?:               string;
   manufacturer?:        string;
+  image_url?:           string;
+  image_credit?:        string;
   content_reviewed?:    boolean;
   ai_content_generated_at?: string;
   needsAiContent?:      boolean;
@@ -287,6 +289,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
           name: ing.name,
           description: ing.summary ?? ing.description ?? undefined,
           url: `https://soup.dog/ingredients/${ing.slug}`,
+          ...(ing.image_url ? { image: ing.image_url } : {}),
           ...(ing.brand ? { brand: { '@type': 'Brand', name: ing.brand } } : {}),
         }) }}
       />
@@ -317,6 +320,35 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                 {ing.name}
               </span>
             </nav>
+          )}
+
+          {/* Hero image */}
+          {ing.image_url && (
+            <div style={{
+              marginBottom: 24, position: 'relative',
+              width: '100%', aspectRatio: '4/3',
+              overflow: 'hidden', border: B, background: 'var(--surface-hover)',
+            }}>
+              <img
+                src={ing.image_url}
+                alt={ing.name}
+                style={{
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', objectPosition: 'center',
+                  display: 'block',
+                }}
+              />
+              {ing.image_credit && (
+                <div style={{
+                  position: 'absolute', bottom: 0, right: 0,
+                  padding: '3px 8px', background: 'rgba(0,0,0,0.45)',
+                  fontFamily: MONO, fontSize: 9, color: 'rgba(255,255,255,0.7)',
+                  letterSpacing: '0.08em',
+                }}>
+                  {ing.image_credit}
+                </div>
+              )}
+            </div>
           )}
 
           {/* Title */}
@@ -629,6 +661,25 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
           overflowY: 'auto', padding: '24px 20px',
           display: 'flex', flexDirection: 'column', gap: 24,
         }} className="hidden md:flex">
+
+          {/* Thumbnail */}
+          {ing.image_url && (
+            <div style={{
+              width: '100%', aspectRatio: '4/3',
+              overflow: 'hidden', border: B,
+              background: 'var(--surface-hover)',
+            }}>
+              <img
+                src={ing.image_url}
+                alt={ing.name}
+                style={{
+                  width: '100%', height: '100%',
+                  objectFit: 'cover', objectPosition: 'center',
+                  display: 'block',
+                }}
+              />
+            </div>
+          )}
 
           {/* Make it yourself */}
           {ing.transformationRecipe && (
