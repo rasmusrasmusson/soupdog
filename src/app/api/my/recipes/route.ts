@@ -86,34 +86,96 @@ export async function POST(req: NextRequest) {
 
     await db.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
 
+    // ── Insert steps (with appliance_settings) + per-step ingredients ──
+    const stepIngredientIds = new Set<string>();
+
+    for (let i = 0; i < (data.steps ?? []).length; i++) {
+      const step = data.steps[i];
+      if (!step.instruction?.trim()) continue;
+
+      // Build appliance_settings JSONB if a connected appliance is configured on any tool
+      const connectedTool = (step.stepTools ?? []).find(
+        (t: any) => t.applianceId && t.applianceModeId
+      );
+      const applianceSettings = connectedTool
+        ? {
+            applianceId:     connectedTool.applianceId,
+            applianceModeId: connectedTool.applianceModeId,
+            settings:        connectedTool.applianceSettings ?? {},
+          }
+        : null;
+
+      const { data: insertedStep, error: se } = await db
+        .from('version_steps')
+        .insert({
+          version_id:          version.id,
+          order_index:         i + 1,
+          step_type:           step.stepType ?? 'human',
+          instruction:         step.instruction.trim(),
+          group_label:         step.groupLabel?.trim() || null,
+          duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
+          temperature_celsius: step.temperatureCelsius || null,
+          appliance_settings:  applianceSettings,
+        })
+        .select('id')
+        .single();
+
+      if (se || !insertedStep) continue;
+      const stepId = insertedStep.id;
+
+      // Insert per-step ingredients linked to this step
+      for (let j = 0; j < (step.stepIngredients ?? []).length; j++) {
+        const si = step.stepIngredients[j];
+        if (!si.name?.trim() && !si.ingredientId) continue;
+
+        let ingredientId = si.ingredientId;
+        if (!ingredientId && si.name?.trim()) {
+          const { data: newIng } = await db
+            .from('ingredients')
+            .insert({ slug: slugify(si.name) + '-' + Date.now().toString(36).slice(-4), name: si.name.trim(), category: 'other' })
+            .select('id').single();
+          ingredientId = newIng?.id;
+        }
+        if (!ingredientId) continue;
+
+        stepIngredientIds.add(ingredientId);
+        await db.from('version_ingredients').insert({
+          version_id:     version.id,
+          step_id:        stepId,           // ← link to step
+          ingredient_id:  ingredientId,
+          quantity_value: si.quantityValue ?? 0,
+          quantity_unit:  si.quantityUnit ?? 'g',
+          prep_note:      si.prepNote?.trim() || null,
+          optional:       false,
+          order_index:    j + 1,
+        });
+      }
+    }
+
+    // ── Top-level ingredients not already saved via a step ──
     for (let i = 0; i < (data.ingredients ?? []).length; i++) {
       const ing = data.ingredients[i];
       if (!ing.name?.trim() && !ing.ingredientId) continue;
+
       let ingredientId = ing.ingredientId;
       if (!ingredientId && ing.name?.trim()) {
         const { data: newIng } = await db
           .from('ingredients')
           .insert({ slug: slugify(ing.name) + '-' + Date.now().toString(36).slice(-4), name: ing.name.trim(), category: 'other' })
-          .select().single();
+          .select('id').single();
         ingredientId = newIng?.id;
       }
-      if (!ingredientId) continue;
-      await db.from('version_ingredients').insert({
-        version_id: version.id, ingredient_id: ingredientId,
-        quantity_value: ing.quantityValue ?? 0, quantity_unit: ing.quantityUnit ?? 'g',
-        prep_note: ing.prepNote?.trim() || null, optional: ing.optional ?? false, order_index: i + 1,
-      });
-    }
+      if (!ingredientId || stepIngredientIds.has(ingredientId)) continue;
 
-    for (let i = 0; i < (data.steps ?? []).length; i++) {
-      const step = data.steps[i];
-      if (!step.instruction?.trim()) continue;
-      await db.from('version_steps').insert({
-        version_id: version.id, order_index: i + 1,
-        step_type: step.stepType ?? 'human', instruction: step.instruction.trim(),
-        group_label: step.groupLabel?.trim() || null,
-        duration_seconds: step.durationMinutes ? step.durationMinutes * 60 : null,
-        temperature_celsius: step.temperatureCelsius || null,
+      await db.from('version_ingredients').insert({
+        version_id:     version.id,
+        // step_id intentionally null — this is the aggregate list row
+        ingredient_id:  ingredientId,
+        quantity_value: ing.quantityValue ?? 0,
+        quantity_unit:  ing.quantityUnit ?? 'g',
+        prep_note:      ing.prepNote?.trim() || null,
+        optional:       ing.optional ?? false,
+        order_index:    1000 + i,
       });
     }
 
@@ -125,6 +187,25 @@ export async function POST(req: NextRequest) {
     await db.from('execution_variants').insert({
       version_id: version.id, servings: data.servings ?? 4,
       unit_system: 'si', is_canonical_variant: true, author_id: user.id,
+    });
+
+    // ── Mirror to legacy recipes table ──
+    await db.from('recipes').insert({
+      slug,
+      title:                data.title?.trim(),
+      description:          data.description?.trim() || null,
+      cuisine:              data.cuisine?.trim() || null,
+      tags:                 data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
+      servings:             data.servings ?? 4,
+      difficulty:           data.difficulty ?? 'medium',
+      total_time_seconds:   (data.totalTimeMinutes ?? 0) * 60,
+      active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
+      passive_time_seconds: Math.max(0, ((data.totalTimeMinutes ?? 0) - (data.activeTimeMinutes ?? 0))) * 60,
+      is_published:         false,
+      author_id:            user.id,
+      source:               'human_authored',
+      version:              1,
+      recipe_version_id:    version.id,
     });
 
     return NextResponse.json({ id: canonical.id, slug }, { status: 201 });

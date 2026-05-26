@@ -1,5 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 //  Soupdog — TypeScript Types v2
+//  Updated: added stepId to RecipeIngredientRef,
+//           applianceSettings to RecipeStep
 // ═══════════════════════════════════════════════════════════════
 
 export type UnitSystem      = 'si' | 'imperial' | 'us';
@@ -20,21 +22,18 @@ export interface Measurement {
 }
 
 // ── Nutrition ─────────────────────────────────────────────────
-// Stored per 100g on ingredients/products; per serving on recipes
 export interface NutritionData {
   calories?:      number;
-  protein?:       number;   // g
-  fat?:           number;   // g
-  carbohydrates?: number;   // g
-  fiber?:         number;   // g
-  sugar?:         number;   // g
-  sodium?:        number;   // mg
-  saturatedFat?:  number;   // g
-  // Micronutrients (Phase 2+)
-  vitaminC?:      number;   // mg
-  iron?:          number;   // mg
-  calcium?:       number;   // mg
-  // Meta
+  protein?:       number;
+  fat?:           number;
+  carbohydrates?: number;
+  fiber?:         number;
+  sugar?:         number;
+  sodium?:        number;
+  saturatedFat?:  number;
+  vitaminC?:      number;
+  iron?:          number;
+  calcium?:       number;
   perServingGrams?: number;
   allergens?:       string[];
 }
@@ -49,17 +48,12 @@ export interface Ingredient {
   name:                   string;
   description?:           string;
   category:               IngredientCategory;
-
-  // Taxonomy
-  transformedFromId?:     string;    // parent ingredient in transformation chain
-  transformationRecipeId?: string;   // recipe that produces this from parent
-
-  // Nutrition (per 100g)
+  transformedFromId?:     string;
+  transformationRecipeId?: string;
   nutritionPer100g?:      NutritionData;
   nutritionSource?:       NutritionSource;
-
   allergens?:             string[];
-  season?:                string[];  // months in season
+  season?:                string[];
   storageNotes?:          string;
   typicalUnit?:           string;
   isVerified:             boolean;
@@ -92,7 +86,6 @@ export interface ApplianceCapability {
   notes?: string;
 }
 
-// Per-user calibrated appliance profile
 export interface ApplianceProfile {
   id:                       string;
   userId:                   string;
@@ -108,7 +101,7 @@ export interface ApplianceProfile {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  PRODUCTS (packaged / prepared foods)
+//  PRODUCTS
 // ═══════════════════════════════════════════════════════════════
 
 export interface Product {
@@ -151,7 +144,6 @@ export interface ProductCookingProfile {
 //  RECIPE IDENTITY LAYER
 // ═══════════════════════════════════════════════════════════════
 
-// Stable identity anchor — never changes
 export interface RecipeCanonical {
   id:               string;
   slug:             string;
@@ -161,19 +153,16 @@ export interface RecipeCanonical {
   source:           RecipeSource;
   confidenceScore?: number;
   createdAt:        string;
-  // Resolved fields
   currentVersion?:  RecipeVersion;
   preferenceAxes?:  PreferenceAxis[];
 }
 
-// Versioned recipe content — immutable once published
 export interface RecipeVersion {
   id:                  string;
   canonicalId:         string;
   parentVersionId?:    string;
   versionNumber:       number;
   changeSummary?:      string;
-
   title:               string;
   description?:        string;
   cuisine?:            string;
@@ -188,8 +177,6 @@ export interface RecipeVersion {
   nutritionPerServing?: NutritionData;
   isCanonicalVersion:  boolean;
   createdAt:           string;
-
-  // Resolved associations
   ingredients?:        VersionIngredient[];
   steps?:              VersionStep[];
   equipment?:          VersionEquipment[];
@@ -200,8 +187,9 @@ export interface RecipeVersion {
 export interface VersionIngredient {
   id:           string;
   versionId:    string;
+  stepId?:      string;  // null = top-level aggregate
   ingredientId: string;
-  ingredient?:  Ingredient;    // resolved
+  ingredient?:  Ingredient;
   quantityValue: number;
   quantityUnit:  string;
   foodState?:    FoodState;
@@ -222,15 +210,22 @@ export interface VersionStep {
   groupLabel?:         string;
   isParallelPrev:      boolean;
   parallelGroupId?:    string;
-  // Resolved
-  ingredientRefs?:     string[];  // ingredient IDs used in this step
-  equipmentRefs?:      string[];  // equipment IDs
+  applianceSettings?:  ApplianceStepSettings;  // new
+  ingredientRefs?:     string[];
+  equipmentRefs?:      string[];
+}
+
+/** Stored as JSONB in version_steps.appliance_settings */
+export interface ApplianceStepSettings {
+  applianceId:    string;
+  applianceModeId: string;
+  settings:       Record<string, string | number>;
 }
 
 export interface VersionEquipment {
   versionId:    string;
   equipmentId:  string;
-  equipment?:   Equipment;   // resolved
+  equipment?:   Equipment;
   required:     boolean;
   alternatives?: string[];
 }
@@ -242,7 +237,6 @@ export interface VersionSubRecipe {
   usedAsIngredientLabel?: string;
   expandByDefault:        boolean;
   optional:               boolean;
-  // Resolved
   childCanonical?:        RecipeCanonical;
 }
 
@@ -252,7 +246,7 @@ export interface RecipeTranslation {
   locale:           string;
   title:            string;
   description?:     string;
-  stepInstructions?: Record<number, string>;  // orderIndex → translated text
+  stepInstructions?: Record<number, string>;
   translatedBy:     string;
   createdAt:        string;
 }
@@ -275,7 +269,6 @@ export interface ExecutionVariant {
   authorId?:             string;
   nutritionPerServing?:  NutritionData;
   createdAt:             string;
-  // Resolved
   ingredientScaling?:    VariantIngredientScaling[];
   stepOverrides?:        VariantStepOverride[];
   preferenceValues?:     VariantPreferenceMapping[];
@@ -320,8 +313,6 @@ export interface VariantPreferenceMapping {
 
 // ═══════════════════════════════════════════════════════════════
 //  LEGACY RECIPE TYPE
-//  Kept for compatibility with existing recipe page rendering.
-//  New code should use RecipeVersion / ExecutionVariant.
 // ═══════════════════════════════════════════════════════════════
 
 export interface Recipe {
@@ -330,7 +321,6 @@ export interface Recipe {
   version:             number;
   parentVersionId?:    string;
   canonicalId?:        string;
-  // Version IDs for new-schema linking
   recipeVersionId?:    string;
   title:               string;
   description?:        string;
@@ -361,7 +351,7 @@ export interface RecipeIngredientRef {
   state?:         FoodState;
   prep?:          string;
   optional?:      boolean;
-  // Extended fields
+  stepId?:        string;  // which step this ingredient belongs to (new)
   nutritionPer100g?: NutritionData;
 }
 
@@ -376,6 +366,7 @@ export interface RecipeStep {
   durationSeconds?: number;
   temperature?:     Measurement;
   notes?:           string;
+  applianceSettings?: ApplianceStepSettings;  // new
 }
 
 export interface SubRecipeRef {
@@ -444,18 +435,15 @@ export interface NutritionProfile {
   userId:               string;
   householdMemberId?:   string;
   label?:               string;
-  // Goals
   dailyCaloriesKcal?:   number;
   dailyProteinG?:       number;
   dailyCarbsG?:         number;
   dailyFatG?:           number;
   dailyFiberG?:         number;
   dailySodiumMg?:       number;
-  // Restrictions
   allergies?:           string[];
   dietaryRestrictions?: string[];
   medicalConditions?:   string[];
-  // Demographics
   ageYears?:            number;
   biologicalSex?:       string;
   weightKg?:            number;
@@ -470,7 +458,7 @@ export interface FlavorPreferences {
   dislikedCuisines?:    string[];
   likedIngredients?:    string[];
   dislikedIngredients?: string[];
-  spiceTolerance?:      number;   // 0.0–1.0
+  spiceTolerance?:      number;
   sweetPreference?:     number;
   sourPreference?:      number;
   umamiPreference?:     number;
@@ -495,7 +483,6 @@ export interface InventoryItem {
   invState:       InventoryState;
   notes?:         string;
   addedAt:        string;
-  // Resolved
   ingredient?:    Ingredient;
   product?:       Product;
 }

@@ -31,6 +31,13 @@ export interface RecipeFormData {
     groupLabel:         string;
     durationMinutes:    number;
     temperatureCelsius: number;
+    stepTools?: {
+      equipmentId:       string;
+      name:              string;
+      applianceId?:      string;
+      applianceModeId?:  string;
+      applianceSettings?: Record<string, string | number>;
+    }[];
     stepIngredients?: {
       ingredientId:  string;
       name:          string;

@@ -25,12 +25,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         base_servings, difficulty, total_time_seconds, active_time_seconds,
         version_ingredients (
           id, order_index, quantity_value, quantity_unit, prep_note, optional,
-          ingredient_id,
+          ingredient_id, step_id,
           ingredients ( id, name )
         ),
         version_steps (
           id, order_index, step_type, instruction, group_label,
-          duration_seconds, temperature_celsius
+          duration_seconds, temperature_celsius, appliance_settings
         ),
         version_equipment ( equipment_id )
       )
@@ -46,9 +46,12 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     : canonical.recipe_versions;
   if (!v) return NextResponse.json({ error: 'No version found' }, { status: 404 });
 
-  const ingredients = (v.version_ingredients ?? [])
-    .sort((a: any, b: any) => a.order_index - b.order_index)
-    .map((i: any) => ({
+  // Build a map of step_id → ingredients for the editor
+  const stepIngMap: Record<string, any[]> = {};
+  const topLevelIngs: any[] = [];
+
+  for (const i of (v.version_ingredients ?? []).sort((a: any, b: any) => a.order_index - b.order_index)) {
+    const ing = {
       id:            i.id,
       ingredientId:  i.ingredient_id,
       name:          i.ingredients?.name ?? '',
@@ -56,7 +59,14 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       quantityUnit:  i.quantity_unit,
       prepNote:      i.prep_note ?? '',
       optional:      i.optional,
-    }));
+    };
+    if (i.step_id) {
+      if (!stepIngMap[i.step_id]) stepIngMap[i.step_id] = [];
+      stepIngMap[i.step_id].push(ing);
+    } else {
+      topLevelIngs.push(ing);
+    }
+  }
 
   const steps = (v.version_steps ?? [])
     .sort((a: any, b: any) => a.order_index - b.order_index)
@@ -67,21 +77,24 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       groupLabel:         s.group_label ?? '',
       durationMinutes:    s.duration_seconds ? Math.round(s.duration_seconds / 60) : 0,
       temperatureCelsius: s.temperature_celsius ?? 0,
-      stepIngredients:    [], // populated below
+      stepIngredients:    stepIngMap[s.id] ?? [],
+      // Reconstruct stepTools from appliance_settings if present
+      stepTools: s.appliance_settings
+        ? [{
+            id:               'loaded-' + s.id,
+            equipmentId:      s.appliance_settings.applianceId ?? '',
+            name:             s.appliance_settings.applianceId ?? '',
+            applianceId:      s.appliance_settings.applianceId,
+            applianceModeId:  s.appliance_settings.applianceModeId,
+            applianceSettings: s.appliance_settings.settings ?? {},
+          }]
+        : [],
     }));
 
-  // Since we don't have step-ingredient linking yet, put all ingredients
-  // on the first step as a fallback so the editor shows them
-  // In future this will be per-step via a step_id FK
-  if (steps.length > 0 && ingredients.length > 0) {
-    steps[0].stepIngredients = ingredients.map((ing: any) => ({
-      id:            ing.id,
-      ingredientId:  ing.ingredientId,
-      name:          ing.name,
-      quantityValue: ing.quantityValue,
-      quantityUnit:  ing.quantityUnit,
-      prepNote:      ing.prepNote,
-    }));
+  // Fall back: if no ingredients have step_ids (old data), put everything on first step
+  const hasStepLinked = Object.keys(stepIngMap).length > 0;
+  if (!hasStepLinked && topLevelIngs.length > 0 && steps.length > 0) {
+    steps[0].stepIngredients = topLevelIngs;
   }
 
   return NextResponse.json({
@@ -96,7 +109,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
     totalTimeMinutes:  Math.round((v.total_time_seconds ?? 0) / 60),
     activeTimeMinutes: Math.round((v.active_time_seconds ?? 0) / 60),
     isPublished:       canonical.is_published,
-    ingredients,
+    // Top-level aggregate list (null step_id rows, or fallback from old data)
+    ingredients: hasStepLinked ? topLevelIngs : [],
     steps,
     equipmentIds: (v.version_equipment ?? []).map((e: any) => e.equipment_id),
   });
@@ -157,24 +171,44 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const stepIngredientIds = new Set<string>();
 
-  // Insert steps + their stepIngredients
+  // Insert steps + per-step ingredients
   for (let i = 0; i < (data.steps ?? []).length; i++) {
     const step = data.steps[i];
     if (!step.instruction?.trim()) continue;
 
-    await db.from('version_steps').insert({
-      version_id:          version.id,
-      order_index:         i + 1,
-      step_type:           step.stepType ?? 'human',
-      instruction:         step.instruction.trim(),
-      group_label:         step.groupLabel?.trim() || null,
-      duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
-      temperature_celsius: step.temperatureCelsius || null,
-    });
+    const connectedTool = (step.stepTools ?? []).find(
+      (t: any) => t.applianceId && t.applianceModeId
+    );
+    const applianceSettings = connectedTool
+      ? {
+          applianceId:     connectedTool.applianceId,
+          applianceModeId: connectedTool.applianceModeId,
+          settings:        connectedTool.applianceSettings ?? {},
+        }
+      : null;
+
+    const { data: insertedStep, error: se } = await db
+      .from('version_steps')
+      .insert({
+        version_id:          version.id,
+        order_index:         i + 1,
+        step_type:           step.stepType ?? 'human',
+        instruction:         step.instruction.trim(),
+        group_label:         step.groupLabel?.trim() || null,
+        duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
+        temperature_celsius: step.temperatureCelsius || null,
+        appliance_settings:  applianceSettings,
+      })
+      .select('id')
+      .single();
+
+    if (se || !insertedStep) continue;
+    const stepId = insertedStep.id;
 
     for (let j = 0; j < (step.stepIngredients ?? []).length; j++) {
       const si = step.stepIngredients[j];
       if (!si.name?.trim() && !si.ingredientId) continue;
+
       let ingredientId = si.ingredientId;
       if (!ingredientId && si.name?.trim()) {
         const { data: newIng } = await db
@@ -184,9 +218,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         ingredientId = newIng?.id;
       }
       if (!ingredientId) continue;
+
       stepIngredientIds.add(ingredientId);
       await db.from('version_ingredients').insert({
         version_id:     version.id,
+        step_id:        stepId,
         ingredient_id:  ingredientId,
         quantity_value: si.quantityValue ?? 0,
         quantity_unit:  si.quantityUnit ?? 'g',
@@ -197,10 +233,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
-  // Top-level ingredients not already in steps
+  // Top-level ingredients not already saved via a step
   for (let i = 0; i < (data.ingredients ?? []).length; i++) {
     const ing = data.ingredients[i];
     if (!ing.name?.trim() && !ing.ingredientId) continue;
+
     let ingredientId = ing.ingredientId;
     if (!ingredientId && ing.name?.trim()) {
       const { data: newIng } = await db
@@ -210,6 +247,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       ingredientId = newIng?.id;
     }
     if (!ingredientId || stepIngredientIds.has(ingredientId)) continue;
+
     await db.from('version_ingredients').insert({
       version_id:     version.id,
       ingredient_id:  ingredientId,
