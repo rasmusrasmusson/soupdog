@@ -4,6 +4,7 @@ import { formatDuration } from '@/lib/utils';
 import { Bookmark, Zap } from 'lucide-react';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
+import { calculateRecipeTiming, type TimingResult } from '@/lib/recipe-timing';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -239,6 +240,13 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     g.steps.push({ ...step, globalIndex: i });
   });
 
+  // Critical-path timing
+  const timing = calculateRecipeTiming(recipe.steps);
+  // Use calculated total if stored value is 0 but steps have durations
+  const displayTotalSeconds = recipe.totalTimeSeconds > 0
+    ? recipe.totalTimeSeconds
+    : timing.totalSeconds;
+
   const B    = '1px solid var(--border)';
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
@@ -249,7 +257,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const metaItems: [string, string][] = [
     ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
     ['YIELD',       `${servings} servings`],
-    ['TOTAL TIME',  formatDuration(recipe.totalTimeSeconds)],
+    ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
     ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
     ['DIFFICULTY',  recipe.difficulty],
     ['RATING',      recipe.ratings ? `${(recipe.ratings as any).average.toFixed(1)} / 5` : '—'],
@@ -370,8 +378,13 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
               {groups.map((group, gi) => (
                 <React.Fragment key={group.label}>
-                  <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined }}>
-                    {group.label}
+                  <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>{group.label}</span>
+                    {timing.groupSeconds[group.label] > 0 && (
+                      <span style={{ fontWeight: 400, color: MUT }}>
+                        {formatDuration(timing.groupSeconds[group.label])}
+                      </span>
+                    )}
                   </div>
                   {group.steps.map(step => {
                     const gIdx = step.globalIndex;
@@ -417,7 +430,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
               ))}
               <div style={{ padding: '8px 12px', background: 'var(--surface-hover)', display: 'flex', justifyContent: 'space-between', borderTop: '2px solid var(--border)' }}>
                 <span style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</span>
-                <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: 'var(--fg)' }}>{formatDuration(recipe.totalTimeSeconds)}</span>
+                <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: 'var(--fg)' }}>{displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'}</span>
               </div>
             </div>
 
@@ -436,7 +449,14 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                     <tbody>
                       <tr>
                         <td colSpan={7} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
-                          {group.label}
+                          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>{group.label}</span>
+                            {timing.groupSeconds[group.label] > 0 && (
+                              <span style={{ fontWeight: 400, color: MUT, textTransform: 'none', letterSpacing: 0 }}>
+                                {formatDuration(timing.groupSeconds[group.label])}
+                              </span>
+                            )}
+                          </span>
                         </td>
                       </tr>
                       {group.steps.map(step => {
@@ -501,7 +521,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                 <tfoot>
                   <tr style={{ borderTop: `2px solid var(--border)`, background: 'var(--surface-hover)' }}>
                     <td colSpan={6} style={{ ...td, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</td>
-                    <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: 'var(--fg)' }}>{formatDuration(recipe.totalTimeSeconds)}</td>
+                    <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: 'var(--fg)' }}>{displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'}</td>
                   </tr>
                 </tfoot>
               </table>

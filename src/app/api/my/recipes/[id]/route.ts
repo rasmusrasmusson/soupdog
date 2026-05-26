@@ -1,6 +1,7 @@
 // src/app/api/my/recipes/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -144,6 +145,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const newVersionNumber = (currentVersion?.version_number ?? 1) + 1;
 
+  // Auto-calculate total time from step durations (critical path)
+  const calculatedTotalSeconds = calculateTotalSecondsForSave(data.steps ?? []);
+  const totalTimeSeconds = calculatedTotalSeconds > 0
+    ? calculatedTotalSeconds
+    : (data.totalTimeMinutes ?? 0) * 60;
+
   const { data: version, error: ve } = await db
     .from('recipe_versions')
     .insert({
@@ -157,9 +164,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       tags:                 data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
       base_servings:        data.servings ?? 4,
       difficulty:           data.difficulty ?? 'medium',
-      total_time_seconds:   (data.totalTimeMinutes ?? 0) * 60,
+      total_time_seconds:   totalTimeSeconds,
       active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
-      passive_time_seconds: Math.max(0, ((data.totalTimeMinutes ?? 0) - (data.activeTimeMinutes ?? 0))) * 60,
+      passive_time_seconds: Math.max(0, totalTimeSeconds - (data.activeTimeMinutes ?? 0) * 60),
       is_canonical_version: true,
     })
     .select().single();
@@ -272,9 +279,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     tags:                 data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
     servings:             data.servings ?? 4,
     difficulty:           data.difficulty ?? 'medium',
-    total_time_seconds:   (data.totalTimeMinutes ?? 0) * 60,
+    total_time_seconds:   totalTimeSeconds,
     active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
-    passive_time_seconds: Math.max(0, ((data.totalTimeMinutes ?? 0) - (data.activeTimeMinutes ?? 0))) * 60,
+    passive_time_seconds: Math.max(0, totalTimeSeconds - (data.activeTimeMinutes ?? 0) * 60),
     recipe_version_id:    version.id,
     version:              newVersionNumber,
   }).eq('recipe_version_id', canonical.current_version_id);
