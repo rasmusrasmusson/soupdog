@@ -4,7 +4,8 @@ import { formatDuration } from '@/lib/utils';
 import { Bookmark, Zap } from 'lucide-react';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
-import { calculateRecipeTiming, type TimingResult } from '@/lib/recipe-timing';
+import { calculateRecipeTiming } from '@/lib/recipe-timing';
+import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -97,11 +98,15 @@ function mapNewSchemaRecipe(row: any): Recipe {
       ingredientId:   vi.ingredients?.id   ?? vi.ingredient_id,
       ingredientSlug: vi.ingredients?.slug ?? '',
       name:           vi.ingredients?.name ?? '',
+      category:       vi.ingredients?.category ?? undefined,
       quantity: { value: vi.quantity_value, unit: vi.quantity_unit },
       state:    vi.food_state  ?? undefined,
       prep:     vi.prep_note   ?? undefined,
       optional: vi.optional    ?? false,
-      stepId:   vi.step_id     ?? undefined,   // preserve step linkage
+      stepId:   vi.step_id     ?? undefined,
+      nutritionPer100g:    vi.ingredients?.nutrition_per_100g    ?? undefined,
+      densityGPerMl:       vi.ingredients?.density_g_per_ml      ?? undefined,
+      typicalUnitWeightG:  vi.ingredients?.typical_unit_weight_g ?? undefined,
     }));
 
   const steps: RecipeStep[] = (rv?.version_steps ?? [])
@@ -207,6 +212,104 @@ function mapLegacyRecipe(row: any): Recipe {
     createdAt:          row.created_at,
     updatedAt:          row.updated_at,
   };
+}
+
+// ── Recipe nutrition section ──────────────────────────────────
+
+function RecipeNutritionSection({ ingredients, servings, storedNutrition }: {
+  ingredients: RecipeIngredientRef[];
+  servings: number;
+  storedNutrition?: any;
+}) {
+  const MONO = 'var(--font-mono)';
+  const MUT  = 'var(--muted)';
+  const B    = '1px solid var(--border)';
+  const tbl: React.CSSProperties  = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
+  const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
+  const td: React.CSSProperties   = { padding: '8px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
+
+  const ingNutrition = ingredients.map(ing => ({
+    name:               ing.name,
+    quantityValue:      ing.quantity.value,
+    quantityUnit:       ing.quantity.unit,
+    category:           (ing as any).category,
+    densityGPerMl:      (ing as any).densityGPerMl,
+    typicalUnitWeightG: (ing as any).typicalUnitWeightG,
+    nutritionPer100g:   (ing as any).nutritionPer100g,
+  }));
+
+  const result = calculateRecipeNutrition(ingNutrition, servings);
+  const n = result.perServing;
+
+  const hasCalc = result.confidence !== 'insufficient' && (n.calories ?? 0) > 0;
+  const hasStored = storedNutrition?.calories;
+
+  if (!hasCalc && !hasStored) return null;
+
+  const rows: [string, number | undefined, string][] = [
+    ['Calories',      n.calories,      'kcal'],
+    ['Protein',       n.protein,       'g'],
+    ['Fat',           n.fat,           'g'],
+    ['  Saturated',   n.saturated_fat, 'g'],
+    ['Carbohydrates', n.carbohydrates, 'g'],
+    ['  Sugar',       n.sugar,         'g'],
+    ['  Fiber',       n.fiber,         'g'],
+    ['Sodium',        n.sodium,        'mg'],
+    ['Potassium',     n.potassium,     'mg'],
+    ['Vitamin C',     n.vitamin_c,     'mg'],
+    ['Iron',          n.iron,          'mg'],
+    ['Calcium',       n.calcium,       'mg'],
+  ];
+
+  const confidenceLabel = result.confidence === 'calculated'
+    ? `Estimated · pre-cooking · ${result.coveredPct}% ingredients covered`
+    : result.confidence === 'partial'
+    ? `Partial estimate · pre-cooking · ${result.coveredPct}% ingredients covered`
+    : 'Stored values';
+
+  const confidenceColor = result.confidence === 'calculated' ? 'var(--accent)'
+    : result.confidence === 'partial' ? 'var(--warning)' : MUT;
+
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.22em', color: MUT }}>Nutrition</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT }}>per serving</span>
+      </div>
+      <div style={{
+        marginBottom: 8, padding: '4px 10px',
+        background: 'var(--surface-hover)', border: B,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: confidenceColor }}>
+          {confidenceLabel}
+        </span>
+      </div>
+      <div className="overflow-x-auto">
+        <table style={{ ...tbl, minWidth: 260 }}>
+          <thead>
+            <tr style={thead}>
+              <th style={{ padding: '8px 14px', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, textAlign: 'left', borderRight: B }}>Nutrient</th>
+              <th style={{ padding: '8px 14px', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, textAlign: 'right' }}>Per serving</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.filter(([, v]) => v != null && v > 0).map(([label, value, unit]) => (
+              <tr key={label} style={{ borderTop: B }}>
+                <td style={{ ...td, borderRight: B, paddingLeft: label.startsWith('  ') ? 28 : 14, color: label.startsWith('  ') ? MUT : 'var(--fg)' }}>
+                  {label.trim()}
+                </td>
+                <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                  {value}<span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 function RecipeView({ recipe }: { recipe: Recipe }) {
@@ -528,25 +631,12 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             </div>
           </section>
 
-          {recipe.nutrition && (
-            <section>
-              <SectionHeader title="Nutrition" meta="per serving" />
-              <div className="overflow-x-auto">
-                <table style={{ ...tbl, minWidth: 280 }}>
-                  <thead><tr style={thead}><Th>Nutrient</Th><Th w={130} right>Per serving</Th><Th w={130} right>Per 100g</Th></tr></thead>
-                  <tbody>
-                    {([['Calories',(recipe.nutrition as any).calories,'kcal'],['Protein',(recipe.nutrition as any).protein,'g'],['Fat',(recipe.nutrition as any).fat,'g'],['Carbohydrates',(recipe.nutrition as any).carbohydrates,'g'],['Fiber',(recipe.nutrition as any).fiber,'g'],['Sodium',(recipe.nutrition as any).sodium,'mg']] as [string,number|undefined,string][]).filter(([,v])=>v!=null).map(([label,value,u])=>(
-                      <tr key={label} style={{ borderTop: B }}>
-                        <td style={{ ...td, borderRight: B }}>{label}</td>
-                        <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{value}<span style={{ color: MUT, marginLeft: 3 }}>{u}</span></td>
-                        <td style={{ ...td, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
+          {/* Nutrition — calculated from ingredients */}
+          <RecipeNutritionSection
+            ingredients={recipe.ingredients}
+            servings={servings}
+            storedNutrition={recipe.nutrition}
+          />
 
           <div className="md:hidden h-16" />
         </div>
@@ -620,7 +710,8 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,
                 food_state, prep_note, optional, step_id,
-                ingredients!ingredient_id ( id, slug, name )
+                ingredients!ingredient_id ( id, slug, name, category,
+                  nutrition_per_100g, density_g_per_ml, typical_unit_weight_g )
               ),
               version_steps (
                 id, order_index, step_type, group_label, instruction,
