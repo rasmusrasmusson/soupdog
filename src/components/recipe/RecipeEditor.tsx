@@ -382,22 +382,6 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{
-        borderTop: showResults ? '1px solid var(--border)' : 'none',
-        padding: '6px 10px',
-      }}>
-        <button onClick={onFreeText}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
-          }}
-          className="hover:text-[var(--fg)]"
-        >
-          <PenLine size={10} /> Write a custom step
-        </button>
-      </div>
     </div>
   );
 }
@@ -786,9 +770,10 @@ function PickerBtn({ value, placeholder, nodes, onSelect, className, extraSectio
 
 // ── Step ingredient row ───────────────────────────────────────
 
-function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove }: {
+function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overBudget }: {
   row: StepIngredient; ingredientTree: TaxonomyNode[]; fromRecipe: GroupOutput[];
   onChange: (r: StepIngredient) => void; onRemove: () => void;
+  overBudget?: boolean;
 }) {
   const [query,    setQuery]    = useState(row.name);
   const [showDrop, setShowDrop] = useState(false);
@@ -836,7 +821,7 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove }: {
             placeholder="Ingredient…"
             style={{
               width: '100%', background: 'var(--surface)',
-              border: `1px solid ${row.name.trim() ? 'var(--border)' : 'var(--border)'}`,
+              border: `1px solid ${overBudget ? 'rgb(220,38,38)' : 'var(--border)'}`,
               padding: '6px 28px 6px 10px', fontSize: 12,
               color: 'var(--fg)', outline: 'none',
             }}
@@ -1053,10 +1038,11 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
 
 // ── Step Editor ───────────────────────────────────────────────
 
-function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, isFirst, isLast, onChange, onRemove, onMoveUp, onMoveDown }: {
+function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, isFirst, isLast, overBudgetKeys, onChange, onRemove, onMoveUp, onMoveDown }: {
   step: Step; index: number;
   ingredientTree: TaxonomyNode[]; equipmentTree: TaxonomyNode[];
   fromRecipe: GroupOutput[]; isFirst: boolean; isLast: boolean;
+  overBudgetKeys?: Set<string>;
   onChange: (s: Step) => void; onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
   const hasTask        = !!step.taskId;
@@ -1130,8 +1116,15 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
     taskFamily: undefined, showTemperature: undefined, durationLabel: undefined,
   });
 
+  const hasOverBudget = overBudgetKeys && step.stepIngredients.some(si => {
+    const key = si.ingredientId || si.name.toLowerCase().trim();
+    return overBudgetKeys.has(key);
+  });
+
   return (
-    <div className="border border-[var(--border)] mb-2 last:mb-0">
+    <div className="border mb-2 last:mb-0" style={{
+      borderColor: hasOverBudget ? 'rgb(220,38,38)' : 'var(--border)',
+    }}>
       {/* Step header */}
       <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)]">
         <span className="font-mono text-[10px] text-[var(--muted)] w-4 flex-shrink-0">{index + 1}</span>
@@ -1158,6 +1151,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             <StepIngRow key={si.id} row={si}
               ingredientTree={filteredIngTree}
               fromRecipe={fromRecipe}
+              overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
               onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
           ))}
           <button onClick={addIng} className="mt-1 flex items-center gap-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
@@ -1167,7 +1161,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
 
         {/* ── 2. STEP / TASK ──────────────────────────────── */}
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-          <FL>Step</FL>
+          <FL>Task</FL>
 
           {/* Task badge — shown after selection */}
           {hasTask && step.taskName && step.taskType && (
@@ -1211,31 +1205,66 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             <StepToolRow key={st.id} tool={st} equipmentTree={equipmentTree}
               onChange={v => updateTool(i, v)} onRemove={() => removeTool(i)} />
           ))}
+          {step.stepTools.length >= 2 && (
+            <div style={{
+              marginTop: 6, padding: '5px 10px',
+              background: 'var(--surface-hover)', border: '1px solid var(--border)',
+              fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
+            }}>
+              💡 Multiple tools? If they are used at different times, add a separate step for each.
+            </div>
+          )}
           <button onClick={addTool} className="mt-1 flex items-center gap-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
             <Plus size={10} /> Add tool
           </button>
         </div>
 
         {/* ── 4. DURATION + TEMPERATURE ───────────────────── */}
-        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
-          <div className="flex gap-3 flex-wrap">
-            <div>
-              <FL>{durationLabel}</FL>
-              <input type="number" min={0} value={step.durationMinutes || ''} placeholder="0"
-                onChange={e => onChange({ ...step, durationMinutes: parseFloat(e.target.value) || 0 })}
-                className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
-            </div>
-            {/* Only show temperature when relevant to the task */}
-            {(!hasTask || showTemp) && (
-              <div>
-                <FL>Temperature (°C)</FL>
-                <input type="number" min={0} value={step.temperatureCelsius || ''} placeholder="—"
-                  onChange={e => onChange({ ...step, temperatureCelsius: parseFloat(e.target.value) || 0 })}
-                  className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+        {/* Hide these when the tool's capability schema already defines time/temperature */}
+        {(() => {
+          const toolsWithSchema = step.stepTools.filter(t => {
+            const node = equipmentTree.find(n => n.id === t.equipmentId || n.name === t.name);
+            return node?.capability_schema?.modes?.length;
+          });
+          // Also hide if a connected Panasonic appliance is present
+          const hasConnected = step.stepTools.some(t => t.applianceId);
+          const schemaCoversTime = toolsWithSchema.length > 0 || hasConnected;
+          const schemaCoversTemp = toolsWithSchema.some(t => {
+            const node = equipmentTree.find(n => n.id === t.equipmentId || n.name === t.name);
+            return node?.capability_schema?.modes?.some((m: any) =>
+              m.controls?.some((c: any) => c.id === 'temperature')
+            );
+          }) || hasConnected;
+
+          // Show duration if: no schema covers it, or task explicitly needs it (passive)
+          const showDuration = !schemaCoversTime || isPassive || (!hasTask && !schemaCoversTime);
+          const showTempField = (!hasTask || showTemp) && !schemaCoversTemp;
+
+          if (!showDuration && !showTempField) return null;
+
+          return (
+            <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+              <div className="flex gap-3 flex-wrap">
+                {showDuration && (
+                  <div>
+                    <FL>{durationLabel}</FL>
+                    <input type="number" min={0} value={step.durationMinutes || ''} placeholder="0"
+                      onChange={e => onChange({ ...step, durationMinutes: parseFloat(e.target.value) || 0 })}
+                      className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+                  </div>
+                )}
+                {showTempField && (
+                  <div>
+                    <FL>Temperature (°C)</FL>
+                    <input type="number" min={0} value={step.temperatureCelsius || ''} placeholder="—"
+                      onChange={e => onChange({ ...step, temperatureCelsius: parseFloat(e.target.value) || 0 })}
+                      className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          );
+        })()}
 
       </div>
     </div>
@@ -1413,7 +1442,9 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   };
 
   return (
-    <div className="border border-[var(--border)] mb-4 last:mb-0">
+    <div className="border mb-4 last:mb-0" style={{
+      borderColor: balance?.hasError ? 'rgba(220,38,38,0.5)' : 'var(--border)',
+    }}>
       <div className="flex items-center gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
         <GripVertical size={13} className="text-[var(--border)] flex-shrink-0" />
         <div className="flex-1 relative">
@@ -1477,16 +1508,35 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
       </div>
       {!group.collapsed && (
         <div className="p-4">
-          {group.steps.map((step, i) => (
-            <StepEditor key={step.id} step={step} index={i}
-              ingredientTree={ingredientTree} equipmentTree={equipmentTree}
-              fromRecipe={groupOutputs}
-              isFirst={i === 0} isLast={i === group.steps.length - 1}
-              onChange={s => updateStep(i, s)}
-              onRemove={() => removeStep(i)}
-              onMoveUp={() => moveStep(i, -1)}
-              onMoveDown={() => moveStep(i, 1)} />
-          ))}
+          {group.steps.map((step, i) => {
+            // Build set of ingredient keys that are over-budget in this group
+            const overBudgetKeys = new Set<string>();
+            if (balance?.hasError) {
+              for (const entry of balance.entries) {
+                if (entry.groupId === group.id && entry.overBudget) {
+                  // Mark all ingredients in this step that reference the output
+                  for (const si of step.stepIngredients) {
+                    const key = si.ingredientId || si.name.toLowerCase().trim();
+                    const outputKey = groupOutputs.find(go =>
+                      go.id === si.ingredientId || go.name.toLowerCase() === si.name.toLowerCase()
+                    );
+                    if (outputKey) overBudgetKeys.add(key);
+                  }
+                }
+              }
+            }
+            return (
+              <StepEditor key={step.id} step={step} index={i}
+                ingredientTree={ingredientTree} equipmentTree={equipmentTree}
+                fromRecipe={groupOutputs}
+                overBudgetKeys={overBudgetKeys.size > 0 ? overBudgetKeys : undefined}
+                isFirst={i === 0} isLast={i === group.steps.length - 1}
+                onChange={s => updateStep(i, s)}
+                onRemove={() => removeStep(i)}
+                onMoveUp={() => moveStep(i, -1)}
+                onMoveDown={() => moveStep(i, 1)} />
+            );
+          })}
           <button onClick={addStep}
             className="mt-3 flex items-center gap-2 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors border border-dashed border-[var(--border)] px-3 py-2 w-full justify-center hover:border-[var(--accent)]">
             <Plus size={11} /> Add step
