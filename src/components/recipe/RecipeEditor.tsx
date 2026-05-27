@@ -325,6 +325,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
 }
 
 // ── Task Picker (full-screen dropdown, kept for future use) ───
+function TaskPicker({ onSelect, onClose, onFreeText }: {
   onSelect: (task: TaskResult) => void;
   onClose: () => void;
   onFreeText: () => void;
