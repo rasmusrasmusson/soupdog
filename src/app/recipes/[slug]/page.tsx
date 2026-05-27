@@ -136,7 +136,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
     id:                 row.id,
     slug:               row.slug,
     version:            row.version ?? 1,
-    versionId:          rv?.id ?? undefined,
+    recipeVersionId:    rv?.id ?? undefined,
     title:              rv?.title ?? row.title,
     description:        rv?.description  ?? row.description  ?? undefined,
     cuisine:            rv?.cuisine      ?? row.cuisine      ?? undefined,
@@ -652,7 +652,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
           {/* Nutrition — calculated from ingredients */}
           <RecipeNutritionSection
-            versionId={(recipe as any).versionId}
+            versionId={(recipe as any).recipeVersionId}
             ingredients={recipe.ingredients}
             servings={servings}
             storedNutrition={recipe.nutrition}
