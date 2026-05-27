@@ -37,6 +37,7 @@ interface TaskResult {
   suggested_tool_slugs?: string[];
   show_temperature?: boolean;
   duration_label?: string;
+  yield_factor?: number;
 }
 
 interface TaskTreeNode {
@@ -290,7 +291,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
           ref={inputRef}
           value={query}
           onChange={e => { setQuery(e.target.value); setFam(null); }}
-          placeholder="Search steps…"
+          placeholder="Search tasks…"
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
             fontSize: 12, color: 'var(--fg)',
@@ -353,8 +354,40 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
       {showResults && (
         <div style={{ maxHeight: 220, overflowY: 'auto' }}>
           {results.length === 0 && !loading && (
-            <div style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
-              No steps found.
+            <div>
+              <div style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
+                No tasks found.
+              </div>
+              {query.length >= 2 && (
+                <button
+                  onClick={() => {
+                    handleSelect({
+                      id: `custom-${uid()}`, slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
+                      name: query, family: 'custom', category: 'custom',
+                      task_type: 'human', description: '',
+                    });
+                  }}
+                  style={{
+                    width: '100%', textAlign: 'left', padding: '8px 12px',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    borderTop: '1px solid var(--border)',
+                  }}
+                  className="hover:bg-[var(--accent-subtle)]"
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>+ Add</span>
+                    <span style={{ fontSize: 12, color: 'var(--fg)', fontStyle: 'italic' }}>"{query}"</span>
+                    <span style={{
+                      marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 9,
+                      color: 'var(--muted)', border: '1px solid var(--border)',
+                      padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.08em',
+                    }}>new</span>
+                  </div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
+                    Custom task · not in library
+                  </div>
+                </button>
+              )}
             </div>
           )}
           {results.map(task => (
@@ -379,6 +412,32 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               )}
             </button>
           ))}
+          {/* Add custom task option at bottom when searching and no exact match */}
+          {isSearching && results.length > 0 && !results.some(t => t.name.toLowerCase() === query.toLowerCase()) && (
+            <button
+              onClick={() => handleSelect({
+                id: `custom-${uid()}`, slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
+                name: query, family: 'custom', category: 'custom',
+                task_type: 'human', description: '',
+              })}
+              style={{
+                width: '100%', textAlign: 'left', padding: '7px 12px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                borderTop: '1px solid var(--border)',
+              }}
+              className="hover:bg-[var(--accent-subtle)]"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)', fontWeight: 600 }}>+ Add</span>
+                <span style={{ fontSize: 12, color: 'var(--fg)', fontStyle: 'italic' }}>"{query}"</span>
+                <span style={{
+                  marginLeft: 'auto', fontFamily: 'var(--font-mono)', fontSize: 9,
+                  color: 'var(--muted)', border: '1px solid var(--border)',
+                  padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.08em',
+                }}>new</span>
+              </div>
+            </button>
+          )}
         </div>
       )}
 
@@ -974,9 +1033,10 @@ function GenericCapabilityPanel({ tool, schema, onChange }: {
 
 // ── Step tool row ─────────────────────────────────────────────
 
-function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
+function StepToolRow({ tool, equipmentTree, onChange, onRemove, suggestedSlugs }: {
   tool: StepTool; equipmentTree: TaxonomyNode[];
   onChange: (t: StepTool) => void; onRemove: () => void;
+  suggestedSlugs?: string[];
 }) {
   // Match connected Panasonic by slug or id
   const connectedAppliance = APPLIANCES.find(a =>
@@ -993,6 +1053,15 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
   );
   const hasCapability = !connectedAppliance &&
     (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
+
+  // Build suggested tools section for the picker
+  const suggestedNodes = (suggestedSlugs ?? [])
+    .map(slug => equipmentTree.find(n => n.slug === slug))
+    .filter((n): n is TaxonomyNode => !!n && n.name !== tool.name);
+
+  const suggestedSection = suggestedNodes.length > 0
+    ? { label: 'Suggested for this task', items: suggestedNodes }
+    : undefined;
 
   const handleSelect = (n: TaxonomyNode) => {
     const matchedAppliance = APPLIANCES.find(a =>
@@ -1015,7 +1084,8 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
       <div className="flex items-center gap-1.5">
         <div className="flex-1">
           <PickerBtn value={tool.name} placeholder="Tool / equipment…"
-            nodes={equipmentTree} onSelect={handleSelect} />
+            nodes={equipmentTree} onSelect={handleSelect}
+            extraSection={suggestedSection} />
         </div>
         <button onClick={onRemove}
           className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
@@ -1107,6 +1177,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         (task.typical_duration_min_seconds
           ? Math.round(task.typical_duration_min_seconds / 60) : 0),
       stepTools: [...step.stepTools, ...suggestedTools],
+      ...(task.suggested_tool_slugs?.length ? { suggestedToolSlugs: task.suggested_tool_slugs } : {}),
+      ...(task.yield_factor != null ? { yieldFactor: task.yield_factor } : {}),
     });
   };
 
@@ -1203,6 +1275,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
           </FL>
           {step.stepTools.map((st, i) => (
             <StepToolRow key={st.id} tool={st} equipmentTree={equipmentTree}
+              suggestedSlugs={step.taskId ? (step as any).suggestedToolSlugs : undefined}
               onChange={v => updateTool(i, v)} onRemove={() => removeTool(i)} />
           ))}
           {step.stepTools.length >= 2 && (
@@ -1223,20 +1296,17 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         {/* Hide these when the tool's capability schema already defines time/temperature */}
         {(() => {
           const toolsWithSchema = step.stepTools.filter(t => {
-            const node = equipmentTree.find(n => n.id === t.equipmentId || n.name === t.name);
-            return node?.capability_schema?.modes?.length;
+            const node = equipmentTree.find(n =>
+              n.id === t.equipmentId ||
+              n.slug === t.equipmentId ||
+              (t.name && n.name.toLowerCase() === t.name.toLowerCase())
+            );
+            return (node?.capability_schema?.modes?.length ?? 0) > 0;
           });
-          // Also hide if a connected Panasonic appliance is present
           const hasConnected = step.stepTools.some(t => t.applianceId);
           const schemaCoversTime = toolsWithSchema.length > 0 || hasConnected;
-          const schemaCoversTemp = toolsWithSchema.some(t => {
-            const node = equipmentTree.find(n => n.id === t.equipmentId || n.name === t.name);
-            return node?.capability_schema?.modes?.some((m: any) =>
-              m.controls?.some((c: any) => c.id === 'temperature')
-            );
-          }) || hasConnected;
+          const schemaCoversTemp = schemaCoversTime; // if schema covers time, assume it covers temp too
 
-          // Show duration if: no schema covers it, or task explicitly needs it (passive)
           const showDuration = !schemaCoversTime || isPassive || (!hasTask && !schemaCoversTime);
           const showTempField = (!hasTask || showTemp) && !schemaCoversTemp;
 
@@ -1269,6 +1339,52 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
       </div>
     </div>
   );
+}
+
+// ── Group yield auto-calculation ─────────────────────────────
+// Converts all step ingredients to grams, applies task yield factors,
+// returns estimated output weight in grams.
+
+function calculateGroupYield(
+  steps: Step[],
+  ingredientTree: TaxonomyNode[]
+): number {
+  const UNIT_TO_G: Record<string, number> = {
+    g: 1, kg: 1000, oz: 28.35, lb: 453.59,
+    ml: 1, l: 1000, tsp: 5, tbsp: 15, cup: 240,
+    fl_oz: 29.57, piece: 100, clove: 5, slice: 30, pinch: 0.36,
+  };
+
+  let totalGrams = 0;
+
+  for (const step of steps) {
+    const yieldFactor = (step as any).yieldFactor ?? 1.0;
+
+    for (const si of step.stepIngredients) {
+      if (!si.quantityValue || !si.name.trim()) continue;
+      const unit = si.quantityUnit.toLowerCase();
+
+      // Find density from ingredient tree
+      const node = ingredientTree.find(n =>
+        n.id === si.ingredientId || n.name.toLowerCase() === si.name.toLowerCase()
+      );
+      const density = (node as any)?.density_g_per_ml ?? 1.0;
+
+      let grams = 0;
+      if (unit === 'g') grams = si.quantityValue;
+      else if (unit === 'kg') grams = si.quantityValue * 1000;
+      else if (unit === 'ml') grams = si.quantityValue * density;
+      else if (unit === 'l')  grams = si.quantityValue * density * 1000;
+      else {
+        const factor = UNIT_TO_G[unit];
+        grams = factor ? si.quantityValue * factor : si.quantityValue * 50; // unknown unit fallback
+      }
+
+      totalGrams += grams * yieldFactor;
+    }
+  }
+
+  return Math.round(totalGrams);
 }
 
 // ── Balance tracker ───────────────────────────────────────────
@@ -1431,8 +1547,25 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
 }) {
   const isFirst = groupIndex === 0;
   const isLast  = groupIndex === totalGroups - 1;
+
+  // Track whether user has manually edited the yield
+  const [yieldUserEdited, setYieldUserEdited] = useState(
+    !!(group.outputQuantityValue && group.outputQuantityValue > 0)
+  );
+
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
-  const updateStep = (i: number, s: Step) => onChange({ ...group, steps: group.steps.map((r, idx) => idx === i ? s : r) });
+  const updateStep = (i: number, s: Step) => {
+    const newGroup = { ...group, steps: group.steps.map((r, idx) => idx === i ? s : r) };
+    // Auto-update yield if user hasn't manually set it
+    if (!yieldUserEdited && group.outputName.trim()) {
+      const calcYield = calculateGroupYield(newGroup.steps, ingredientTree);
+      if (calcYield > 0) {
+        onChange({ ...newGroup, outputQuantityValue: calcYield, outputQuantityUnit: newGroup.outputQuantityUnit ?? 'g' });
+        return;
+      }
+    }
+    onChange(newGroup);
+  };
   const removeStep = (i: number) => onChange({ ...group, steps: group.steps.filter((_, idx) => idx !== i) });
   const moveStep   = (i: number, dir: -1 | 1) => {
     const next = [...group.steps]; const swap = i + dir;
@@ -1457,16 +1590,19 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
           />
           {/* Output quantity — shown when group has a name */}
           {group.outputName.trim() && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
               <FL>Yield</FL>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                 <input
                   type="number" min={0} step="any"
                   value={group.outputQuantityValue || ''}
-                  placeholder="0"
-                  onChange={e => onChange({ ...group, outputQuantityValue: parseFloat(e.target.value) || 0 })}
+                  placeholder="auto"
+                  onChange={e => {
+                    setYieldUserEdited(true);
+                    onChange({ ...group, outputQuantityValue: parseFloat(e.target.value) || 0 });
+                  }}
                   style={{
-                    width: 64, background: 'transparent',
+                    width: 72, background: 'transparent',
                     border: '1px solid var(--border)', padding: '4px 8px',
                     fontSize: 11, textAlign: 'right', color: 'var(--fg)', outline: 'none',
                   }}
@@ -1483,9 +1619,29 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                     <option key={u}>{u}</option>
                   ))}
                 </select>
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
-                  actual yield after cooking
-                </span>
+                {yieldUserEdited ? (
+                  <button
+                    onClick={() => {
+                      const calc = calculateGroupYield(group.steps, ingredientTree);
+                      if (calc > 0) {
+                        onChange({ ...group, outputQuantityValue: calc, outputQuantityUnit: 'g' });
+                        setYieldUserEdited(false);
+                      }
+                    }}
+                    style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)',
+                      background: 'none', border: '1px solid var(--accent)',
+                      padding: '2px 6px', cursor: 'pointer',
+                    }}
+                    title="Recalculate from ingredients"
+                  >
+                    ⟳ recalc
+                  </button>
+                ) : (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+                    auto · edit to override
+                  </span>
+                )}
               </div>
             </div>
           )}

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
     .select(`id, slug, name, family, category, task_type, description,
              typical_duration_min_seconds, typical_duration_max_seconds,
              difficulty, parameter_schema, appliance_capability,
-             suggested_tool_slugs, show_temperature, duration_label`)
+             suggested_tool_slugs, show_temperature, duration_label, yield_factor`)
     .order('name');
 
   if (q.length >= 2) query = query.ilike('name', `%${q}%`);
