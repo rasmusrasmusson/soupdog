@@ -9,39 +9,34 @@ export async function GET(req: NextRequest) {
   const q        = searchParams.get('q')?.trim() ?? '';
   const family   = searchParams.get('family') ?? '';
   const category = searchParams.get('category') ?? '';
-  const type     = searchParams.get('type') ?? '';   // human | machine | passive
+  const type     = searchParams.get('type') ?? '';
 
   const supabase = await createClient();
   const db       = supabase as any;
 
   let query = db
     .from('tasks')
-    .select('id, slug, name, family, category, task_type, description, typical_duration_min_seconds, typical_duration_max_seconds, difficulty, parameter_schema, appliance_capability')
+    .select(`id, slug, name, family, category, task_type, description,
+             typical_duration_min_seconds, typical_duration_max_seconds,
+             difficulty, parameter_schema, appliance_capability,
+             suggested_tool_slugs, show_temperature, duration_label`)
     .order('name');
 
-  if (q.length >= 2) {
-    // Simple ILIKE search — fast enough for task library size
-    // Upgrade to full-text / vector when library grows large
-    query = query.ilike('name', `%${q}%`);
-  }
-
-  if (family)   query = query.eq('family',    family);
-  if (category) query = query.eq('category',  category);
-  if (type)     query = query.eq('task_type', type);
+  if (q.length >= 2) query = query.ilike('name', `%${q}%`);
+  if (family)        query = query.eq('family',    family);
+  if (category)      query = query.eq('category',  category);
+  if (type)          query = query.eq('task_type', type);
 
   query = query.limit(20);
 
   const { data, error } = await query;
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Also return distinct families and categories for the picker tree
   const { data: families } = await db
     .from('tasks')
     .select('family, category, task_type')
     .order('family');
 
-  // Build tree structure
   const tree: Record<string, { categories: Set<string>; types: Set<string> }> = {};
   for (const row of (families ?? [])) {
     if (!tree[row.family]) tree[row.family] = { categories: new Set(), types: new Set() };

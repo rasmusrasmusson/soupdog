@@ -18,6 +18,9 @@ interface TaskResult {
   typical_duration_min_seconds?: number;
   typical_duration_max_seconds?: number;
   difficulty?: string;
+  suggested_tool_slugs?: string[];
+  show_temperature?: boolean;
+  duration_label?: string;
 }
 
 interface TaskTreeNode {
@@ -37,9 +40,9 @@ interface StepTool {
 
 interface Step {
   id: string;
-  // Task fields
   taskId?: string; taskName?: string; taskType?: 'human' | 'machine' | 'passive';
-  // Free text fallback
+  showTemperature?: boolean;
+  durationLabel?: string;
   instruction: string;
   durationMinutes: number; temperatureCelsius: number;
   stepIngredients: StepIngredient[];
@@ -101,9 +104,227 @@ function FL({ children }: { children: React.ReactNode }) {
   return <span className="font-mono text-[9px] uppercase tracking-wider text-[var(--muted)] block mb-1">{children}</span>;
 }
 
-// ── Task Picker ───────────────────────────────────────────────
+// ── Task Picker Inline — always visible in step ───────────────
+// Shows search + family tiles. Collapses to a "change" link after selection.
 
-function TaskPicker({ onSelect, onClose, onFreeText }: {
+function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
+  selected: boolean;
+  equipmentTree: TaxonomyNode[];
+  onSelect: (task: TaskResult) => void;
+  onFreeText: () => void;
+}) {
+  const [open, setOpen]           = useState(!selected);
+  const [query, setQuery]         = useState('');
+  const [results, setResults]     = useState<TaskResult[]>([]);
+  const [tree, setTree]           = useState<TaskTreeNode[]>([]);
+  const [selectedFamily, setFam]  = useState<string | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const inputRef                  = useRef<HTMLInputElement>(null);
+  const debounceRef               = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => {
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(d => setTree(d.tree ?? []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [open]);
+
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    if (query.length < 2) { setResults([]); return; }
+    setLoading(true);
+    debounceRef.current = setTimeout(() => {
+      fetch(`/api/tasks?q=${encodeURIComponent(query)}`)
+        .then(r => r.json())
+        .then(d => { setResults(d.tasks ?? []); setLoading(false); })
+        .catch(() => setLoading(false));
+    }, 250);
+  }, [query]);
+
+  useEffect(() => {
+    if (!selectedFamily || query.length >= 2) return;
+    setLoading(true);
+    fetch(`/api/tasks?family=${selectedFamily}`)
+      .then(r => r.json())
+      .then(d => { setResults(d.tasks ?? []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [selectedFamily, query]);
+
+  const handleSelect = (task: TaskResult) => {
+    onSelect(task);
+    setOpen(false);
+    setQuery('');
+    setResults([]);
+    setFam(null);
+  };
+
+  const orderedTree = FAMILY_ORDER
+    .map(f => tree.find(t => t.family === f))
+    .filter(Boolean) as TaskTreeNode[];
+
+  const isSearching = query.length >= 2;
+  const showResults = isSearching || selectedFamily !== null;
+
+  // Collapsed state — show "change step" link
+  if (selected && !open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
+          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+          display: 'flex', alignItems: 'center', gap: 4,
+        }}
+        className="hover:text-[var(--accent)]"
+      >
+        <Search size={9} /> Change step
+      </button>
+    );
+  }
+
+  return (
+    <div style={{
+      border: '1px solid var(--border)',
+      background: 'var(--surface)',
+    }}>
+      {/* Search bar */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '7px 10px',
+        borderBottom: (showResults || !isSearching) ? '1px solid var(--border)' : 'none',
+      }}>
+        <Search size={11} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+        <input
+          ref={inputRef}
+          value={query}
+          onChange={e => { setQuery(e.target.value); setFam(null); }}
+          placeholder="Search steps…"
+          style={{
+            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+            fontSize: 12, color: 'var(--fg)',
+          }}
+        />
+        {loading && <Loader2 size={11} style={{ color: 'var(--muted)' }} className="animate-spin" />}
+        {selected && (
+          <button onClick={() => setOpen(false)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2 }}>
+            <X size={11} style={{ color: 'var(--muted)' }} />
+          </button>
+        )}
+      </div>
+
+      {/* Family tiles */}
+      {!isSearching && !selectedFamily && (
+        <div style={{ padding: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 5 }}>
+            {orderedTree.map(node => (
+              <button key={node.family}
+                onClick={() => setFam(node.family)}
+                style={{
+                  padding: '6px 4px', border: '1px solid var(--border)',
+                  background: 'var(--surface)', cursor: 'pointer', textAlign: 'center',
+                  transition: 'all 0.15s',
+                }}
+                className="hover:border-[var(--accent)] hover:bg-[var(--accent-subtle)]"
+              >
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 9,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  color: 'var(--fg)', lineHeight: 1.4, display: 'block',
+                }}>
+                  {FAMILY_LABELS[node.family] ?? node.family}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Back button */}
+      {selectedFamily && !isSearching && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '5px 10px', borderBottom: '1px solid var(--border)',
+          background: 'var(--surface-hover)',
+        }}>
+          <button onClick={() => { setFam(null); setResults([]); }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>
+            ← Back
+          </button>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+            {FAMILY_LABELS[selectedFamily] ?? selectedFamily}
+          </span>
+        </div>
+      )}
+
+      {/* Results */}
+      {showResults && (
+        <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+          {results.length === 0 && !loading && (
+            <div style={{ padding: '10px 12px', fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
+              No steps found.
+            </div>
+          )}
+          {results.map(task => (
+            <button key={task.id}
+              onClick={() => handleSelect(task)}
+              style={{
+                width: '100%', textAlign: 'left', padding: '7px 12px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                borderBottom: '1px solid var(--border-subtle)', transition: 'background 0.1s',
+              }}
+              className="hover:bg-[var(--surface-hover)]"
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)', flex: 1 }}>
+                  {task.name}
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 9,
+                  textTransform: 'uppercase', letterSpacing: '0.08em',
+                  color: task.task_type === 'machine' ? 'var(--accent)' : 'var(--muted)',
+                  border: '1px solid', flexShrink: 0, padding: '1px 5px',
+                  borderColor: task.task_type === 'machine' ? 'var(--accent)' : 'var(--border)',
+                }}>
+                  {task.task_type}
+                </span>
+              </div>
+              {task.description && (
+                <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
+                  {task.description.slice(0, 75)}
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div style={{
+        borderTop: showResults ? '1px solid var(--border)' : 'none',
+        padding: '6px 10px',
+      }}>
+        <button onClick={onFreeText}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
+          }}
+          className="hover:text-[var(--fg)]"
+        >
+          <PenLine size={10} /> Write a custom step
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Task Picker (full-screen dropdown, kept for future use) ───
   onSelect: (task: TaskResult) => void;
   onClose: () => void;
   onFreeText: () => void;
@@ -552,30 +773,65 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   fromRecipe: { id: string; name: string }[]; isFirst: boolean; isLast: boolean;
   onChange: (s: Step) => void; onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
-  const [showTaskPicker, setShowTaskPicker] = useState(false);
-  const hasTask = !!step.taskId;
-  const isFreeText = !hasTask;
+  const hasTask        = !!step.taskId;
+  const isMachine      = step.taskType === 'machine';
+  const isPassive      = step.taskType === 'passive';
+  const showTemp       = step.showTemperature ?? false;
+  const durationLabel  = step.durationLabel ?? 'Duration (min)';
 
-  const addIng  = () => onChange({ ...step, stepIngredients: [...step.stepIngredients, emptyStepIngredient()] });
-  const addTool = () => onChange({ ...step, stepTools: [...step.stepTools, emptyStepTool()] });
+  const addIng     = () => onChange({ ...step, stepIngredients: [...step.stepIngredients, emptyStepIngredient()] });
+  const addTool    = () => onChange({ ...step, stepTools: [...step.stepTools, emptyStepTool()] });
   const updateIng  = (i: number, v: StepIngredient) => onChange({ ...step, stepIngredients: step.stepIngredients.map((r, idx) => idx === i ? v : r) });
   const removeIng  = (i: number) => onChange({ ...step, stepIngredients: step.stepIngredients.filter((_, idx) => idx !== i) });
   const updateTool = (i: number, v: StepTool) => onChange({ ...step, stepTools: step.stepTools.map((r, idx) => idx === i ? v : r) });
   const removeTool = (i: number) => onChange({ ...step, stepTools: step.stepTools.filter((_, idx) => idx !== i) });
 
   const selectTask = (task: TaskResult) => {
+    // Auto-suggest tools based on task
+    const suggestedTools: StepTool[] = [];
+    if (task.suggested_tool_slugs?.length) {
+      for (const slug of task.suggested_tool_slugs) {
+        // Find matching node in equipment tree by slug-like name match
+        const node = equipmentTree.find(n =>
+          n.name.toLowerCase().replace(/[^a-z0-9]/g, '-').includes(slug.replace(/-/g, '')) ||
+          slug.includes(n.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
+        );
+        if (node) {
+          // Only add if not already present
+          const alreadyAdded = step.stepTools.some(t => t.equipmentId === node.id);
+          if (!alreadyAdded) {
+            const matchedAppliance = APPLIANCES.find(a =>
+              a.name.toLowerCase().includes(node.name.toLowerCase()) ||
+              a.model.toLowerCase().includes(node.name.toLowerCase())
+            );
+            suggestedTools.push({
+              id: uid(), equipmentId: node.id, name: node.name,
+              applianceId: matchedAppliance?.id,
+            });
+          }
+        }
+      }
+    }
+
     onChange({
       ...step,
-      taskId:   task.id,
-      taskName: task.name,
-      taskType: task.task_type as 'human' | 'machine' | 'passive',
-      instruction: step.instruction || task.description || '',
-      durationMinutes: step.durationMinutes || (task.typical_duration_min_seconds ? Math.round(task.typical_duration_min_seconds / 60) : 0),
+      taskId:          task.id,
+      taskName:        task.name,
+      taskType:        task.task_type as 'human' | 'machine' | 'passive',
+      showTemperature: task.show_temperature ?? false,
+      durationLabel:   task.duration_label ?? undefined,
+      instruction:     step.instruction || '',
+      durationMinutes: step.durationMinutes ||
+        (task.typical_duration_min_seconds ? Math.round(task.typical_duration_min_seconds / 60) : 0),
+      stepTools: [...step.stepTools, ...suggestedTools],
     });
-    setShowTaskPicker(false);
   };
 
-  const clearTask = () => onChange({ ...step, taskId: undefined, taskName: undefined, taskType: undefined });
+  const clearTask = () => onChange({
+    ...step,
+    taskId: undefined, taskName: undefined, taskType: undefined,
+    showTemperature: undefined, durationLabel: undefined,
+  });
 
   return (
     <div className="border border-[var(--border)] mb-2 last:mb-0">
@@ -590,67 +846,11 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         </div>
       </div>
 
-      <div className="p-3 space-y-3">
-        {/* Task picker trigger */}
-        <div style={{ position: 'relative' }}>
-          {hasTask && step.taskName && step.taskType ? (
-            <StepModeBadge
-              taskType={step.taskType}
-              taskName={step.taskName}
-              onClear={clearTask}
-            />
-          ) : (
-            <button
-              onClick={() => setShowTaskPicker(o => !o)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 6,
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                color: 'var(--muted)', background: 'none',
-                border: '1px dashed var(--border)', padding: '4px 10px',
-                cursor: 'pointer', marginBottom: 8, transition: 'border-color 0.15s',
-              }}
-              className="hover:border-[var(--accent)] hover:text-[var(--accent)]"
-            >
-              <BookOpen size={10} />
-              Select task from library
-            </button>
-          )}
+      <div className="p-3 space-y-4">
 
-          {showTaskPicker && (
-            <TaskPicker
-              onSelect={selectTask}
-              onClose={() => setShowTaskPicker(false)}
-              onFreeText={() => setShowTaskPicker(false)}
-            />
-          )}
-        </div>
-
-        {/* Instruction — always shown */}
-        <textarea value={step.instruction}
-          onChange={e => onChange({ ...step, instruction: e.target.value })}
-          placeholder={hasTask ? `Additional notes for "${step.taskName}"… (optional)` : 'Describe this step…'}
-          rows={2}
-          className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y" />
-
-        {/* Duration + temp */}
-        <div className="flex gap-3">
-          <div>
-            <FL>Duration (min)</FL>
-            <input type="number" min={0} value={step.durationMinutes || ''} placeholder="0"
-              onChange={e => onChange({ ...step, durationMinutes: parseFloat(e.target.value) || 0 })}
-              className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
-          </div>
-          <div>
-            <FL>Temperature (°C)</FL>
-            <input type="number" min={0} value={step.temperatureCelsius || ''} placeholder="—"
-              onChange={e => onChange({ ...step, temperatureCelsius: parseFloat(e.target.value) || 0 })}
-              className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
-          </div>
-        </div>
-
-        {/* Ingredients */}
+        {/* ── 1. INGREDIENTS ──────────────────────────────── */}
         <div>
-          <FL>Ingredients used in this step</FL>
+          <FL>Ingredients</FL>
           {step.stepIngredients.length > 0 && (
             <div className="mb-1 grid gap-1.5 font-mono text-[9px] uppercase tracking-wider text-[var(--muted)]"
               style={{ gridTemplateColumns: '1fr 64px 64px 1fr auto' }}>
@@ -666,9 +866,50 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
           </button>
         </div>
 
-        {/* Tools */}
-        <div className="border-t border-[var(--border-subtle)] pt-3">
-          <FL>Tools used in this step</FL>
+        {/* ── 2. STEP / TASK ──────────────────────────────── */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+          <FL>Step</FL>
+
+          {/* Task badge — shown after selection */}
+          {hasTask && step.taskName && step.taskType && (
+            <div style={{ marginBottom: 8 }}>
+              <StepModeBadge
+                taskType={step.taskType}
+                taskName={step.taskName}
+                onClear={clearTask}
+              />
+            </div>
+          )}
+
+          {/* Task search — always visible when no task selected, collapsible after */}
+          <TaskPickerInline
+            selected={hasTask}
+            equipmentTree={equipmentTree}
+            onSelect={selectTask}
+            onFreeText={() => {}}
+          />
+
+          {/* Recipe note — shown after task selected or as primary for custom */}
+          <textarea
+            value={step.instruction}
+            onChange={e => onChange({ ...step, instruction: e.target.value })}
+            placeholder={hasTask
+              ? `Recipe note for "${step.taskName}"… (optional)`
+              : 'Describe this step…'
+            }
+            rows={hasTask ? 1 : 2}
+            className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mt-2"
+          />
+        </div>
+
+        {/* ── 3. TOOLS ────────────────────────────────────── */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+          <FL>
+            Tools
+            {step.stepTools.some(t => !t.name) ? '' : step.stepTools.length > 0 && hasTask
+              ? ' · auto-suggested'
+              : ''}
+          </FL>
           {step.stepTools.map((st, i) => (
             <StepToolRow key={st.id} tool={st} equipmentTree={equipmentTree}
               onChange={v => updateTool(i, v)} onRemove={() => removeTool(i)} />
@@ -677,6 +918,28 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             <Plus size={10} /> Add tool
           </button>
         </div>
+
+        {/* ── 4. DURATION + TEMPERATURE ───────────────────── */}
+        <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
+          <div className="flex gap-3 flex-wrap">
+            <div>
+              <FL>{durationLabel}</FL>
+              <input type="number" min={0} value={step.durationMinutes || ''} placeholder="0"
+                onChange={e => onChange({ ...step, durationMinutes: parseFloat(e.target.value) || 0 })}
+                className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+            </div>
+            {/* Only show temperature when relevant to the task */}
+            {(!hasTask || showTemp) && (
+              <div>
+                <FL>Temperature (°C)</FL>
+                <input type="number" min={0} value={step.temperatureCelsius || ''} placeholder="—"
+                  onChange={e => onChange({ ...step, temperatureCelsius: parseFloat(e.target.value) || 0 })}
+                  className="w-20 bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+              </div>
+            )}
+          </div>
+        </div>
+
       </div>
     </div>
   );
