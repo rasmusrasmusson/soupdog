@@ -1813,8 +1813,21 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   );
 
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
-  const updateStep = (i: number, s: Step) => {
-    const newGroup = { ...group, steps: group.steps.map((r, idx) => idx === i ? s : r) };
+
+  // updateStep also accepts optional new tool instances to add atomically
+  const updateStep = (i: number, s: Step, newInstances?: ToolInstance[]) => {
+    const updatedInstances = newInstances
+      ? [
+          ...group.toolInstances,
+          ...newInstances.filter(ni => !group.toolInstances.find(ei => ei.instanceId === ni.instanceId))
+        ]
+      : group.toolInstances;
+
+    const newGroup = {
+      ...group,
+      toolInstances: updatedInstances,
+      steps: group.steps.map((r, idx) => idx === i ? s : r),
+    };
     if (!yieldUserEdited && group.outputName.trim()) {
       const calcYield = calculateGroupYield(newGroup.steps, ingredientTree);
       if (calcYield > 0) {
@@ -1832,11 +1845,14 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
     onChange({ ...group, steps: next });
   };
 
-  // Add a new tool instance to this group's registry
+  // Collect new instances to add — merged into the next updateStep call
+  const pendingInstancesRef = useRef<ToolInstance[]>([]);
+
   const addToolInstance = (inst: ToolInstance) => {
-    // Only add if not already present
-    if (!group.toolInstances.find(i => i.instanceId === inst.instanceId)) {
-      onChange({ ...group, toolInstances: [...group.toolInstances, inst] });
+    // Collect pending — will be merged on next updateStep
+    if (!group.toolInstances.find(i => i.instanceId === inst.instanceId) &&
+        !pendingInstancesRef.current.find(i => i.instanceId === inst.instanceId)) {
+      pendingInstancesRef.current = [...pendingInstancesRef.current, inst];
     }
   };
 
@@ -1997,10 +2013,14 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                 ingredientTree={ingredientTree} equipmentTree={equipmentTree}
                 fromRecipe={groupOutputs}
                 overBudgetKeys={overBudgetKeys.size > 0 ? overBudgetKeys : undefined}
-                groupInstances={group.toolInstances}
+                groupInstances={[...group.toolInstances, ...pendingInstancesRef.current]}
                 onAddInstance={addToolInstance}
                 isFirst={i === 0} isLast={i === group.steps.length - 1}
-                onChange={s => updateStep(i, s)}
+                onChange={s => {
+                  const pending = [...pendingInstancesRef.current];
+                  pendingInstancesRef.current = [];
+                  updateStep(i, s, pending);
+                }}
                 onRemove={() => removeStep(i)}
                 onMoveUp={() => moveStep(i, -1)}
                 onMoveDown={() => moveStep(i, 1)} />
