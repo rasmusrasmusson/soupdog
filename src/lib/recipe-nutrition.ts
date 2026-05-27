@@ -212,3 +212,109 @@ export function calculateRecipeNutrition(
 
   return { perServing, confidence, coveredPct, totalWeightG: Math.round(totalWeightG) };
 }
+
+// ── Phase 2: Apply retention factors ─────────────────────────
+
+export interface StepTaskInfo {
+  stepId:   string;
+  taskSlug: string;  // 'boil', 'roast', 'steam' etc.
+}
+
+export interface IngredientRetention {
+  retentionCategoryId: string;
+  // Map of nutrient -> retention_pct (0-100) for this category+task
+  factors: Record<string, number>;
+}
+
+export function applyRetentionFactors(
+  ingredients: (IngredientNutrition & {
+    stepId?:             string;
+    retentionFactors?:   Record<string, Record<string, number>>;
+    // retentionFactors[taskSlug][nutrient] = pct
+  })[],
+  stepTasks:   StepTaskInfo[],  // stepId -> taskSlug
+  servings:    number
+): RecipeNutritionResult {
+
+  const stepTaskMap = new Map(stepTasks.map(s => [s.stepId, s.taskSlug]));
+
+  // Find the dominant task in the recipe as fallback
+  const taskCounts = new Map<string, number>();
+  for (const st of stepTasks) {
+    taskCounts.set(st.taskSlug, (taskCounts.get(st.taskSlug) ?? 0) + 1);
+  }
+  const dominantTask = [...taskCounts.entries()]
+    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'boil';
+
+  const totals: Record<string, number> = {};
+  let totalWeightG = 0;
+  let coveredCount = 0;
+  let skippedCount = 0;
+
+  for (const ing of ingredients) {
+    if (!ing.quantityValue || ing.quantityValue <= 0) continue;
+
+    const weightG = unitToGrams(ing.quantityValue, ing.quantityUnit, ing);
+    if (weightG === null || weightG <= 0) { skippedCount++; continue; }
+
+    totalWeightG += weightG;
+
+    if (!ing.nutritionPer100g) { skippedCount++; continue; }
+
+    coveredCount++;
+    const n   = ing.nutritionPer100g;
+    const mul = weightG / 100;
+
+    // Determine which task applies to this ingredient
+    const taskSlug = ing.stepId
+      ? (stepTaskMap.get(ing.stepId) ?? dominantTask)
+      : dominantTask;
+
+    // Get retention factors for this ingredient's category + task
+    const retFactors = ing.retentionFactors?.[taskSlug] ?? {};
+
+    const addWithRetention = (key: string, val?: number) => {
+      if (val == null || val <= 0) return;
+      const retPct = retFactors[key] ?? 100;  // default: no loss
+      totals[key] = (totals[key] ?? 0) + (val * mul * retPct / 100);
+    };
+
+    addWithRetention('calories',      n.calories);      // calories don't change much
+    addWithRetention('protein',       n.protein);
+    addWithRetention('fat',           n.fat);
+    addWithRetention('saturated_fat', n.saturated_fat);
+    addWithRetention('carbohydrates', n.carbohydrates);
+    addWithRetention('sugar',         n.sugar);
+    addWithRetention('fiber',         n.fiber);
+    addWithRetention('sodium',        n.sodium);
+    addWithRetention('potassium',     n.potassium);
+    addWithRetention('vitamin_c',     n.vitamin_c);
+    addWithRetention('iron',          n.iron);
+    addWithRetention('calcium',       n.calcium);
+    addWithRetention('magnesium',     n.magnesium);
+    addWithRetention('phosphorus',    n.phosphorus);
+  }
+
+  const total      = coveredCount + skippedCount;
+  const coveredPct = total > 0 ? Math.round((coveredCount / total) * 100) : 0;
+  const confidence = coveredPct >= 80 ? 'calculated'
+                   : coveredPct >= 40 ? 'partial'
+                   : 'insufficient';
+
+  const srv   = Math.max(servings, 1);
+  const round = (v: number, dp = 1) =>
+    Math.round(v * Math.pow(10, dp)) / Math.pow(10, dp);
+
+  const perServing: RecipeNutritionResult['perServing'] = {};
+  for (const [key, val] of Object.entries(totals)) {
+    const rounded = round(val / srv, key === 'calories' ? 0 : 1);
+    if (rounded > 0) (perServing as any)[key] = rounded;
+  }
+
+  return {
+    perServing,
+    confidence,
+    coveredPct,
+    totalWeightG: Math.round(totalWeightG),
+  };
+}

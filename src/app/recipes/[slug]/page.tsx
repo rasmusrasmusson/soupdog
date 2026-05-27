@@ -136,6 +136,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
     id:                 row.id,
     slug:               row.slug,
     version:            row.version ?? 1,
+    versionId:          rv?.id ?? undefined,
     title:              rv?.title ?? row.title,
     description:        rv?.description  ?? row.description  ?? undefined,
     cuisine:            rv?.cuisine      ?? row.cuisine      ?? undefined,
@@ -216,7 +217,8 @@ function mapLegacyRecipe(row: any): Recipe {
 
 // ── Recipe nutrition section ──────────────────────────────────
 
-function RecipeNutritionSection({ ingredients, servings, storedNutrition }: {
+function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition }: {
+  versionId?: string;
   ingredients: RecipeIngredientRef[];
   servings: number;
   storedNutrition?: any;
@@ -224,51 +226,68 @@ function RecipeNutritionSection({ ingredients, servings, storedNutrition }: {
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
   const B    = '1px solid var(--border)';
-  const tbl: React.CSSProperties  = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
+  const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
-  const td: React.CSSProperties   = { padding: '8px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
+  const td: React.CSSProperties    = { padding: '8px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
 
-  const ingNutrition = ingredients.map(ing => ({
-    name:               ing.name,
-    quantityValue:      ing.quantity.value,
-    quantityUnit:       ing.quantity.unit,
-    category:           (ing as any).category,
-    densityGPerMl:      (ing as any).densityGPerMl,
-    typicalUnitWeightG: (ing as any).typicalUnitWeightG,
-    nutritionPer100g:   (ing as any).nutritionPer100g,
-  }));
+  const [apiResult, setApiResult] = React.useState<any>(null);
+  const [loading,   setLoading]   = React.useState(false);
 
-  const result = calculateRecipeNutrition(ingNutrition, servings);
-  const n = result.perServing;
+  React.useEffect(() => {
+    if (!versionId) return;
+    setLoading(true);
+    fetch(`/api/recipes/${versionId}/nutrition`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setApiResult(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [versionId]);
 
-  const hasCalc = result.confidence !== 'insufficient' && (n.calories ?? 0) > 0;
+  // Phase 1 fallback while API loads or if no versionId
+  const fallback = calculateRecipeNutrition(
+    ingredients.map(ing => ({
+      name:               ing.name,
+      quantityValue:      ing.quantity.value,
+      quantityUnit:       ing.quantity.unit,
+      category:           (ing as any).category,
+      densityGPerMl:      (ing as any).densityGPerMl,
+      typicalUnitWeightG: (ing as any).typicalUnitWeightG,
+      nutritionPer100g:   (ing as any).nutritionPer100g,
+    })),
+    servings
+  );
+
+  const result = apiResult ?? fallback;
+  const phase  = apiResult?.phase ?? 'pre-cooking';
+  const n      = result?.perServing ?? {};
+
+  const hasCalc   = result?.confidence !== 'insufficient' && (n?.calories ?? 0) > 0;
   const hasStored = storedNutrition?.calories;
-
   if (!hasCalc && !hasStored) return null;
 
   const rows: [string, number | undefined, string][] = [
-    ['Calories',      n.calories,      'kcal'],
-    ['Protein',       n.protein,       'g'],
-    ['Fat',           n.fat,           'g'],
-    ['  Saturated',   n.saturated_fat, 'g'],
-    ['Carbohydrates', n.carbohydrates, 'g'],
-    ['  Sugar',       n.sugar,         'g'],
-    ['  Fiber',       n.fiber,         'g'],
-    ['Sodium',        n.sodium,        'mg'],
-    ['Potassium',     n.potassium,     'mg'],
-    ['Vitamin C',     n.vitamin_c,     'mg'],
-    ['Iron',          n.iron,          'mg'],
-    ['Calcium',       n.calcium,       'mg'],
+    ['Calories',      n?.calories,      'kcal'],
+    ['Protein',       n?.protein,       'g'],
+    ['Fat',           n?.fat,           'g'],
+    ['  Saturated',   n?.saturated_fat, 'g'],
+    ['Carbohydrates', n?.carbohydrates, 'g'],
+    ['  Sugar',       n?.sugar,         'g'],
+    ['  Fiber',       n?.fiber,         'g'],
+    ['Sodium',        n?.sodium,        'mg'],
+    ['Potassium',     n?.potassium,     'mg'],
+    ['Vitamin C',     n?.vitamin_c,     'mg'],
+    ['Iron',          n?.iron,          'mg'],
+    ['Calcium',       n?.calcium,       'mg'],
   ];
 
-  const confidenceLabel = result.confidence === 'calculated'
-    ? `Estimated · pre-cooking · ${result.coveredPct}% ingredients covered`
-    : result.confidence === 'partial'
-    ? `Partial estimate · pre-cooking · ${result.coveredPct}% ingredients covered`
-    : 'Stored values';
+  const phaseLabel = loading ? 'calculating…'
+    : phase === 'post-cooking'
+    ? `Estimated · post-cooking · ${result.coveredPct}% ingredients covered`
+    : `Estimated · pre-cooking · ${result.coveredPct}% ingredients covered`;
 
-  const confidenceColor = result.confidence === 'calculated' ? 'var(--accent)'
-    : result.confidence === 'partial' ? 'var(--warning)' : MUT;
+  const confidenceColor = loading ? MUT
+    : phase === 'post-cooking'    ? 'var(--accent)'
+    : result?.confidence === 'partial' ? '#b45309'
+    : MUT;
 
   return (
     <section>
@@ -283,7 +302,7 @@ function RecipeNutritionSection({ ingredients, servings, storedNutrition }: {
         display: 'inline-flex', alignItems: 'center', gap: 6,
       }}>
         <span style={{ fontFamily: MONO, fontSize: 9, color: confidenceColor }}>
-          {confidenceLabel}
+          {phaseLabel}
         </span>
       </div>
       <div className="overflow-x-auto">
@@ -295,7 +314,7 @@ function RecipeNutritionSection({ ingredients, servings, storedNutrition }: {
             </tr>
           </thead>
           <tbody>
-            {rows.filter(([, v]) => v != null && v > 0).map(([label, value, unit]) => (
+            {rows.filter(([, v]) => v != null && (v as number) > 0).map(([label, value, unit]) => (
               <tr key={label} style={{ borderTop: B }}>
                 <td style={{ ...td, borderRight: B, paddingLeft: label.startsWith('  ') ? 28 : 14, color: label.startsWith('  ') ? MUT : 'var(--fg)' }}>
                   {label.trim()}
@@ -633,6 +652,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
           {/* Nutrition — calculated from ingredients */}
           <RecipeNutritionSection
+            versionId={(recipe as any).versionId}
             ingredients={recipe.ingredients}
             servings={servings}
             storedNutrition={recipe.nutrition}
@@ -711,7 +731,8 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
                 id, order_index, quantity_value, quantity_unit,
                 food_state, prep_note, optional, step_id,
                 ingredients!ingredient_id ( id, slug, name, category,
-                  nutrition_per_100g, density_g_per_ml, typical_unit_weight_g )
+                  nutrition_per_100g, density_g_per_ml, typical_unit_weight_g,
+                  retention_category_id )
               ),
               version_steps (
                 id, order_index, step_type, group_label, instruction,
