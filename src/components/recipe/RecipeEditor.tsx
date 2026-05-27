@@ -38,6 +38,7 @@ interface TaskResult {
   show_temperature?: boolean;
   duration_label?: string;
   yield_factor?: number;
+  status?: string;
 }
 
 interface TaskTreeNode {
