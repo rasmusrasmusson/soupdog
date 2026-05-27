@@ -790,23 +790,103 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove }: {
   row: StepIngredient; ingredientTree: TaxonomyNode[]; fromRecipe: GroupOutput[];
   onChange: (r: StepIngredient) => void; onRemove: () => void;
 }) {
-  const handleSelect = (n: TaxonomyNode) => {
-    // Check if this is a group output — pre-populate remaining quantity
-    const groupOutput = fromRecipe.find(go => go.id === n.id || go.name === n.name);
+  const [query,    setQuery]    = useState(row.name);
+  const [showDrop, setShowDrop] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { setQuery(row.name); }, [row.name]);
+
+  const filtered = query.length >= 1
+    ? ingredientTree.filter(n => n.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : [];
+
+  const fromRecipeFiltered = fromRecipe.filter(go =>
+    !query || go.name.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const handleSelect = (id: string, name: string, qty?: number, unit?: string) => {
+    setQuery(name);
+    setShowDrop(false);
     onChange({
       ...row,
-      ingredientId:  n.id,
-      name:          n.name,
-      quantityValue: groupOutput?.quantityValue ?? row.quantityValue,
-      quantityUnit:  groupOutput?.quantityUnit  ?? row.quantityUnit,
+      ingredientId:  id,
+      name,
+      quantityValue: qty ?? row.quantityValue,
+      quantityUnit:  unit ?? row.quantityUnit,
     });
+  };
+
+  const handleFreeText = (name: string) => {
+    setQuery(name);
+    setShowDrop(false);
+    onChange({ ...row, ingredientId: '', name });
   };
 
   return (
     <div className="grid gap-1.5 mb-1.5" style={{ gridTemplateColumns: '1fr 64px 64px 1fr auto' }}>
-      <PickerBtn value={row.name} placeholder="Ingredient…" nodes={ingredientTree}
-        onSelect={handleSelect}
-        extraSection={fromRecipe.length > 0 ? { label: 'From this recipe', items: fromRecipe } : undefined} />
+      {/* Ingredient name — free text with autocomplete */}
+      <div style={{ position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={e => { setQuery(e.target.value); onChange({ ...row, ingredientId: '', name: e.target.value }); setShowDrop(true); }}
+            onFocus={() => setShowDrop(query.length >= 1)}
+            onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+            placeholder="Ingredient…"
+            style={{
+              width: '100%', background: 'var(--surface)',
+              border: `1px solid ${row.name.trim() ? 'var(--border)' : 'var(--border)'}`,
+              padding: '6px 28px 6px 10px', fontSize: 12,
+              color: 'var(--fg)', outline: 'none',
+            }}
+            className="focus:border-[var(--accent)] transition-colors"
+          />
+          {row.ingredientId && (
+            <span style={{ position: 'absolute', right: 8, color: 'var(--accent)', fontSize: 10, pointerEvents: 'none' }}>✓</span>
+          )}
+        </div>
+        {showDrop && (filtered.length > 0 || fromRecipeFiltered.length > 0 || query.length >= 1) && (
+          <div style={{
+            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderTop: 'none', maxHeight: 200, overflowY: 'auto',
+          }}>
+            {/* From this recipe */}
+            {fromRecipeFiltered.length > 0 && (
+              <>
+                <div style={{ padding: '4px 10px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', background: 'var(--surface-hover)' }}>
+                  From this recipe
+                </div>
+                {fromRecipeFiltered.map(go => (
+                  <div key={go.id} onMouseDown={() => handleSelect(go.id, go.name, go.quantityValue, go.quantityUnit)}
+                    style={{ padding: '6px 12px', fontSize: 12, color: 'var(--fg)', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' }}
+                    className="hover:bg-[var(--surface-hover)]">
+                    {go.name}
+                    {go.quantityValue ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginLeft: 8 }}>{go.quantityValue} {go.quantityUnit}</span> : null}
+                  </div>
+                ))}
+              </>
+            )}
+            {/* DB matches */}
+            {filtered.map(n => (
+              <div key={n.id} onMouseDown={() => handleSelect(n.id, n.name)}
+                style={{ padding: '6px 12px', fontSize: 12, color: 'var(--fg)', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)' }}
+                className="hover:bg-[var(--surface-hover)]">
+                {n.name}
+              </div>
+            ))}
+            {/* Add new if not exact match */}
+            {query.length >= 2 && !filtered.some(n => n.name.toLowerCase() === query.toLowerCase()) && !fromRecipeFiltered.some(go => go.name.toLowerCase() === query.toLowerCase()) && (
+              <div onMouseDown={() => handleFreeText(query)}
+                style={{ padding: '6px 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent)', cursor: 'pointer', borderTop: '1px solid var(--border)' }}
+                className="hover:bg-[var(--accent-subtle)]">
+                + Add "{query}"
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       <input type="number" min={0} step="any" value={row.quantityValue || ''} placeholder="0"
         onChange={e => onChange({ ...row, quantityValue: parseFloat(e.target.value) || 0 })}
         className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
@@ -984,6 +1064,20 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   const isPassive      = step.taskType === 'passive';
   const showTemp       = step.showTemperature ?? false;
   const durationLabel  = step.durationLabel ?? 'Duration (min)';
+  const noteRef        = useRef<HTMLTextAreaElement>(null);
+
+  // Ingredients already added in this step — for duplicate prevention
+  const usedIngredientKeys = new Set(
+    step.stepIngredients
+      .filter(si => si.name.trim())
+      .map(si => si.ingredientId || si.name.toLowerCase().trim())
+  );
+
+  // Filter ingredient tree to exclude already-used ingredients in this step
+  const filteredIngTree = ingredientTree.filter(n => {
+    const key = n.id || n.name.toLowerCase().trim();
+    return !usedIngredientKeys.has(key);
+  });
 
   const addIng     = () => onChange({ ...step, stepIngredients: [...step.stepIngredients, emptyStepIngredient()] });
   const addTool    = () => onChange({ ...step, stepTools: [...step.stepTools, emptyStepTool()] });
@@ -1061,7 +1155,9 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             </div>
           )}
           {step.stepIngredients.map((si, i) => (
-            <StepIngRow key={si.id} row={si} ingredientTree={ingredientTree} fromRecipe={fromRecipe}
+            <StepIngRow key={si.id} row={si}
+              ingredientTree={filteredIngTree}
+              fromRecipe={fromRecipe}
               onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
           ))}
           <button onClick={addIng} className="mt-1 flex items-center gap-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
@@ -1089,11 +1185,15 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             selected={hasTask}
             equipmentTree={equipmentTree}
             onSelect={selectTask}
-            onFreeText={() => {}}
+            onFreeText={() => {
+              // Close picker and focus the note/instruction field
+              setTimeout(() => noteRef.current?.focus(), 50);
+            }}
           />
 
           {/* Recipe note — shown after task selected or as primary for custom */}
           <textarea
+            ref={noteRef}
             value={step.instruction}
             onChange={e => onChange({ ...step, instruction: e.target.value })}
             placeholder={hasTask ? 'Note (optional)' : 'Describe this step…'}
@@ -1105,10 +1205,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         {/* ── 3. TOOLS ────────────────────────────────────── */}
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
           <FL>
-            Tools
-            {step.stepTools.some(t => !t.name) ? '' : step.stepTools.length > 0 && hasTask
-              ? ' · auto-suggested'
-              : ''}
+            Tools{step.stepTools.length > 0 && hasTask ? ' · auto-suggested' : ''}
           </FL>
           {step.stepTools.map((st, i) => (
             <StepToolRow key={st.id} tool={st} equipmentTree={equipmentTree}
