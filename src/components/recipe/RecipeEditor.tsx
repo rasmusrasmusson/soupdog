@@ -1142,7 +1142,7 @@ function GroupNameInput({ value, placeholder, nodes, onChange, onSelect }: {
             <div
               onMouseDown={() => { onChange(query); setShowPicker(false); }}
               style={{
-                padding: '7px 12px', fontSize: 12,
+                padding: '7px 12px',
                 color: 'var(--accent)', cursor: 'pointer',
                 fontFamily: 'var(--font-mono)', fontSize: 11,
                 borderTop: '1px solid var(--border)',
