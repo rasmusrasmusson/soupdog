@@ -849,7 +849,9 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
 
   // Find equipment node from tree for capability_schema
   const equipNode = equipmentTree.find(n =>
-    n.id === tool.equipmentId || n.slug === tool.equipmentId
+    n.id === tool.equipmentId ||
+    n.slug === tool.equipmentId ||
+    (tool.name && n.name.toLowerCase() === tool.name.toLowerCase())
   );
   const hasCapability = !connectedAppliance &&
     (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
@@ -1070,6 +1072,92 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   );
 }
 
+// ── Group name input — free text + optional ingredient picker ─
+
+function GroupNameInput({ value, placeholder, nodes, onChange, onSelect }: {
+  value: string; placeholder: string; nodes: TaxonomyNode[];
+  onChange: (name: string) => void;
+  onSelect: (n: TaxonomyNode) => void;
+}) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [query, setQuery]           = useState(value);
+  const inputRef                    = useRef<HTMLInputElement>(null);
+
+  // Keep local query in sync when value changes externally
+  useEffect(() => { setQuery(value); }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setQuery(e.target.value);
+    onChange(e.target.value);
+    setShowPicker(e.target.value.length >= 1);
+  };
+
+  const handleSelect = (n: TaxonomyNode) => {
+    setQuery(n.name);
+    onSelect(n);
+    setShowPicker(false);
+  };
+
+  // Filter nodes by query
+  const filtered = query.length >= 1
+    ? nodes.filter(n => n.name.toLowerCase().includes(query.toLowerCase())).slice(0, 8)
+    : [];
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        ref={inputRef}
+        value={query}
+        onChange={handleChange}
+        onFocus={() => query.length >= 1 && setShowPicker(true)}
+        onBlur={() => setTimeout(() => setShowPicker(false), 150)}
+        placeholder={placeholder}
+        style={{
+          width: '100%', background: 'var(--surface)',
+          border: '1px solid var(--border)', padding: '6px 10px',
+          fontSize: 12, color: 'var(--fg)', outline: 'none',
+        }}
+        className="focus:border-[var(--accent)] transition-colors"
+      />
+      {showPicker && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 50,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderTop: 'none', maxHeight: 200, overflowY: 'auto',
+        }}>
+          {filtered.map(n => (
+            <div key={n.id}
+              onMouseDown={() => handleSelect(n)}
+              style={{
+                padding: '7px 12px', fontSize: 12, color: 'var(--fg)',
+                cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)',
+              }}
+              className="hover:bg-[var(--surface-hover)]"
+            >
+              {n.name}
+            </div>
+          ))}
+          {/* Always allow keeping the typed value */}
+          {!filtered.some(n => n.name.toLowerCase() === query.toLowerCase()) && (
+            <div
+              onMouseDown={() => { onChange(query); setShowPicker(false); }}
+              style={{
+                padding: '7px 12px', fontSize: 12,
+                color: 'var(--accent)', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: 11,
+                borderTop: '1px solid var(--border)',
+              }}
+              className="hover:bg-[var(--accent-subtle)]"
+            >
+              + Use "{query}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Group editor ──────────────────────────────────────────────
 
 function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipmentTree,
@@ -1096,12 +1184,13 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
       <div className="flex items-center gap-3 px-4 py-3 bg-[var(--surface)] border-b border-[var(--border)]">
         <GripVertical size={13} className="text-[var(--border)] flex-shrink-0" />
         <div className="flex-1 relative">
-          <PickerBtn
+          <GroupNameInput
             value={group.outputName}
-            placeholder={totalGroups === 1 ? 'Group / output name (optional)…' : 'Group output (e.g. Vegetable broth)…'}
+            placeholder={totalGroups === 1 ? 'Group / output name (optional)…' : 'Group output (e.g. Chopped almonds and walnuts)…'}
             nodes={ingredientTree}
+            onChange={name => onChange({ ...group, outputName: name, outputIngId: '' })}
             onSelect={n => onChange({ ...group, outputName: n.name, outputIngId: n.id })}
-            className="w-full" />
+          />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={onMoveUp}   disabled={isFirst} className="p-1 text-[var(--muted)] hover:text-[var(--fg)] disabled:opacity-30"><ChevronUp  size={12} /></button>
