@@ -218,18 +218,23 @@ const INSTANCE_COLORS = [
   '#3c5e8a', // navy
 ];
 
-// Generate a sequential label for a new tool instance
-// e.g. "Pot #1", "Knife #1", "Knife #2"
+function instanceDisplayName(inst: ToolInstance): string {
+  if (inst.customName) {
+    // "Pot #1 · The curry pot" not "Pot # The curry pot"
+    return `${inst.label} · ${inst.customName}`;
+  }
+  return inst.label;
+}
+
 function generateInstanceLabel(
   equipmentName: string,
   existing: ToolInstance[]
 ): string {
-  // Map equipment names to short labels
   const SHORT_LABELS: Record<string, string> = {
     'stock pot': 'Pot', 'saucepan': 'Pan', 'frying pan': 'Pan',
     'saute pan': 'Pan', 'cast iron pan': 'Pan', 'wok': 'Wok',
     'grill pan': 'Grill pan', 'roasting tin': 'Tin',
-    'chef\'s knife': 'Knife', 'santoku knife': 'Knife',
+    "chef's knife": 'Knife', 'santoku knife': 'Knife',
     'paring knife': 'Knife', 'boning knife': 'Knife',
     'blender': 'Blender', 'immersion blender': 'Blender',
     'stand mixer': 'Mixer', 'food processor': 'Processor',
@@ -237,18 +242,15 @@ function generateInstanceLabel(
     'steam oven': 'Oven', 'combi steam oven': 'Oven',
     'microwave': 'Microwave', 'sous vide circulator': 'Sous vide',
     'chopping board': 'Board', 'mixing bowls': 'Bowl',
+    'whisk': 'Whisk', 'spatula': 'Spatula', 'colander': 'Colander',
+    'kitchen scale': 'Scale', 'probe thermometer': 'Thermometer',
   };
-  const base = SHORT_LABELS[equipmentName.toLowerCase()] ?? equipmentName;
+  const base  = SHORT_LABELS[equipmentName.toLowerCase()] ?? equipmentName;
   const count = existing.filter(t =>
     (SHORT_LABELS[t.name.toLowerCase()] ?? t.name) === base
   ).length;
-  return `${base} #${count + 1}`;
-}
-
-function instanceDisplayName(inst: ToolInstance): string {
-  return inst.customName
-    ? `${inst.label} · ${inst.customName}`
-    : inst.label;
+  // Only add #N if there's more than one, or if this is already #2+
+  return count === 0 ? `${base} #1` : `${base} #${count + 1}`;
 }
 
 function FL({ children }: { children: React.ReactNode }) {
@@ -423,11 +425,23 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               </div>
               {query.length >= 2 && (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    // Save to DB as personal task
+                    let taskId = `custom-${uid()}`;
+                    try {
+                      const res = await fetch('/api/tasks', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: query, family: 'custom', category: 'custom', task_type: 'human' }),
+                      });
+                      const d = await res.json();
+                      if (d.task?.id) taskId = d.task.id;
+                    } catch {}
                     handleSelect({
-                      id: `custom-${uid()}`, slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
+                      id: taskId,
+                      slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
                       name: query, family: 'custom', category: 'custom',
-                      task_type: 'human', description: '',
+                      task_type: 'human', description: '', status: 'personal',
                     });
                   }}
                   style={{
@@ -447,7 +461,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
                     }}>new</span>
                   </div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-                    Custom task · not in library
+                    Saved to your personal library
                   </div>
                 </button>
               )}
@@ -467,6 +481,13 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)', flex: 1 }}>
                   {task.name}
                 </span>
+                {(task as any).status === 'personal' && (
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)',
+                    border: '1px solid var(--border)', padding: '1px 5px',
+                    textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0,
+                  }}>mine</span>
+                )}
               </div>
               {task.description && (
                 <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 2 }}>
@@ -478,11 +499,24 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
           {/* Add custom task option at bottom when searching and no exact match */}
           {isSearching && results.length > 0 && !results.some(t => t.name.toLowerCase() === query.toLowerCase()) && (
             <button
-              onClick={() => handleSelect({
-                id: `custom-${uid()}`, slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
-                name: query, family: 'custom', category: 'custom',
-                task_type: 'human', description: '',
-              })}
+              onClick={async () => {
+                let taskId = `custom-${uid()}`;
+                try {
+                  const res = await fetch('/api/tasks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: query, family: 'custom', category: 'custom', task_type: 'human' }),
+                  });
+                  const d = await res.json();
+                  if (d.task?.id) taskId = d.task.id;
+                } catch {}
+                handleSelect({
+                  id: taskId,
+                  slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
+                  name: query, family: 'custom', category: 'custom',
+                  task_type: 'human', description: '', status: 'personal',
+                });
+              }}
               style={{
                 width: '100%', textAlign: 'left', padding: '7px 12px',
                 background: 'none', border: 'none', cursor: 'pointer',
@@ -2101,9 +2135,24 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
 
   useEffect(() => {
     setIngredients(prev => {
-      const agg = aggregateIngredients(groups);
+      const agg    = aggregateIngredients(groups);
       const aggKeys = new Set(agg.map(r => r.ingredientId || r.name.toLowerCase().trim()));
-      const manual = prev.filter(r => !aggKeys.has(r.ingredientId || r.name.toLowerCase().trim()));
+
+      // Keep only manual entries (ones the user added manually, not auto-aggregated)
+      // An entry is "manual" if it has no ingredientId AND wasn't previously aggregated
+      // We detect previously-aggregated rows by checking if all current groups still have them
+      const allStepIngKeys = new Set(
+        groups.flatMap(g => g.steps.flatMap(s =>
+          s.stepIngredients.map(si => si.ingredientId || si.name.toLowerCase().trim())
+        ))
+      );
+
+      const manual = prev.filter(r => {
+        const key = r.ingredientId || r.name.toLowerCase().trim();
+        // Keep if: not in new agg AND not referenced in any step (truly manual)
+        return !aggKeys.has(key) && !allStepIngKeys.has(key);
+      });
+
       return [...agg, ...manual];
     });
   }, [groups]);
