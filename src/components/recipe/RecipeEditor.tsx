@@ -68,7 +68,77 @@ interface Step {
 
 interface Group {
   id: string; outputName: string; outputIngId: string;
+  outputQuantityValue?: number;
+  outputQuantityUnit?: string;
   steps: Step[]; collapsed: boolean;
+}
+
+interface GroupOutput {
+  id: string; name: string;
+  quantityValue?: number; quantityUnit?: string;
+  remaining?: number;  // pre-calculated available quantity for this usage point
+}
+
+// ── Balance calculation ────────────────────────────────────────
+// For each group output, calculate how much is available at each
+// subsequent usage point, accounting for prior consumptions.
+
+interface BalanceEntry {
+  groupId:      string;  // which consumer group
+  consumed:     number;
+  remaining:    number;
+  overBudget:   boolean;
+}
+
+interface OutputBalance {
+  produced:   number;
+  unit:       string;
+  entries:    BalanceEntry[];
+  totalUsed:  number;
+  hasError:   boolean;
+}
+
+function calculateBalances(groups: Group[]): Map<string, OutputBalance> {
+  const result = new Map<string, OutputBalance>();
+
+  for (let gi = 0; gi < groups.length; gi++) {
+    const producer = groups[gi];
+    if (!producer.outputName.trim()) continue;
+    const produced = producer.outputQuantityValue ?? 0;
+    const unit     = producer.outputQuantityUnit ?? 'g';
+    const key      = producer.outputIngId || producer.outputName.toLowerCase().trim();
+
+    const entries: BalanceEntry[] = [];
+    let remaining = produced;
+    let hasError  = false;
+
+    // Look through all later groups for consumption of this output
+    for (let ci = gi + 1; ci < groups.length; ci++) {
+      const consumer = groups[ci];
+      let consumed = 0;
+
+      // Sum all step ingredients in this group that reference the output
+      for (const step of consumer.steps) {
+        for (const si of step.stepIngredients) {
+          const siKey = si.ingredientId || si.name.toLowerCase().trim();
+          if (siKey === key || si.name.toLowerCase().trim() === producer.outputName.toLowerCase().trim()) {
+            consumed += si.quantityValue ?? 0;
+          }
+        }
+      }
+
+      if (consumed > 0) {
+        remaining -= consumed;
+        const overBudget = remaining < -0.001; // small float tolerance
+        if (overBudget) hasError = true;
+        entries.push({ groupId: consumer.id, consumed, remaining, overBudget });
+      }
+    }
+
+    result.set(key, { produced, unit, entries, totalUsed: produced - remaining, hasError });
+  }
+
+  return result;
 }
 
 interface IngredientRow {
@@ -300,15 +370,6 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--fg)', flex: 1 }}>
                   {task.name}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 9,
-                  textTransform: 'uppercase', letterSpacing: '0.08em',
-                  color: task.task_type === 'machine' ? 'var(--accent)' : 'var(--muted)',
-                  border: '1px solid', flexShrink: 0, padding: '1px 5px',
-                  borderColor: task.task_type === 'machine' ? 'var(--accent)' : 'var(--border)',
-                }}>
-                  {task.task_type}
                 </span>
               </div>
               {task.description && (
@@ -651,7 +712,7 @@ function HierarchicalPicker({ nodes, onSelect, onClose, placeholder, extraSectio
   onSelect: (n: TaxonomyNode) => void;
   onClose: () => void;
   placeholder: string;
-  extraSection?: { label: string; items: { id: string; name: string }[] };
+  extraSection?: { label: string; items: GroupOutput[] };
 }) {
   const [query, setQuery]       = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -709,7 +770,7 @@ function HierarchicalPicker({ nodes, onSelect, onClose, placeholder, extraSectio
 function PickerBtn({ value, placeholder, nodes, onSelect, className, extraSection }: {
   value: string; placeholder: string; nodes: TaxonomyNode[];
   onSelect: (n: TaxonomyNode) => void; className?: string;
-  extraSection?: { label: string; items: { id: string; name: string }[] };
+  extraSection?: { label: string; items: GroupOutput[] };
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -726,13 +787,25 @@ function PickerBtn({ value, placeholder, nodes, onSelect, className, extraSectio
 // ── Step ingredient row ───────────────────────────────────────
 
 function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove }: {
-  row: StepIngredient; ingredientTree: TaxonomyNode[]; fromRecipe: { id: string; name: string }[];
+  row: StepIngredient; ingredientTree: TaxonomyNode[]; fromRecipe: GroupOutput[];
   onChange: (r: StepIngredient) => void; onRemove: () => void;
 }) {
+  const handleSelect = (n: TaxonomyNode) => {
+    // Check if this is a group output — pre-populate remaining quantity
+    const groupOutput = fromRecipe.find(go => go.id === n.id || go.name === n.name);
+    onChange({
+      ...row,
+      ingredientId:  n.id,
+      name:          n.name,
+      quantityValue: groupOutput?.quantityValue ?? row.quantityValue,
+      quantityUnit:  groupOutput?.quantityUnit  ?? row.quantityUnit,
+    });
+  };
+
   return (
     <div className="grid gap-1.5 mb-1.5" style={{ gridTemplateColumns: '1fr 64px 64px 1fr auto' }}>
       <PickerBtn value={row.name} placeholder="Ingredient…" nodes={ingredientTree}
-        onSelect={n => onChange({ ...row, ingredientId: n.id, name: n.name })}
+        onSelect={handleSelect}
         extraSection={fromRecipe.length > 0 ? { label: 'From this recipe', items: fromRecipe } : undefined} />
       <input type="number" min={0} step="any" value={row.quantityValue || ''} placeholder="0"
         onChange={e => onChange({ ...row, quantityValue: parseFloat(e.target.value) || 0 })}
@@ -903,7 +976,7 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
 function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, isFirst, isLast, onChange, onRemove, onMoveUp, onMoveDown }: {
   step: Step; index: number;
   ingredientTree: TaxonomyNode[]; equipmentTree: TaxonomyNode[];
-  fromRecipe: { id: string; name: string }[]; isFirst: boolean; isLast: boolean;
+  fromRecipe: GroupOutput[]; isFirst: boolean; isLast: boolean;
   onChange: (s: Step) => void; onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
   const hasTask        = !!step.taskId;
@@ -1072,6 +1145,67 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   );
 }
 
+// ── Balance tracker ───────────────────────────────────────────
+// Shows how a group output is consumed across subsequent groups
+
+function BalanceTracker({ balance, groupNames }: {
+  balance: OutputBalance;
+  groupNames: Map<string, string>;
+}) {
+  const MONO = 'var(--font-mono)';
+  const MUT  = 'var(--muted)';
+  if (!balance.produced || balance.entries.length === 0) return null;
+
+  return (
+    <div style={{
+      marginTop: 6, padding: '6px 10px',
+      background: balance.hasError ? 'rgba(220,38,38,0.05)' : 'var(--surface-hover)',
+      border: `1px solid ${balance.hasError ? 'rgba(220,38,38,0.3)' : 'var(--border)'}`,
+      fontSize: 11,
+    }}>
+      <div style={{ fontFamily: MONO, fontSize: 9, color: MUT, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        Output usage
+      </div>
+      {/* Produced row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>Produced</span>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--fg)', fontWeight: 600 }}>
+          {balance.produced} {balance.unit}
+        </span>
+      </div>
+      {/* Consumption rows */}
+      {balance.entries.map((entry, i) => {
+        const name = groupNames.get(entry.groupId) ?? `Group ${i + 2}`;
+        return (
+          <div key={entry.groupId} style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '2px 0', borderTop: '1px solid var(--border-subtle)',
+          }}>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>
+              → {name} uses {entry.consumed} {balance.unit}
+            </span>
+            <span style={{
+              fontFamily: MONO, fontSize: 10, fontWeight: 500,
+              color: entry.overBudget ? 'rgb(220,38,38)' : entry.remaining === 0 ? MUT : 'var(--fg)',
+            }}>
+              {entry.overBudget ? '⚠ ' : ''}{entry.remaining < 0 ? '' : ''}{Math.abs(entry.remaining).toFixed(1)} {balance.unit} {entry.overBudget ? 'over' : 'left'}
+            </span>
+          </div>
+        );
+      })}
+      {balance.hasError && (
+        <div style={{
+          marginTop: 6, padding: '4px 8px',
+          background: 'rgba(220,38,38,0.1)', border: '1px solid rgba(220,38,38,0.3)',
+          fontFamily: MONO, fontSize: 10, color: 'rgb(220,38,38)',
+        }}>
+          ⚠ Total consumption exceeds what was produced. Reduce usage in highlighted groups or increase the output quantity.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Group name input — free text + optional ingredient picker ─
 
 function GroupNameInput({ value, placeholder, nodes, onChange, onSelect }: {
@@ -1161,10 +1295,12 @@ function GroupNameInput({ value, placeholder, nodes, onChange, onSelect }: {
 // ── Group editor ──────────────────────────────────────────────
 
 function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipmentTree,
-  groupOutputs, onChange, onRemove, onMoveUp, onMoveDown }: {
+  groupOutputs, balance, groupNames, onChange, onRemove, onMoveUp, onMoveDown }: {
   group: Group; groupIndex: number; totalGroups: number;
   ingredientTree: TaxonomyNode[]; equipmentTree: TaxonomyNode[];
-  groupOutputs: { id: string; name: string }[];
+  groupOutputs: GroupOutput[];
+  balance?: OutputBalance;
+  groupNames: Map<string, string>;
   onChange: (g: Group) => void; onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
   const isFirst = groupIndex === 0;
@@ -1191,6 +1327,44 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
             onChange={name => onChange({ ...group, outputName: name, outputIngId: '' })}
             onSelect={n => onChange({ ...group, outputName: n.name, outputIngId: n.id })}
           />
+          {/* Output quantity — shown when group has a name */}
+          {group.outputName.trim() && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+              <FL>Yield</FL>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <input
+                  type="number" min={0} step="any"
+                  value={group.outputQuantityValue || ''}
+                  placeholder="0"
+                  onChange={e => onChange({ ...group, outputQuantityValue: parseFloat(e.target.value) || 0 })}
+                  style={{
+                    width: 64, background: 'transparent',
+                    border: '1px solid var(--border)', padding: '4px 8px',
+                    fontSize: 11, textAlign: 'right', color: 'var(--fg)', outline: 'none',
+                  }}
+                />
+                <select
+                  value={group.outputQuantityUnit ?? 'g'}
+                  onChange={e => onChange({ ...group, outputQuantityUnit: e.target.value })}
+                  style={{
+                    background: 'var(--surface)', border: '1px solid var(--border)',
+                    padding: '4px 4px', fontSize: 11, color: 'var(--fg)', outline: 'none', cursor: 'pointer',
+                  }}
+                >
+                  {['g','kg','ml','l','tsp','tbsp','cup','piece','portion'].map(u => (
+                    <option key={u}>{u}</option>
+                  ))}
+                </select>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+                  actual yield after cooking
+                </span>
+              </div>
+            </div>
+          )}
+          {/* Balance tracker */}
+          {balance && group.outputName.trim() && (
+            <BalanceTracker balance={balance} groupNames={groupNames} />
+          )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={onMoveUp}   disabled={isFirst} className="p-1 text-[var(--muted)] hover:text-[var(--fg)] disabled:opacity-30"><ChevronUp  size={12} /></button>
@@ -1304,6 +1478,14 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     const allSteps = groups.flatMap(g => g.steps);
     const hasContent = allSteps.some(s => s.instruction.trim() || s.taskId);
     if (!hasContent) { setError('Add at least one step.'); return; }
+
+    // Check for balance errors
+    const balances = calculateBalances(groups);
+    const hasBalanceError = [...balances.values()].some(b => b.hasError);
+    if (hasBalanceError) {
+      setError('One or more group outputs are over budget — a later step uses more than was produced. Check the yield trackers and fix before saving.');
+      return;
+    }
     try {
       const steps = groups.flatMap(g =>
         g.steps
@@ -1314,6 +1496,8 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
             taskFamily:  s.taskFamily,
             instruction: s.instruction,
             groupLabel:  groups.length > 1 ? (g.outputName || '') : '',
+            groupOutputQuantityValue: g.outputQuantityValue,
+            groupOutputQuantityUnit:  g.outputQuantityUnit,
             durationMinutes:    s.durationMinutes,
             temperatureCelsius: s.temperatureCelsius,
             stepIngredients: s.stepIngredients.filter(si => si.name.trim()),
@@ -1385,15 +1569,52 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
           <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[var(--muted)]">{groups.length > 1 ? 'Groups & Steps' : 'Steps'}</span>
           <div className="flex-1 h-px bg-[var(--border)]" />
         </div>
-        {groups.map((group, gi) => (
-          <GroupEditor key={group.id} group={group} groupIndex={gi} totalGroups={groups.length}
-            ingredientTree={ingredientTree} equipmentTree={equipmentTree}
-            groupOutputs={groups.slice(0, gi).filter(g => g.outputName.trim()).map(g => ({ id: g.outputIngId || g.outputName, name: g.outputName }))}
-            onChange={g => updateGroup(gi, g)}
-            onRemove={() => removeGroup(gi)}
-            onMoveUp={() => moveGroup(gi, -1)}
-            onMoveDown={() => moveGroup(gi, 1)} />
-        ))}
+        {(() => {
+          const balances    = calculateBalances(groups);
+          const groupNamesM = new Map(groups.map(g => [g.id, g.outputName || `Group ${groups.indexOf(g) + 1}`]));
+          return groups.map((group, gi) => {
+            // Build groupOutputs with remaining quantity for each prior output
+            const priorOutputs: GroupOutput[] = groups.slice(0, gi)
+              .filter(g => g.outputName.trim())
+              .map(g => {
+                const key      = g.outputIngId || g.outputName.toLowerCase().trim();
+                const bal      = balances.get(key);
+                // Find remaining just before this group consumes
+                let remaining  = g.outputQuantityValue ?? 0;
+                if (bal) {
+                  // Find the entry just before current group gi
+                  const prevEntries = bal.entries.filter(e => {
+                    const consumerIdx = groups.findIndex(gr => gr.id === e.groupId);
+                    return consumerIdx < gi;
+                  });
+                  if (prevEntries.length > 0) {
+                    remaining = prevEntries[prevEntries.length - 1].remaining;
+                  }
+                }
+                return {
+                  id:            g.outputIngId || g.outputName,
+                  name:          g.outputName,
+                  quantityValue: remaining > 0 ? remaining : (g.outputQuantityValue ?? 0),
+                  quantityUnit:  g.outputQuantityUnit,
+                };
+              });
+
+            const key      = group.outputIngId || group.outputName.toLowerCase().trim();
+            const balance  = group.outputName.trim() ? balances.get(key) : undefined;
+
+            return (
+              <GroupEditor key={group.id} group={group} groupIndex={gi} totalGroups={groups.length}
+                ingredientTree={ingredientTree} equipmentTree={equipmentTree}
+                groupOutputs={priorOutputs}
+                balance={balance}
+                groupNames={groupNamesM}
+                onChange={g => updateGroup(gi, g)}
+                onRemove={() => removeGroup(gi)}
+                onMoveUp={() => moveGroup(gi, -1)}
+                onMoveDown={() => moveGroup(gi, 1)} />
+            );
+          });
+        })()}
         <button onClick={addGroup}
           className="mt-2 flex items-center gap-2 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors border border-dashed border-[var(--border)] px-3 py-2 w-full justify-center hover:border-[var(--accent)]">
           <Plus size={11} /> Add group
