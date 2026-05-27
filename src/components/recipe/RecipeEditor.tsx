@@ -49,9 +49,26 @@ interface StepIngredient {
   quantityValue: number; quantityUnit: string; prepNote: string;
 }
 
+// Tool instance — a specific physical tool in use during this recipe
+// e.g. "Pot #1 · The curry pot", "Knife #1"
+interface ToolInstance {
+  instanceId:   string;   // unique within recipe
+  equipmentId:  string;   // links to equipment table
+  name:         string;   // equipment type name e.g. "Stock pot"
+  label:        string;   // auto-generated e.g. "Pot #1"
+  customName?:  string;   // optional user label e.g. "The curry pot"
+  applianceId?: string;
+  // display
+  colorIndex:   number;   // 0-7, maps to a color palette
+}
+
 interface StepTool {
-  id: string; equipmentId: string; name: string;
-  applianceId?: string; applianceModeId?: string;
+  id: string;
+  instanceId?:     string;   // references ToolInstance.instanceId (preferred)
+  equipmentId:     string;   // fallback when no instance
+  name:            string;
+  applianceId?:    string;
+  applianceModeId?: string;
   applianceSettings?: Record<string, string | number>;
 }
 
@@ -71,6 +88,7 @@ interface Group {
   id: string; outputName: string; outputIngId: string;
   outputQuantityValue?: number;
   outputQuantityUnit?: string;
+  toolInstances: ToolInstance[];   // registry of tools in use in this group
   steps: Step[]; collapsed: boolean;
 }
 
@@ -181,12 +199,57 @@ function emptyStep(): Step {
   return { id: uid(), instruction: '', durationMinutes: 0, temperatureCelsius: 0, stepIngredients: [], stepTools: [] };
 }
 function emptyGroup(name = ''): Group {
-  return { id: uid(), outputName: name, outputIngId: '', steps: [emptyStep()], collapsed: false };
+  return { id: uid(), outputName: name, outputIngId: '', toolInstances: [], steps: [emptyStep()], collapsed: false };
 }
 function emptyStepIngredient(): StepIngredient {
   return { id: uid(), ingredientId: '', name: '', quantityValue: 0, quantityUnit: 'g', prepNote: '' };
 }
 function emptyStepTool(): StepTool { return { id: uid(), equipmentId: '', name: '' }; }
+
+// Tool instance color palette — muted, Soupdog-appropriate
+const INSTANCE_COLORS = [
+  '#2e4638', // dark olive (accent)
+  '#5b6e8a', // slate blue
+  '#8a5b3c', // warm brown
+  '#4a7c6f', // teal
+  '#7c4a6e', // muted purple
+  '#6e7c4a', // moss
+  '#8a3c3c', // muted red
+  '#3c5e8a', // navy
+];
+
+// Generate a sequential label for a new tool instance
+// e.g. "Pot #1", "Knife #1", "Knife #2"
+function generateInstanceLabel(
+  equipmentName: string,
+  existing: ToolInstance[]
+): string {
+  // Map equipment names to short labels
+  const SHORT_LABELS: Record<string, string> = {
+    'stock pot': 'Pot', 'saucepan': 'Pan', 'frying pan': 'Pan',
+    'saute pan': 'Pan', 'cast iron pan': 'Pan', 'wok': 'Wok',
+    'grill pan': 'Grill pan', 'roasting tin': 'Tin',
+    'chef\'s knife': 'Knife', 'santoku knife': 'Knife',
+    'paring knife': 'Knife', 'boning knife': 'Knife',
+    'blender': 'Blender', 'immersion blender': 'Blender',
+    'stand mixer': 'Mixer', 'food processor': 'Processor',
+    'conventional oven': 'Oven', 'convection oven': 'Oven',
+    'steam oven': 'Oven', 'combi steam oven': 'Oven',
+    'microwave': 'Microwave', 'sous vide circulator': 'Sous vide',
+    'chopping board': 'Board', 'mixing bowls': 'Bowl',
+  };
+  const base = SHORT_LABELS[equipmentName.toLowerCase()] ?? equipmentName;
+  const count = existing.filter(t =>
+    (SHORT_LABELS[t.name.toLowerCase()] ?? t.name) === base
+  ).length;
+  return `${base} #${count + 1}`;
+}
+
+function instanceDisplayName(inst: ToolInstance): string {
+  return inst.customName
+    ? `${inst.label} · ${inst.customName}`
+    : inst.label;
+}
 
 function FL({ children }: { children: React.ReactNode }) {
   return <span className="font-mono text-[9px] uppercase tracking-wider text-[var(--muted)] block mb-1">{children}</span>;
@@ -1031,13 +1094,132 @@ function GenericCapabilityPanel({ tool, schema, onChange }: {
   );
 }
 
+// ── Tool instance picker ──────────────────────────────────────
+// Shows active tool instances at top, full equipment tree below.
+
+function ToolInstancePicker({ instances, equipmentTree, currentName, onSelectInstance, onSelectNew, onClose }: {
+  instances:        ToolInstance[];
+  equipmentTree:    TaxonomyNode[];
+  currentName:      string;
+  onSelectInstance: (inst: ToolInstance) => void;
+  onSelectNew:      (node: TaxonomyNode) => void;
+  onClose:          () => void;
+}) {
+  const [query, setQuery]     = useState('');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const inputRef              = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const roots      = equipmentTree.filter(n => !n.parent_id);
+  const childrenOf = (id: string) => equipmentTree.filter(n => n.parent_id === id);
+  const search     = query.length >= 2
+    ? equipmentTree.filter(n => n.name.toLowerCase().includes(query.toLowerCase()))
+    : null;
+
+  function EquipNode({ node, depth }: { node: TaxonomyNode; depth: number }) {
+    const kids = childrenOf(node.id);
+    const isP  = kids.length > 0;
+    const open = expanded.has(node.id);
+    return (
+      <div>
+        <div
+          className="flex items-center gap-1 hover:bg-[var(--surface-hover)] cursor-pointer"
+          style={{ paddingLeft: 12 + depth * 16, paddingTop: 6, paddingBottom: 6, paddingRight: 12 }}
+          onClick={() => isP
+            ? setExpanded(p => { const n = new Set(p); n.has(node.id) ? n.delete(node.id) : n.add(node.id); return n; })
+            : onSelectNew(node)
+          }
+        >
+          {isP
+            ? <ChevronRight size={10} className={`text-[var(--muted)] flex-shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
+            : <span className="w-[10px]" />
+          }
+          <span className={isP
+            ? 'font-mono text-[10px] uppercase tracking-wider text-[var(--muted)]'
+            : 'text-[12px] text-[var(--fg)]'
+          }>
+            {node.name}
+          </span>
+        </div>
+        {isP && open && kids.map(k => <EquipNode key={k.id} node={k} depth={depth + 1} />)}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 60,
+      background: 'var(--surface)', border: '1px solid var(--border)',
+      borderTop: 'none', maxHeight: 320, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+    }}>
+      {/* Search */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: '1px solid var(--border)' }}>
+        <Search size={11} style={{ color: 'var(--muted)', flexShrink: 0 }} />
+        <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
+          placeholder="Search tool / equipment…"
+          style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', fontSize: 12, color: 'var(--fg)' }} />
+        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+          <X size={11} style={{ color: 'var(--muted)' }} />
+        </button>
+      </div>
+
+      <div style={{ overflowY: 'auto', flex: 1 }}>
+        {/* In use in this group */}
+        {!query && instances.length > 0 && (
+          <>
+            <div style={{ padding: '5px 12px 3px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', background: 'var(--surface-hover)' }}>
+              In use in this group
+            </div>
+            {instances.map(inst => (
+              <div key={inst.instanceId}
+                onClick={() => onSelectInstance(inst)}
+                className="hover:bg-[var(--surface-hover)] cursor-pointer"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: '1px solid var(--border-subtle)' }}
+              >
+                {/* Color dot */}
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                  background: INSTANCE_COLORS[inst.colorIndex % INSTANCE_COLORS.length],
+                }} />
+                <span style={{ fontSize: 12, color: 'var(--fg)', flex: 1 }}>
+                  {instanceDisplayName(inst)}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)' }}>
+                  {inst.name}
+                </span>
+              </div>
+            ))}
+            <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+            <div style={{ padding: '4px 12px 3px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)' }}>
+              Add new tool
+            </div>
+          </>
+        )}
+
+        {/* Equipment tree or search results */}
+        {(search ?? roots).map(n => <EquipNode key={n.id} node={n} depth={0} />)}
+      </div>
+    </div>
+  );
+}
+
 // ── Step tool row ─────────────────────────────────────────────
 
-function StepToolRow({ tool, equipmentTree, onChange, onRemove, suggestedSlugs }: {
+function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onChange, onRemove, suggestedSlugs }: {
   tool: StepTool; equipmentTree: TaxonomyNode[];
+  groupInstances:  ToolInstance[];
+  onAddInstance:   (inst: ToolInstance) => void;
   onChange: (t: StepTool) => void; onRemove: () => void;
   suggestedSlugs?: string[];
 }) {
+  const [open, setOpen] = useState(!tool.name);
+
+  // Find the instance this tool is linked to
+  const linkedInstance = tool.instanceId
+    ? groupInstances.find(i => i.instanceId === tool.instanceId)
+    : undefined;
+
   // Match connected Panasonic by slug or id
   const connectedAppliance = APPLIANCES.find(a =>
     a.id === tool.applianceId ||
@@ -1054,38 +1236,96 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove, suggestedSlugs }
   const hasCapability = !connectedAppliance &&
     (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
 
-  // Build suggested tools section for the picker
-  const suggestedNodes = (suggestedSlugs ?? [])
-    .map(slug => equipmentTree.find(n => n.slug === slug))
-    .filter((n): n is TaxonomyNode => !!n && n.name !== tool.name);
-
-  const suggestedSection = suggestedNodes.length > 0
-    ? { label: 'Suggested for this task', items: suggestedNodes }
-    : undefined;
-
-  const handleSelect = (n: TaxonomyNode) => {
-    const matchedAppliance = APPLIANCES.find(a =>
-      a.id === n.slug ||
-      a.model.toLowerCase().includes(n.name.toLowerCase()) ||
-      n.name.toLowerCase().includes(a.model.toLowerCase())
-    );
+  const handleSelectInstance = (inst: ToolInstance) => {
+    const matchedAppliance = APPLIANCES.find(a => a.id === inst.applianceId);
     onChange({
       ...tool,
-      equipmentId:      n.id,
-      name:             n.name,
-      applianceId:      matchedAppliance?.id,
-      applianceModeId:  undefined,
+      instanceId:    inst.instanceId,
+      equipmentId:   inst.equipmentId,
+      name:          inst.name,
+      applianceId:   inst.applianceId,
+      applianceModeId: undefined,
       applianceSettings: {},
     });
+    setOpen(false);
   };
+
+  const handleSelectNew = (node: TaxonomyNode) => {
+    const matchedAppliance = APPLIANCES.find(a =>
+      a.id === node.slug ||
+      a.model.toLowerCase().includes(node.name.toLowerCase()) ||
+      node.name.toLowerCase().includes(a.model.toLowerCase())
+    );
+    // Create new tool instance
+    const newInstance: ToolInstance = {
+      instanceId:  uid(),
+      equipmentId: node.id,
+      name:        node.name,
+      label:       generateInstanceLabel(node.name, groupInstances),
+      colorIndex:  groupInstances.length % INSTANCE_COLORS.length,
+      applianceId: matchedAppliance?.id,
+    };
+    onAddInstance(newInstance);
+    onChange({
+      ...tool,
+      instanceId:    newInstance.instanceId,
+      equipmentId:   node.id,
+      name:          node.name,
+      applianceId:   matchedAppliance?.id,
+      applianceModeId: undefined,
+      applianceSettings: {},
+    });
+    setOpen(false);
+  };
+
+  const instanceColor = linkedInstance
+    ? INSTANCE_COLORS[linkedInstance.colorIndex % INSTANCE_COLORS.length]
+    : undefined;
+
+  const displayName = linkedInstance
+    ? instanceDisplayName(linkedInstance)
+    : tool.name;
 
   return (
     <div className="mb-2">
       <div className="flex items-center gap-1.5">
-        <div className="flex-1">
-          <PickerBtn value={tool.name} placeholder="Tool / equipment…"
-            nodes={equipmentTree} onSelect={handleSelect}
-            extraSection={suggestedSection} />
+        {/* Color dot for linked instance */}
+        {instanceColor && (
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+            background: instanceColor,
+          }} />
+        )}
+        <div className="flex-1 relative">
+          <button
+            onClick={() => setOpen(o => !o)}
+            style={{
+              width: '100%', textAlign: 'left', background: 'var(--surface)',
+              border: '1px solid var(--border)', padding: '6px 10px',
+              fontSize: 12, color: displayName ? 'var(--fg)' : 'var(--muted)',
+              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+            }}
+          >
+            <span className="truncate">{displayName || 'Tool / equipment…'}</span>
+            {linkedInstance && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', flexShrink: 0 }}>
+                {linkedInstance.name}
+              </span>
+            )}
+            {tool.name && !linkedInstance && (
+              <span style={{ color: 'var(--accent)', fontSize: 10, flexShrink: 0 }}>✓</span>
+            )}
+          </button>
+          {open && (
+            <ToolInstancePicker
+              instances={groupInstances}
+              equipmentTree={equipmentTree}
+              currentName={tool.name}
+              onSelectInstance={handleSelectInstance}
+              onSelectNew={handleSelectNew}
+              onClose={() => setOpen(false)}
+            />
+          )}
         </div>
         <button onClick={onRemove}
           className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
@@ -1108,11 +1348,13 @@ function StepToolRow({ tool, equipmentTree, onChange, onRemove, suggestedSlugs }
 
 // ── Step Editor ───────────────────────────────────────────────
 
-function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, isFirst, isLast, overBudgetKeys, onChange, onRemove, onMoveUp, onMoveDown }: {
+function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, isFirst, isLast, overBudgetKeys, groupInstances, onAddInstance, onChange, onRemove, onMoveUp, onMoveDown }: {
   step: Step; index: number;
   ingredientTree: TaxonomyNode[]; equipmentTree: TaxonomyNode[];
   fromRecipe: GroupOutput[]; isFirst: boolean; isLast: boolean;
   overBudgetKeys?: Set<string>;
+  groupInstances:  ToolInstance[];
+  onAddInstance:   (inst: ToolInstance) => void;
   onChange: (s: Step) => void; onRemove: () => void; onMoveUp: () => void; onMoveDown: () => void;
 }) {
   const hasTask        = !!step.taskId;
@@ -1146,17 +1388,32 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
     const suggestedTools: StepTool[] = [];
     if (task.suggested_tool_slugs?.length) {
       for (const slug of task.suggested_tool_slugs) {
-        // Match by slug field directly
         const node = equipmentTree.find(n => n.slug === slug);
         if (node) {
-          const alreadyAdded = step.stepTools.some(t => t.equipmentId === node.id);
+          const alreadyAdded = step.stepTools.some(t => t.equipmentId === node.id || t.name === node.name);
           if (!alreadyAdded) {
             const matchedAppliance = APPLIANCES.find(a =>
-              a.id === node.slug ||
-              a.model.toLowerCase().includes(node.name.toLowerCase())
+              a.id === node.slug || a.model.toLowerCase().includes(node.name.toLowerCase())
             );
+            // Check if instance already exists in group
+            const existingInst = groupInstances.find(i => i.name === node.name);
+            let instanceId: string;
+            if (existingInst) {
+              instanceId = existingInst.instanceId;
+            } else {
+              const newInst: ToolInstance = {
+                instanceId:  uid(),
+                equipmentId: node.id,
+                name:        node.name,
+                label:       generateInstanceLabel(node.name, groupInstances),
+                colorIndex:  groupInstances.length % INSTANCE_COLORS.length,
+                applianceId: matchedAppliance?.id,
+              };
+              onAddInstance(newInst);
+              instanceId = newInst.instanceId;
+            }
             suggestedTools.push({
-              id: uid(), equipmentId: node.id, name: node.name,
+              id: uid(), instanceId, equipmentId: node.id, name: node.name,
               applianceId: matchedAppliance?.id,
             });
           }
@@ -1275,6 +1532,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
           </FL>
           {step.stepTools.map((st, i) => (
             <StepToolRow key={st.id} tool={st} equipmentTree={equipmentTree}
+              groupInstances={groupInstances}
+              onAddInstance={onAddInstance}
               suggestedSlugs={step.taskId ? (step as any).suggestedToolSlugs : undefined}
               onChange={v => updateTool(i, v)} onRemove={() => removeTool(i)} />
           ))}
@@ -1556,7 +1815,6 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
   const updateStep = (i: number, s: Step) => {
     const newGroup = { ...group, steps: group.steps.map((r, idx) => idx === i ? s : r) };
-    // Auto-update yield if user hasn't manually set it
     if (!yieldUserEdited && group.outputName.trim()) {
       const calcYield = calculateGroupYield(newGroup.steps, ingredientTree);
       if (calcYield > 0) {
@@ -1572,6 +1830,24 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
     if (swap < 0 || swap >= next.length) return;
     [next[i], next[swap]] = [next[swap], next[i]];
     onChange({ ...group, steps: next });
+  };
+
+  // Add a new tool instance to this group's registry
+  const addToolInstance = (inst: ToolInstance) => {
+    // Only add if not already present
+    if (!group.toolInstances.find(i => i.instanceId === inst.instanceId)) {
+      onChange({ ...group, toolInstances: [...group.toolInstances, inst] });
+    }
+  };
+
+  // Update a tool instance's custom name
+  const updateInstanceName = (instanceId: string, customName: string) => {
+    onChange({
+      ...group,
+      toolInstances: group.toolInstances.map(i =>
+        i.instanceId === instanceId ? { ...i, customName: customName || undefined } : i
+      ),
+    });
   };
 
   return (
@@ -1649,6 +1925,41 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
           {balance && group.outputName.trim() && (
             <BalanceTracker balance={balance} groupNames={groupNames} />
           )}
+          {/* Tool instances panel — editable names */}
+          {group.toolInstances.length > 0 && (
+            <div style={{ marginTop: 8, borderTop: '1px solid var(--border-subtle)', paddingTop: 8 }}>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', marginBottom: 6 }}>
+                Tools in use
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {group.toolInstances.map(inst => (
+                  <div key={inst.instanceId} style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '3px 8px 3px 6px',
+                    border: '1px solid var(--border)',
+                    background: 'var(--surface)',
+                  }}>
+                    <span style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: INSTANCE_COLORS[inst.colorIndex % INSTANCE_COLORS.length],
+                    }} />
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', flexShrink: 0 }}>
+                      {inst.label}
+                    </span>
+                    <input
+                      value={inst.customName ?? ''}
+                      onChange={e => updateInstanceName(inst.instanceId, e.target.value)}
+                      placeholder="Name it…"
+                      style={{
+                        background: 'transparent', border: 'none', outline: 'none',
+                        fontSize: 11, color: 'var(--fg)', width: 100,
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button onClick={onMoveUp}   disabled={isFirst} className="p-1 text-[var(--muted)] hover:text-[var(--fg)] disabled:opacity-30"><ChevronUp  size={12} /></button>
@@ -1686,6 +1997,8 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                 ingredientTree={ingredientTree} equipmentTree={equipmentTree}
                 fromRecipe={groupOutputs}
                 overBudgetKeys={overBudgetKeys.size > 0 ? overBudgetKeys : undefined}
+                groupInstances={group.toolInstances}
+                onAddInstance={addToolInstance}
                 isFirst={i === 0} isLast={i === group.steps.length - 1}
                 onChange={s => updateStep(i, s)}
                 onRemove={() => removeStep(i)}
@@ -1740,7 +2053,7 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
     });
   }
   const groups: Group[] = [];
-  gmap.forEach((steps, label) => groups.push({ id: uid(), outputName: label === '__default__' ? '' : label, outputIngId: '', steps, collapsed: false }));
+  gmap.forEach((steps, label) => groups.push({ id: uid(), outputName: label === '__default__' ? '' : label, outputIngId: '', toolInstances: [], steps, collapsed: false }));
   return groups.length > 0 ? groups : [emptyGroup(title)];
 }
 
