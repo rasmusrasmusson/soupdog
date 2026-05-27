@@ -9,7 +9,23 @@ import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } 
 
 // ── Types ─────────────────────────────────────────────────────
 
-interface TaxonomyNode { id: string; name: string; parent_id: string | null; }
+interface TaxonomyNode {
+  id: string; name: string; parent_id: string | null;
+  slug?: string; connected?: boolean; category?: string;
+  capability_schema?: { modes: CapabilityMode[] } | null;
+}
+
+interface CapabilityControl {
+  id: string; label: string; type: string;
+  min?: number; max?: number; unit?: string;
+  options?: string[]; required: boolean; defaultValue?: string | number;
+  hint?: string;
+}
+
+interface CapabilityMode {
+  id: string; label: string; hint?: string;
+  controls: CapabilityControl[];
+}
 
 interface TaskResult {
   id: string; slug: string; name: string;
@@ -41,6 +57,7 @@ interface StepTool {
 interface Step {
   id: string;
   taskId?: string; taskName?: string; taskType?: 'human' | 'machine' | 'passive';
+  taskFamily?: string;
   showTemperature?: boolean;
   durationLabel?: string;
   instruction: string;
@@ -527,35 +544,26 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
 }
 
 // ── Step mode badge ───────────────────────────────────────────
-function StepModeBadge({ taskType, taskName, onClear }: {
-  taskType: string; taskName: string; onClear: () => void;
+function StepModeBadge({ taskName, taskFamily, onClear }: {
+  taskName: string; taskFamily?: string; onClear: () => void;
 }) {
-  const isM = taskType === 'machine';
-  const isP = taskType === 'passive';
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       padding: '3px 8px 3px 6px',
-      border: `1px solid ${isM ? 'var(--accent)' : 'var(--border)'}`,
-      background: isM ? 'var(--accent-subtle)' : 'var(--surface-hover)',
-      marginBottom: 8,
+      border: '1px solid var(--border)',
+      background: 'var(--surface-hover)',
     }}>
-      {isM ? <Zap size={9} style={{ color: 'var(--accent)' }} /> : <BookOpen size={9} style={{ color: 'var(--muted)' }} />}
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
-        color: isM ? 'var(--accent)' : 'var(--fg)',
-      }}>
+      <BookOpen size={9} style={{ color: 'var(--muted)' }} />
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>
         {taskName}
       </span>
-      <span style={{
-        fontFamily: 'var(--font-mono)', fontSize: 9,
-        color: isM ? 'var(--accent)' : 'var(--muted)',
-        textTransform: 'uppercase', letterSpacing: '0.1em',
-      }}>
-        · {taskType}
-      </span>
-      <button onClick={onClear}
-        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1 }}>
+      {taskFamily && (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+          · {FAMILY_LABELS[taskFamily] ?? taskFamily}
+        </span>
+      )}
+      <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1 }}>
         <X size={9} style={{ color: 'var(--muted)' }} />
       </button>
     </div>
@@ -740,28 +748,150 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove }: {
   );
 }
 
+// ── Generic capability panel (for non-Panasonic equipment) ────
+
+function GenericCapabilityPanel({ tool, schema, onChange }: {
+  tool: StepTool;
+  schema: { modes: CapabilityMode[] };
+  onChange: (t: StepTool) => void;
+}) {
+  const modes = schema.modes;
+  const activeMode = modes.find(m => m.id === tool.applianceModeId) ?? modes[0];
+
+  const setMode = (modeId: string) =>
+    onChange({ ...tool, applianceModeId: modeId, applianceSettings: {} });
+
+  const setSetting = (controlId: string, value: string | number) =>
+    onChange({ ...tool, applianceSettings: { ...tool.applianceSettings, [controlId]: value } });
+
+  useEffect(() => {
+    if (!tool.applianceModeId && modes.length > 0) setMode(modes[0].id);
+  }, []);
+
+  const renderControl = (ctrl: CapabilityControl) => {
+    const val = tool.applianceSettings?.[ctrl.id];
+    if (ctrl.type === 'select') return (
+      <select value={String(val ?? ctrl.defaultValue ?? '')}
+        onChange={e => setSetting(ctrl.id, e.target.value)}
+        className="bg-[var(--surface)] border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--fg)] outline-none focus:border-[var(--accent)] w-full">
+        {ctrl.options?.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+    if (ctrl.type === 'toggle') return (
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox"
+          checked={Boolean(val ?? ctrl.defaultValue)}
+          onChange={e => setSetting(ctrl.id, e.target.checked ? 1 : 0)}
+          className="accent-[var(--accent)]" />
+        <span className="font-mono text-[10px] text-[var(--muted)]">{ctrl.hint ?? ctrl.label}</span>
+      </label>
+    );
+    return (
+      <input type="number" min={ctrl.min} max={ctrl.max}
+        value={String(val ?? ctrl.defaultValue ?? '')}
+        onChange={e => setSetting(ctrl.id, parseFloat(e.target.value) || 0)}
+        className="w-24 bg-transparent border border-[var(--border)] px-2 py-1 text-[11px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
+    );
+  };
+
+  return (
+    <div style={{ marginTop: 8, border: '1px solid var(--border)', padding: 10, background: 'var(--surface-hover)' }}>
+      {modes.length > 1 && (
+        <div style={{ marginBottom: 10 }}>
+          <FL>Method</FL>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {modes.map(m => (
+              <button key={m.id} onClick={() => setMode(m.id)}
+                style={{
+                  fontFamily: 'var(--font-mono)', fontSize: 10, padding: '3px 8px',
+                  border: `1px solid ${activeMode?.id === m.id ? 'var(--accent)' : 'var(--border)'}`,
+                  background: activeMode?.id === m.id ? 'var(--accent)' : 'var(--surface)',
+                  color: activeMode?.id === m.id ? '#fff' : 'var(--fg)',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}>
+                {m.label}
+              </button>
+            ))}
+          </div>
+          {activeMode?.hint && (
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+              {activeMode.hint}
+            </div>
+          )}
+        </div>
+      )}
+      {activeMode && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          {activeMode.controls.map(ctrl => (
+            <div key={ctrl.id}>
+              <FL>{ctrl.label}{ctrl.unit ? ` (${ctrl.unit})` : ''}</FL>
+              {renderControl(ctrl)}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Step tool row ─────────────────────────────────────────────
 
 function StepToolRow({ tool, equipmentTree, onChange, onRemove }: {
   tool: StepTool; equipmentTree: TaxonomyNode[];
   onChange: (t: StepTool) => void; onRemove: () => void;
 }) {
-  const appliance = APPLIANCES.find(a => a.name.toLowerCase().includes(tool.name.toLowerCase()) || a.model.toLowerCase().includes(tool.name.toLowerCase()) || a.id === tool.applianceId);
+  // Match connected Panasonic by slug or id
+  const connectedAppliance = APPLIANCES.find(a =>
+    a.id === tool.applianceId ||
+    a.id === tool.equipmentId ||
+    (tool.name && a.model.toLowerCase() === tool.name.toLowerCase())
+  );
+
+  // Find equipment node from tree for capability_schema
+  const equipNode = equipmentTree.find(n =>
+    n.id === tool.equipmentId || n.slug === tool.equipmentId
+  );
+  const hasCapability = !connectedAppliance &&
+    (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
 
   const handleSelect = (n: TaxonomyNode) => {
-    const matchedAppliance = APPLIANCES.find(a => a.name.toLowerCase().includes(n.name.toLowerCase()) || a.model.toLowerCase().includes(n.name.toLowerCase()));
-    onChange({ ...tool, equipmentId: n.id, name: n.name, applianceId: matchedAppliance?.id, applianceModeId: matchedAppliance ? tool.applianceModeId : undefined, applianceSettings: matchedAppliance ? tool.applianceSettings : undefined });
+    const matchedAppliance = APPLIANCES.find(a =>
+      a.id === n.slug ||
+      a.model.toLowerCase().includes(n.name.toLowerCase()) ||
+      n.name.toLowerCase().includes(a.model.toLowerCase())
+    );
+    onChange({
+      ...tool,
+      equipmentId:      n.id,
+      name:             n.name,
+      applianceId:      matchedAppliance?.id,
+      applianceModeId:  undefined,
+      applianceSettings: {},
+    });
   };
 
   return (
     <div className="mb-2">
       <div className="flex items-center gap-1.5">
         <div className="flex-1">
-          <PickerBtn value={tool.name} placeholder="Tool / equipment…" nodes={equipmentTree} onSelect={handleSelect} />
+          <PickerBtn value={tool.name} placeholder="Tool / equipment…"
+            nodes={equipmentTree} onSelect={handleSelect} />
         </div>
-        <button onClick={onRemove} className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0"><Trash2 size={11} strokeWidth={1.5} /></button>
+        <button onClick={onRemove}
+          className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
+          <Trash2 size={11} strokeWidth={1.5} />
+        </button>
       </div>
-      {appliance && tool.name && <AppliancePanel tool={tool} onChange={onChange} />}
+      {connectedAppliance && tool.name && (
+        <AppliancePanel tool={tool} onChange={onChange} />
+      )}
+      {hasCapability && tool.name && (
+        <GenericCapabilityPanel
+          tool={tool}
+          schema={equipNode!.capability_schema!}
+          onChange={onChange}
+        />
+      )}
     </div>
   );
 }
@@ -788,21 +918,16 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   const removeTool = (i: number) => onChange({ ...step, stepTools: step.stepTools.filter((_, idx) => idx !== i) });
 
   const selectTask = (task: TaskResult) => {
-    // Auto-suggest tools based on task
     const suggestedTools: StepTool[] = [];
     if (task.suggested_tool_slugs?.length) {
       for (const slug of task.suggested_tool_slugs) {
-        // Find matching node in equipment tree by slug-like name match
-        const node = equipmentTree.find(n =>
-          n.name.toLowerCase().replace(/[^a-z0-9]/g, '-').includes(slug.replace(/-/g, '')) ||
-          slug.includes(n.name.toLowerCase().replace(/[^a-z0-9]/g, ''))
-        );
+        // Match by slug field directly
+        const node = equipmentTree.find(n => n.slug === slug);
         if (node) {
-          // Only add if not already present
           const alreadyAdded = step.stepTools.some(t => t.equipmentId === node.id);
           if (!alreadyAdded) {
             const matchedAppliance = APPLIANCES.find(a =>
-              a.name.toLowerCase().includes(node.name.toLowerCase()) ||
+              a.id === node.slug ||
               a.model.toLowerCase().includes(node.name.toLowerCase())
             );
             suggestedTools.push({
@@ -819,11 +944,13 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
       taskId:          task.id,
       taskName:        task.name,
       taskType:        task.task_type as 'human' | 'machine' | 'passive',
+      taskFamily:      task.family,
       showTemperature: task.show_temperature ?? false,
       durationLabel:   task.duration_label ?? undefined,
       instruction:     step.instruction || '',
       durationMinutes: step.durationMinutes ||
-        (task.typical_duration_min_seconds ? Math.round(task.typical_duration_min_seconds / 60) : 0),
+        (task.typical_duration_min_seconds
+          ? Math.round(task.typical_duration_min_seconds / 60) : 0),
       stepTools: [...step.stepTools, ...suggestedTools],
     });
   };
@@ -831,7 +958,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   const clearTask = () => onChange({
     ...step,
     taskId: undefined, taskName: undefined, taskType: undefined,
-    showTemperature: undefined, durationLabel: undefined,
+    taskFamily: undefined, showTemperature: undefined, durationLabel: undefined,
   });
 
   return (
@@ -875,8 +1002,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
           {hasTask && step.taskName && step.taskType && (
             <div style={{ marginBottom: 8 }}>
               <StepModeBadge
-                taskType={step.taskType}
                 taskName={step.taskName}
+                taskFamily={step.taskFamily}
                 onClear={clearTask}
               />
             </div>
@@ -894,10 +1021,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
           <textarea
             value={step.instruction}
             onChange={e => onChange({ ...step, instruction: e.target.value })}
-            placeholder={hasTask
-              ? `Recipe note for "${step.taskName}"… (optional)`
-              : 'Describe this step…'
-            }
+            placeholder={hasTask ? 'Note (optional)' : 'Describe this step…'}
             rows={hasTask ? 1 : 2}
             className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mt-2"
           />
@@ -1098,6 +1222,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
           .map(s => ({
             stepType:    s.taskType ?? 'human',
             taskId:      s.taskId,
+            taskFamily:  s.taskFamily,
             instruction: s.instruction,
             groupLabel:  groups.length > 1 ? (g.outputName || '') : '',
             durationMinutes:    s.durationMinutes,
