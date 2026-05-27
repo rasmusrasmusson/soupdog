@@ -114,7 +114,7 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
   const [selectedFamily, setFamily] = useState<string | null>(null);
   const [loading, setLoading]       = useState(false);
   const inputRef                    = useRef<HTMLInputElement>(null);
-  const debounceRef                 = useRef<NodeJS.Timeout>();
+  const debounceRef                 = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Load tree on mount
   useEffect(() => {
