@@ -1618,18 +1618,15 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
           <FL>Task</FL>
 
-          {/* When task selected: badge + note on same row */}
           {hasTask && step.taskName ? (
+            /* Task selected: badge + note on same row */
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ flexShrink: 0, paddingTop: 1 }}>
                 <StepModeBadge
                   taskName={step.taskName}
                   taskFamily={step.taskFamily}
                   onClear={clearTask}
-                  onEdit={() => {
-                    clearTask();
-                    // TaskPickerInline will re-open since selected becomes false
-                  }}
+                  onEdit={clearTask}
                 />
               </div>
               <textarea
@@ -1643,8 +1640,16 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               />
             </div>
           ) : (
+            /* No task: instruction first, then picker below */
             <>
-              {/* Task search — visible when no task selected */}
+              <textarea
+                ref={noteRef}
+                value={step.instruction}
+                onChange={e => onChange({ ...step, instruction: e.target.value })}
+                placeholder="Describe this step… or pick a task below"
+                rows={2}
+                className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mb-2"
+              />
               <TaskPickerInline
                 selected={false}
                 equipmentTree={equipmentTree}
@@ -1652,15 +1657,6 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
                 onFreeText={() => {
                   setTimeout(() => noteRef.current?.focus(), 50);
                 }}
-              />
-              {/* Free-text instruction when no task */}
-              <textarea
-                ref={noteRef}
-                value={step.instruction}
-                onChange={e => onChange({ ...step, instruction: e.target.value })}
-                placeholder="Describe this step…"
-                rows={2}
-                className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mt-2"
               />
             </>
           )}
