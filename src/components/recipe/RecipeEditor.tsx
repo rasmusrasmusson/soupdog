@@ -2120,28 +2120,29 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                     const from = group.outputQuantityUnit ?? 'g';
                     const to = e.target.value;
                     const val = group.outputQuantityValue ?? 0;
-                    // Convert within same dimension, recalc across dimensions
-                    let newVal = val;
-                    if (val > 0) {
+                    // Same-dimension conversions
+                    const MASS = ['g','kg'];
+                    const VOL  = ['ml','l'];
+                    const sameDim = (MASS.includes(from) && MASS.includes(to)) || (VOL.includes(from) && VOL.includes(to));
+                    if (sameDim && val > 0) {
+                      let newVal = val;
                       if (from === 'g'  && to === 'kg') newVal = Math.round(val / 1000 * 10000) / 10000;
                       else if (from === 'kg' && to === 'g')  newVal = Math.round(val * 1000);
                       else if (from === 'ml' && to === 'l')  newVal = Math.round(val / 1000 * 10000) / 10000;
                       else if (from === 'l'  && to === 'ml') newVal = Math.round(val * 1000);
-                      else {
-                        // Cross-dimension change (g→ml etc): recalculate in grams, then convert to target unit
-                        const recalcG = calculateGroupYield(group.steps, ingredientTree);
-                        if (recalcG > 0) {
-                          let converted = recalcG;
-                          if (to === 'kg') converted = Math.round(recalcG / 1000 * 10000) / 10000;
-                          else if (to === 'ml') converted = recalcG; // 1g ≈ 1ml for water-based
-                          else if (to === 'l')  converted = Math.round(recalcG / 1000 * 10000) / 10000;
-                          setYieldUserEdited(false);
-                          onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: converted });
-                          return;
-                        }
-                      }
+                      onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
+                    } else {
+                      // Cross-dimension (g→ml, g→l, kg→l etc): recalc from ingredients in grams, convert to target
+                      const recalcG = calculateGroupYield(group.steps, ingredientTree);
+                      const base = recalcG > 0 ? recalcG : val;
+                      let converted = base;
+                      if (to === 'kg') converted = Math.round(base / 1000 * 10000) / 10000;
+                      else if (to === 'l')  converted = Math.round(base / 1000 * 10000) / 10000;
+                      else if (to === 'ml') converted = base; // 1g ≈ 1ml
+                      else if (to === 'g')  converted = base;
+                      setYieldUserEdited(false);
+                      onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: converted });
                     }
-                    onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
                   }}
                   style={{
                     background: 'var(--surface)', border: '1px solid var(--border)',
