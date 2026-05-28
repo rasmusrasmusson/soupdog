@@ -1640,25 +1640,15 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               />
             </div>
           ) : (
-            /* No task: instruction first, then picker below */
-            <>
-              <textarea
-                ref={noteRef}
-                value={step.instruction}
-                onChange={e => onChange({ ...step, instruction: e.target.value })}
-                placeholder="Describe this step… or pick a task below"
-                rows={2}
-                className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mb-2"
-              />
-              <TaskPickerInline
-                selected={false}
-                equipmentTree={equipmentTree}
-                onSelect={selectTask}
-                onFreeText={() => {
-                  setTimeout(() => noteRef.current?.focus(), 50);
-                }}
-              />
-            </>
+            /* No task: just the picker */
+            <TaskPickerInline
+              selected={false}
+              equipmentTree={equipmentTree}
+              onSelect={selectTask}
+              onFreeText={() => {
+                setTimeout(() => noteRef.current?.focus(), 50);
+              }}
+            />
           )}
         </div>
 
