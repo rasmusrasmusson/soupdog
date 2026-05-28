@@ -2099,86 +2099,69 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
           {group.outputName.trim() && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
               <FL>Yield</FL>
-              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* 4 unit buttons — always computed from base grams value */}
+                {(['g','kg','ml','l'] as const).map(u => {
+                  const baseG = groupRef.current.outputQuantityValue ?? 0;
+                  const activeUnit = group.outputQuantityUnit ?? 'g';
+                  let display = baseG;
+                  if (u === 'kg' || u === 'l') display = Math.round(baseG / 1000 * 10000) / 10000;
+                  return (
+                    <button key={u}
+                      onClick={() => {
+                        const g = groupRef.current;
+                        const baseG2 = g.outputQuantityValue ?? 0;
+                        let val = baseG2;
+                        if (u === 'kg' || u === 'l') val = Math.round(baseG2 / 1000 * 10000) / 10000;
+                        onChange({ ...g, outputQuantityUnit: u, outputQuantityValue: val });
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 3,
+                        padding: '3px 8px',
+                        border: `1px solid ${u === (group.outputQuantityUnit ?? 'g') ? 'var(--accent)' : 'var(--border)'}`,
+                        background: u === (group.outputQuantityUnit ?? 'g') ? 'var(--accent)' : 'var(--surface)',
+                        color: u === (group.outputQuantityUnit ?? 'g') ? '#fff' : 'var(--muted)',
+                        fontSize: 10, fontFamily: 'var(--font-mono)', cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ color: u === (group.outputQuantityUnit ?? 'g') ? '#fff' : 'var(--fg)', fontWeight: 600 }}>
+                        {display ? display.toLocaleString('en-US') : (u === (group.outputQuantityUnit ?? 'g') ? 'auto' : '—')}
+                      </span>
+                      <span style={{ opacity: 0.75, marginLeft: 2 }}>{u}</span>
+                    </button>
+                  );
+                })}
+                {/* Manual override input */}
                 <input
                   type="text" inputMode="decimal"
                   value={group.outputQuantityValue ? group.outputQuantityValue.toLocaleString('en-US') : ''}
-                  placeholder="auto"
+                  placeholder="override"
                   onChange={e => {
                     const raw = e.target.value.replace(/,/g, '');
                     if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
                       setYieldUserEdited(true);
-                      onChange({ ...group, outputQuantityValue: parseFloat(raw) || 0 });
+                      onChange({ ...groupRef.current, outputQuantityValue: parseFloat(raw) || 0 });
                     }
                   }}
                   style={{
-                    width: 80, background: 'transparent',
-                    border: '1px solid var(--border)', padding: '4px 8px',
-                    fontSize: 11, textAlign: 'right', color: 'var(--fg)', outline: 'none',
+                    width: 70, background: 'transparent',
+                    border: '1px solid var(--border)', padding: '3px 6px',
+                    fontSize: 10, textAlign: 'right', color: 'var(--muted)', outline: 'none',
+                    fontFamily: 'var(--font-mono)',
                   }}
+                  title="Override yield value in grams"
                 />
-                <select
-                  value={group.outputQuantityUnit ?? 'g'}
-                  onChange={e => {
-                    const group = groupRef.current;
-                    const from = group.outputQuantityUnit ?? 'g';
-                    const to = e.target.value;
-                    const val = group.outputQuantityValue ?? 0;
-                    // Same-dimension conversions
-                    const MASS = ['g','kg'];
-                    const VOL  = ['ml','l'];
-                    const sameDim = (MASS.includes(from) && MASS.includes(to)) || (VOL.includes(from) && VOL.includes(to));
-                    if (sameDim && val > 0) {
-                      let newVal = val;
-                      if (from === 'g'  && to === 'kg') newVal = Math.round(val / 1000 * 10000) / 10000;
-                      else if (from === 'kg' && to === 'g')  newVal = Math.round(val * 1000);
-                      else if (from === 'ml' && to === 'l')  newVal = Math.round(val / 1000 * 10000) / 10000;
-                      else if (from === 'l'  && to === 'ml') newVal = Math.round(val * 1000);
-                      onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
-                    } else {
-                      // Cross-dimension (g→ml, g→l, kg→l etc): recalc from ingredients in grams, convert to target
-                      const recalcG = calculateGroupYield(group.steps, ingredientTree);
-                      const base = recalcG > 0 ? recalcG : val;
-                      let converted = base;
-                      if (to === 'kg') converted = Math.round(base / 1000 * 10000) / 10000;
-                      else if (to === 'l')  converted = Math.round(base / 1000 * 10000) / 10000;
-                      else if (to === 'ml') converted = base; // 1g ≈ 1ml
-                      else if (to === 'g')  converted = base;
-                      setYieldUserEdited(false);
-                      onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: converted });
-                    }
-                  }}
-                  style={{
-                    background: 'var(--surface)', border: '1px solid var(--border)',
-                    padding: '4px 4px', fontSize: 11, color: 'var(--fg)', outline: 'none', cursor: 'pointer',
-                  }}
-                >
-                  {['g','kg','ml','l'].map(u => (
-                    <option key={u}>{u}</option>
-                  ))}
-                </select>
-                {yieldUserEdited ? (
+                {yieldUserEdited && (
                   <button
                     onClick={() => {
-                      const calc = calculateGroupYield(group.steps, ingredientTree);
+                      const calc = calculateGroupYield(groupRef.current.steps, ingredientTree);
                       if (calc > 0) {
-                        onChange({ ...group, outputQuantityValue: calc, outputQuantityUnit: 'g' });
+                        onChange({ ...groupRef.current, outputQuantityValue: calc, outputQuantityUnit: 'g' });
                         setYieldUserEdited(false);
                       }
                     }}
-                    style={{
-                      fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)',
-                      background: 'none', border: '1px solid var(--accent)',
-                      padding: '2px 6px', cursor: 'pointer',
-                    }}
-                    title="Recalculate from ingredients"
-                  >
-                    ⟳ recalc
-                  </button>
-                ) : (
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
-                    auto · edit to override
-                  </span>
+                    style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', background: 'none', border: '1px solid var(--accent)', padding: '2px 6px', cursor: 'pointer' }}
+                  >⟳</button>
                 )}
               </div>
             </div>
