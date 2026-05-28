@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
 
     // ── Insert steps (with appliance_settings) + per-step ingredients ──
     const stepIngredientIds = new Set<string>();
+    let ingOrderIndex = 0;  // global counter — unique across all steps
 
     for (let i = 0; i < (data.steps ?? []).length; i++) {
       const step = data.steps[i];
@@ -169,7 +170,7 @@ export async function POST(req: NextRequest) {
           quantity_unit:  si.quantityUnit ?? 'g',
           prep_note:      si.prepNote?.trim() || null,
           optional:       false,
-          order_index:    j + 1,
+          order_index:    ++ingOrderIndex,
         });
       }
     }
@@ -197,7 +198,7 @@ export async function POST(req: NextRequest) {
         quantity_unit:  ing.quantityUnit ?? 'g',
         prep_note:      ing.prepNote?.trim() || null,
         optional:       ing.optional ?? false,
-        order_index:    1000 + i,
+        order_index:    ++ingOrderIndex,
       });
     }
 

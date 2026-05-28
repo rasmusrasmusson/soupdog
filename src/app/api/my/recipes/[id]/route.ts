@@ -187,6 +187,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   await db.from('recipe_canonicals').update({ current_version_id: version.id }).eq('id', canonical.id);
 
   const stepIngredientIds = new Set<string>();
+  let ingOrderIndex = 0;
 
   // Insert steps + per-step ingredients
   for (let i = 0; i < (data.steps ?? []).length; i++) {
@@ -259,7 +260,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         quantity_unit:  si.quantityUnit ?? 'g',
         prep_note:      si.prepNote?.trim() || null,
         optional:       false,
-        order_index:    j + 1,
+        order_index:    ++ingOrderIndex,
       });
     }
   }
@@ -286,7 +287,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       quantity_unit:  ing.quantityUnit ?? 'g',
       prep_note:      ing.prepNote?.trim() || null,
       optional:       ing.optional ?? false,
-      order_index:    1000 + i,
+      order_index:    ++ingOrderIndex,
     });
   }
 
