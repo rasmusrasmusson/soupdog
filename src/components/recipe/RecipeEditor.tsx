@@ -2270,8 +2270,6 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
       taskName:   restoredTaskName,
       taskType:   (s.taskType as 'human' | 'machine' | 'passive' | undefined) ?? undefined,
       taskFamily: s.taskFamily ?? undefined,
-      groupOutputQuantityValue: (s as any).groupOutputQuantityValue ?? undefined,
-      groupOutputQuantityUnit:  (s as any).groupOutputQuantityUnit  ?? undefined,
     });
   }
   const groups: Group[] = [];
