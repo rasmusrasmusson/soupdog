@@ -321,6 +321,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
   const [tree, setTree]           = useState<TaskTreeNode[]>([]);
   const [selectedFamily, setFam]  = useState<string | null>(null);
   const [loading, setLoading]     = useState(false);
+  const [savingTask, setSavingTask] = useState(false);
   const inputRef                  = useRef<HTMLInputElement>(null);
   const debounceRef               = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -470,9 +471,13 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               {query.length >= 2 && (
                 <button
                   onClick={async () => {
+                    if (savingTask) return;
+                    setSavingTask(true);
                     const task = await savePersonalTask(query);
+                    setSavingTask(false);
                     handleSelect(task);
                   }}
+                  disabled={savingTask}
                   style={{
                     width: '100%', textAlign: 'left', padding: '8px 12px',
                     background: 'none', border: 'none', cursor: 'pointer',
@@ -529,9 +534,13 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
           {isSearching && results.length > 0 && !results.some(t => t.name.toLowerCase() === query.toLowerCase()) && (
             <button
               onClick={async () => {
+                if (savingTask) return;
+                setSavingTask(true);
                 const task = await savePersonalTask(query);
+                setSavingTask(false);
                 handleSelect(task);
               }}
+              disabled={savingTask}
               style={{
                 width: '100%', textAlign: 'left', padding: '7px 12px',
                 background: 'none', border: 'none', cursor: 'pointer',
