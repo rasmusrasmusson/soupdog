@@ -334,6 +334,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 function RecipeView({ recipe }: { recipe: Recipe }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
+  const toolChecks = useChecklist(recipe.equipment?.length ?? 0);
   const [servings, setServings] = useState(recipe.servings);
   const [addedIngs, setAddedIngs] = useState<Record<string, boolean>>({});
   const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
@@ -477,10 +478,11 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
               <SectionHeader title="Equipment" />
               <div className="overflow-x-auto">
                 <table style={{ ...tbl, minWidth: 300 }}>
-                  <thead><tr style={thead}><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
+                  <thead><tr style={thead}><Th w={44} center>Have</Th><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
                   <tbody>
-                    {recipe.equipment.map(eq => (
-                      <tr key={eq.equipmentId} style={{ borderTop: B }}>
+                    {recipe.equipment.map((eq, i) => (
+                      <tr key={eq.equipmentId} style={{ borderTop: B, opacity: toolChecks.checked[i] ? 0.4 : 1, background: toolChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
+                        <td style={{ ...td, borderRight: B, textAlign: 'center' }}><Checkbox checked={toolChecks.checked[i]} onChange={() => toolChecks.toggle(i)} /></td>
                         <td style={{ ...td, borderRight: B, fontWeight: 500 }}>{eq.name}</td>
                         <td style={{ ...td, borderRight: B, textAlign: 'center', fontFamily: MONO, fontSize: 10, color: MUT }}>{eq.required ? '✓' : '—'}</td>
                         <td style={{ ...td, color: MUT }}>{eq.alternatives?.join(', ') ?? '—'}</td>
@@ -666,6 +668,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
         <PanelSection title="Progress">
           <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
+          <div className="mt-2"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
           <div className="mt-2"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
         </PanelSection>
         <PanelSection title="Servings">
@@ -692,6 +695,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       {/* Mobile sticky bar */}
       <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4">
         <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
+        <div className="flex-1 min-w-0"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
         <div className="flex-1 min-w-0"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
         <div className="flex items-center border border-[var(--border)] flex-shrink-0">
           <button onClick={() => setServings(s => Math.max(1, s-1))} className="w-7 h-7 font-mono text-[var(--muted)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">−</button>
@@ -761,9 +765,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           .eq('is_published', true)
           .single();
 
-        if (dbError) throw dbError;
-
-        if (data) {
+        if (!dbError && data) {
           const rv = data.recipe_versions;
           const hasNewData = rv && (
             (rv.version_ingredients?.length > 0) ||
@@ -774,7 +776,59 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           return;
         }
       } catch (err) {
-        console.error('[RecipePage]', err);
+        console.error('[RecipePage legacy]', err);
+      }
+
+      // Second attempt: query recipe_canonicals directly (recipes created via new editor)
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient() as any;
+
+        const { data: canonical, error: canonErr } = await supabase
+          .from('recipe_canonicals')
+          .select(`
+            id, slug, created_at, updated_at,
+            recipe_versions (
+              id, title, description, cuisine, tags, base_servings,
+              difficulty, total_time_seconds, active_time_seconds,
+              version_ingredients (
+                id, order_index, quantity_value, quantity_unit,
+                food_state, prep_note, optional, step_id,
+                ingredients!ingredient_id ( id, slug, name, category,
+                  nutrition_per_100g, density_g_per_ml, typical_unit_weight_g,
+                  retention_category_id )
+              ),
+              version_steps (
+                id, order_index, step_type, group_label, instruction,
+                duration_seconds, temperature_celsius, appliance_settings
+              ),
+              version_equipment (
+                id, required,
+                equipment ( id, slug, name )
+              )
+            )
+          `)
+          .eq('slug', slug)
+          .eq('is_published', true)
+          .order('created_at', { foreignTable: 'recipe_versions', ascending: false })
+          .limit(1, { foreignTable: 'recipe_versions' })
+          .single();
+
+        if (!canonErr && canonical) {
+          // Reshape to match mapNewSchemaRecipe expectations
+          const shaped = {
+            ...canonical,
+            version: 1,
+            recipe_versions: Array.isArray(canonical.recipe_versions)
+              ? canonical.recipe_versions[0]
+              : canonical.recipe_versions,
+          };
+          setRecipe(mapNewSchemaRecipe(shaped));
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.error('[RecipePage canonical]', err);
       }
 
       // Fallback: sample data

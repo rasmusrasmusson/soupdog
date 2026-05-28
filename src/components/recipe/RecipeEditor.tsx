@@ -380,22 +380,8 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
   const isSearching = query.length >= 2;
   const showResults = isSearching || selectedFamily !== null;
 
-  // Collapsed state — show "change step" link
-  if (selected && !open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        style={{
-          fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)',
-          background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-          display: 'flex', alignItems: 'center', gap: 4,
-        }}
-        className="hover:text-[var(--accent)]"
-      >
-        <Search size={9} /> Change step
-      </button>
-    );
-  }
+  // Collapsed — badge handles reopening, nothing to render here
+  if (selected && !open) return null;
 
   return (
     <div style={{
@@ -783,26 +769,41 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
 }
 
 // ── Step mode badge ───────────────────────────────────────────
-function StepModeBadge({ taskName, taskFamily, onClear }: {
-  taskName: string; taskFamily?: string; onClear: () => void;
+function StepModeBadge({ taskName, taskFamily, onClear, onEdit }: {
+  taskName: string; taskFamily?: string; onClear: () => void; onEdit: () => void;
 }) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      padding: '3px 8px 3px 6px',
+      display: 'inline-flex', alignItems: 'center', gap: 0,
       border: '1px solid var(--border)',
       background: 'var(--surface-hover)',
     }}>
-      <BookOpen size={9} style={{ color: 'var(--muted)' }} />
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>
-        {taskName}
-      </span>
-      {taskFamily && (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
-          · {FAMILY_LABELS[taskFamily] ?? taskFamily}
+      <button
+        onClick={onEdit}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '3px 8px 3px 6px',
+          background: 'none', border: 'none', cursor: 'pointer',
+        }}
+        className="hover:bg-[var(--accent-subtle)] transition-colors"
+        title="Change task"
+      >
+        <BookOpen size={9} style={{ color: 'var(--muted)' }} />
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>
+          {taskName}
         </span>
-      )}
-      <button onClick={onClear} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 1 }}>
+        {taskFamily && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+            · {FAMILY_LABELS[taskFamily] ?? taskFamily}
+          </span>
+        )}
+      </button>
+      <button
+        onClick={onClear}
+        style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px' }}
+        title="Remove task"
+        className="hover:bg-red-50 transition-colors"
+      >
         <X size={9} style={{ color: 'var(--muted)' }} />
       </button>
     </div>
@@ -1571,37 +1572,52 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
           <FL>Task</FL>
 
-          {/* Task badge — shown after selection */}
-          {hasTask && step.taskName && step.taskType && (
-            <div style={{ marginBottom: 8 }}>
-              <StepModeBadge
-                taskName={step.taskName}
-                taskFamily={step.taskFamily}
-                onClear={clearTask}
+          {/* When task selected: badge + note on same row */}
+          {hasTask && step.taskName ? (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <div style={{ flexShrink: 0, paddingTop: 1 }}>
+                <StepModeBadge
+                  taskName={step.taskName}
+                  taskFamily={step.taskFamily}
+                  onClear={clearTask}
+                  onEdit={() => {
+                    clearTask();
+                    // TaskPickerInline will re-open since selected becomes false
+                  }}
+                />
+              </div>
+              <textarea
+                ref={noteRef}
+                value={step.instruction}
+                onChange={e => onChange({ ...step, instruction: e.target.value })}
+                placeholder="Note (optional)"
+                rows={1}
+                className="flex-1 bg-transparent border border-[var(--border)] px-3 py-1.5 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-none"
+                style={{ minHeight: 30 }}
               />
             </div>
+          ) : (
+            <>
+              {/* Task search — visible when no task selected */}
+              <TaskPickerInline
+                selected={false}
+                equipmentTree={equipmentTree}
+                onSelect={selectTask}
+                onFreeText={() => {
+                  setTimeout(() => noteRef.current?.focus(), 50);
+                }}
+              />
+              {/* Free-text instruction when no task */}
+              <textarea
+                ref={noteRef}
+                value={step.instruction}
+                onChange={e => onChange({ ...step, instruction: e.target.value })}
+                placeholder="Describe this step…"
+                rows={2}
+                className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mt-2"
+              />
+            </>
           )}
-
-          {/* Task search — always visible when no task selected, collapsible after */}
-          <TaskPickerInline
-            selected={hasTask}
-            equipmentTree={equipmentTree}
-            onSelect={selectTask}
-            onFreeText={() => {
-              // Close picker and focus the note/instruction field
-              setTimeout(() => noteRef.current?.focus(), 50);
-            }}
-          />
-
-          {/* Recipe note — shown after task selected or as primary for custom */}
-          <textarea
-            ref={noteRef}
-            value={step.instruction}
-            onChange={e => onChange({ ...step, instruction: e.target.value })}
-            placeholder={hasTask ? 'Note (optional)' : 'Describe this step…'}
-            rows={hasTask ? 1 : 2}
-            className="w-full bg-transparent border border-[var(--border)] px-3 py-2 text-[12px] text-[var(--fg)] placeholder:text-[var(--muted)] outline-none focus:border-[var(--accent)] transition-colors resize-y mt-2"
-          />
         </div>
 
         {/* ── 3. TOOLS ────────────────────────────────────── */}
