@@ -272,7 +272,41 @@ function FL({ children }: { children: React.ReactNode }) {
   return <span className="font-mono text-[9px] uppercase tracking-wider text-[var(--muted)] block mb-1">{children}</span>;
 }
 
-// ── Task Picker Inline — always visible in step ───────────────
+// Module-level cache so custom tasks saved in one step are immediately
+// available in search results in all other steps within the same session.
+const _personalTaskCache: TaskResult[] = [];
+
+async function savePersonalTask(name: string): Promise<TaskResult> {
+  // Check cache first (avoid duplicate saves if user clicks twice)
+  const cached = _personalTaskCache.find(t => t.name.toLowerCase() === name.toLowerCase());
+  if (cached) return cached;
+
+  const fallback: TaskResult = {
+    id: `custom-${uid()}`,
+    slug: `custom-${name.toLowerCase().replace(/\s+/g, '-')}`,
+    name, family: 'custom', category: 'custom',
+    task_type: 'human', description: '', status: 'personal',
+  };
+
+  try {
+    const res = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, family: 'custom', category: 'custom', task_type: 'human' }),
+    });
+    const d = await res.json();
+    if (d.task?.id) {
+      const saved: TaskResult = { ...fallback, id: d.task.id, slug: d.task.slug ?? fallback.slug };
+      _personalTaskCache.push(saved);
+      return saved;
+    }
+  } catch {}
+
+  _personalTaskCache.push(fallback);
+  return fallback;
+}
+
+
 // Shows search + family tiles. Collapses to a "change" link after selection.
 
 function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
@@ -309,7 +343,15 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
     debounceRef.current = setTimeout(() => {
       fetch(`/api/tasks?q=${encodeURIComponent(query)}`)
         .then(r => r.json())
-        .then(d => { setResults(d.tasks ?? []); setLoading(false); })
+        .then(d => {
+          const dbTasks: TaskResult[] = d.tasks ?? [];
+          const dbIds = new Set(dbTasks.map((t: TaskResult) => t.id));
+          const cacheHits = _personalTaskCache.filter(
+            t => !dbIds.has(t.id) && t.name.toLowerCase().includes(query.toLowerCase())
+          );
+          setResults([...dbTasks, ...cacheHits]);
+          setLoading(false);
+        })
         .catch(() => setLoading(false));
     }, 250);
   }, [query]);
@@ -442,23 +484,8 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               {query.length >= 2 && (
                 <button
                   onClick={async () => {
-                    // Save to DB as personal task
-                    let taskId = `custom-${uid()}`;
-                    try {
-                      const res = await fetch('/api/tasks', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name: query, family: 'custom', category: 'custom', task_type: 'human' }),
-                      });
-                      const d = await res.json();
-                      if (d.task?.id) taskId = d.task.id;
-                    } catch {}
-                    handleSelect({
-                      id: taskId,
-                      slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
-                      name: query, family: 'custom', category: 'custom',
-                      task_type: 'human', description: '', status: 'personal',
-                    });
+                    const task = await savePersonalTask(query);
+                    handleSelect(task);
                   }}
                   style={{
                     width: '100%', textAlign: 'left', padding: '8px 12px',
@@ -516,22 +543,8 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
           {isSearching && results.length > 0 && !results.some(t => t.name.toLowerCase() === query.toLowerCase()) && (
             <button
               onClick={async () => {
-                let taskId = `custom-${uid()}`;
-                try {
-                  const res = await fetch('/api/tasks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: query, family: 'custom', category: 'custom', task_type: 'human' }),
-                  });
-                  const d = await res.json();
-                  if (d.task?.id) taskId = d.task.id;
-                } catch {}
-                handleSelect({
-                  id: taskId,
-                  slug: `custom-${query.toLowerCase().replace(/\s+/g,'-')}`,
-                  name: query, family: 'custom', category: 'custom',
-                  task_type: 'human', description: '', status: 'personal',
-                });
+                const task = await savePersonalTask(query);
+                handleSelect(task);
               }}
               style={{
                 width: '100%', textAlign: 'left', padding: '7px 12px',
@@ -589,7 +602,15 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
     debounceRef.current = setTimeout(() => {
       fetch(`/api/tasks?q=${encodeURIComponent(query)}`)
         .then(r => r.json())
-        .then(d => { setResults(d.tasks ?? []); setLoading(false); })
+        .then(d => {
+          const dbTasks: TaskResult[] = d.tasks ?? [];
+          const dbIds = new Set(dbTasks.map((t: TaskResult) => t.id));
+          const cacheHits = _personalTaskCache.filter(
+            t => !dbIds.has(t.id) && t.name.toLowerCase().includes(query.toLowerCase())
+          );
+          setResults([...dbTasks, ...cacheHits]);
+          setLoading(false);
+        })
         .catch(() => setLoading(false));
     }, 250);
   }, [query]);
@@ -1539,9 +1560,11 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
               onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
           ))}
+          {step.stepIngredients.length === 0 && (
           <button onClick={addIng} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
             <Leaf size={11} /> Add ingredient
           </button>
+          )}
         </div>
 
         {/* ── 2. STEP / TASK ──────────────────────────────── */}
