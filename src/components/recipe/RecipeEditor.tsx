@@ -1118,8 +1118,13 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
           </div>
         )}
       </div>
-      <input type="text" inputMode="decimal" value={row.quantityValue === 0 ? '' : String(row.quantityValue)} placeholder="0"
-        onChange={e => { const v = e.target.value; if (v === '' || v === '.' || /^\d*\.?\d*$/.test(v)) onChange({ ...row, quantityValue: parseFloat(v) || 0 }); }}
+      <input type="text" inputMode="decimal"
+        defaultValue={row.quantityValue === 0 ? '' : String(row.quantityValue)}
+        key={row.id + '-qty'}
+        placeholder="0"
+        onFocus={e => { if (e.target.value === '0') e.target.value = ''; }}
+        onChange={e => { const v = e.target.value; if (v === '' || v === '.' || /^\d*\.?\d*$/.test(v)) { /* allow while typing */ } else e.target.value = e.target.value.slice(0,-1); }}
+        onBlur={e => { const v = parseFloat(e.target.value); onChange({ ...row, quantityValue: isNaN(v) ? 0 : v }); e.target.value = isNaN(v) || v === 0 ? '' : String(v); }}
         className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
       <select value={row.quantityUnit} onChange={e => onChange({ ...row, quantityUnit: e.target.value })}
         className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
@@ -1357,7 +1362,10 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
     n.slug === tool.equipmentId ||
     (tool.name && n.name.toLowerCase() === tool.name.toLowerCase())
   );
+  const COOKING_FAMILIES = new Set(['heat_dry','heat_wet','heat_machine','passive']);
+  const taskNeedsCapability = !taskFamily || COOKING_FAMILIES.has(taskFamily);
   const hasCapability = !connectedAppliance &&
+    taskNeedsCapability &&
     (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
 
   const handleSelectInstance = (inst: ToolInstance) => {
@@ -1662,6 +1670,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               groupInstances={groupInstances}
               onAddInstance={onAddInstance}
               suggestedSlugs={step.taskId ? (step as any).suggestedToolSlugs : undefined}
+              taskFamily={step.taskFamily}
               onChange={v => updateTool(i, v)} onRemove={() => removeTool(i)} />
           ))}
           {step.stepTools.length >= 2 && (
