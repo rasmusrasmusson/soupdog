@@ -1335,12 +1335,13 @@ function ToolInstancePicker({ instances, equipmentTree, currentName, onSelectIns
 
 // ── Step tool row ─────────────────────────────────────────────
 
-function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onChange, onRemove, suggestedSlugs }: {
+function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onChange, onRemove, suggestedSlugs, taskFamily }: {
   tool: StepTool; equipmentTree: TaxonomyNode[];
   groupInstances:  ToolInstance[];
   onAddInstance:   (inst: ToolInstance) => void;
   onChange: (t: StepTool) => void; onRemove: () => void;
   suggestedSlugs?: string[];
+  taskFamily?: string;
 }) {
   const [open, setOpen] = useState(!tool.name);
 
