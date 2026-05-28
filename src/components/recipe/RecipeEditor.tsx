@@ -4,8 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          X, GripVertical, Zap, Search, BookOpen, PenLine,
-         Scissors, ArrowRightLeft, Flame, Waves, Cpu, Blend, Clock4,
-         Ruler, Star, Wrench, Leaf } from 'lucide-react';
+         UtensilsCrossed, Pipette, Flame, Droplets, Microwave,
+         Soup, Hourglass, Scale, ChefHat, Leaf, Wrench } from 'lucide-react';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
@@ -196,15 +196,15 @@ const FAMILY_LABELS: Record<string, string> = {
 };
 
 const FAMILY_ICONS: Record<string, React.ElementType> = {
-  cut:          Scissors,
-  move:         ArrowRightLeft,
-  heat_dry:     Flame,
-  heat_wet:     Waves,
-  heat_machine: Cpu,
-  mix:          Blend,
-  passive:      Clock4,
-  prepare:      Ruler,
-  finish:       Star,
+  cut:          UtensilsCrossed, // knife work — chop, slice, dice, mince, peel
+  move:         Pipette,         // pour, transfer, strain, drain
+  heat_dry:     Flame,           // roast, sear, fry, grill, toast
+  heat_wet:     Soup,            // boil, simmer, steam, poach, blanch
+  heat_machine: Microwave,       // oven, microwave, sous vide, appliance
+  mix:          Droplets,        // stir, whisk, fold, knead, emulsify
+  passive:      Hourglass,       // rest, marinate, ferment, proof, chill
+  prepare:      Scale,           // measure, weigh, season, wash, preheat
+  finish:       ChefHat,         // plate, garnish, serve, dress
 };
 
 const FAMILY_ORDER = ['cut','move','heat_dry','heat_wet','heat_machine','mix','passive','prepare','finish'];
