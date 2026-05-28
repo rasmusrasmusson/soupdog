@@ -2124,7 +2124,26 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
   const [totalTimeMinutes, setTotalTime]   = useState(initial?.totalTimeMinutes ?? 0);
   const [activeTimeMinutes,setActiveTime]  = useState(initial?.activeTimeMinutes ?? 0);
   const [groups,           setGroups]      = useState<Group[]>(() => initialToGroups(initial?.title ?? '', initial));
-  const [ingredients,      setIngredients] = useState<IngredientRow[]>(initial?.ingredients ?? []);
+  // Separate manual ingredients (user-added outside steps) from auto-aggregated
+  const [manualIngredients, setManualIngredients] = useState<IngredientRow[]>(() => {
+    // On init, any initial ingredients that aren't in steps are manual
+    const stepKeys = new Set(
+      (initial?.steps ?? []).flatMap((s: any) =>
+        (s.stepIngredients ?? []).map((si: any) => si.ingredientId || si.name?.toLowerCase().trim())
+      ).filter(Boolean)
+    );
+    return (initial?.ingredients ?? []).filter((r: any) =>
+      !stepKeys.has(r.ingredientId || r.name?.toLowerCase().trim())
+    );
+  });
+
+  // Derive the full ingredient list from groups + manual entries
+  const aggregatedIngredients = aggregateIngredients(groups);
+  const aggKeys = new Set(aggregatedIngredients.map(r => r.ingredientId || r.name.toLowerCase().trim()));
+  const ingredients = [
+    ...aggregatedIngredients,
+    ...manualIngredients.filter(r => !aggKeys.has(r.ingredientId || r.name.toLowerCase().trim())),
+  ];
   const [ingredientTree,   setIngTree]     = useState<TaxonomyNode[]>([]);
   const [equipmentTree,    setEqTree]      = useState<TaxonomyNode[]>([]);
   const [error,            setError]       = useState('');
@@ -2134,29 +2153,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     fetch('/api/equipment/tree').then(r => r.ok ? r.json() : []).then(setEqTree).catch(() => {});
   }, []);
 
-  useEffect(() => {
-    setIngredients(prev => {
-      const agg    = aggregateIngredients(groups);
-      const aggKeys = new Set(agg.map(r => r.ingredientId || r.name.toLowerCase().trim()));
-
-      // Keep only manual entries (ones the user added manually, not auto-aggregated)
-      // An entry is "manual" if it has no ingredientId AND wasn't previously aggregated
-      // We detect previously-aggregated rows by checking if all current groups still have them
-      const allStepIngKeys = new Set(
-        groups.flatMap(g => g.steps.flatMap(s =>
-          s.stepIngredients.map(si => si.ingredientId || si.name.toLowerCase().trim())
-        ))
-      );
-
-      const manual = prev.filter(r => {
-        const key = r.ingredientId || r.name.toLowerCase().trim();
-        // Keep if: not in new agg AND not referenced in any step (truly manual)
-        return !aggKeys.has(key) && !allStepIngKeys.has(key);
-      });
-
-      return [...agg, ...manual];
-    });
-  }, [groups]);
+  // (ingredient list is now derived directly from groups — no useEffect needed)
 
   const handleSubmit = async () => {
     setError('');
@@ -2203,9 +2200,27 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     if (swap < 0 || swap >= next.length) return prev;
     [next[i], next[swap]] = [next[swap], next[i]]; return next;
   });
-  const updateIng    = (i: number, v: IngredientRow) => setIngredients(prev => prev.map((r, idx) => idx === i ? v : r));
-  const removeIng    = (i: number) => setIngredients(prev => prev.filter((_, idx) => idx !== i));
-  const addManualIng = () => setIngredients(prev => [...prev, { id: uid(), ingredientId: '', name: '', quantityValue: 0, quantityUnit: 'g', prepNote: '', optional: false }]);
+  const updateIng    = (i: number, v: IngredientRow) => {
+    // If it's in the aggregated list, it can't be edited here (it's derived)
+    // If it's manual, update it
+    const aggCount = aggregatedIngredients.length;
+    if (i >= aggCount) {
+      const manualIdx = i - aggCount;
+      setManualIngredients(prev => prev.map((r, idx) => idx === manualIdx ? v : r));
+    }
+    // Aggregated rows are edited by changing the step ingredient directly
+  };
+  const removeIng    = (i: number) => {
+    const aggCount = aggregatedIngredients.length;
+    if (i >= aggCount) {
+      const manualIdx = i - aggCount;
+      setManualIngredients(prev => prev.filter((_, idx) => idx !== manualIdx));
+    }
+  };
+  const addManualIng = () => setManualIngredients(prev => [
+    ...prev,
+    { id: uid(), ingredientId: '', name: '', quantityValue: 0, quantityUnit: 'g', prepNote: '', optional: false }
+  ]);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10">
