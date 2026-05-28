@@ -2255,15 +2255,37 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
   for (const s of initial.steps) {
     const label = s.groupLabel || '__default__';
     if (!gmap.has(label)) gmap.set(label, []);
+    // taskName: use saved value, or fall back to instruction for old saves
+    const restoredTaskName = s.taskName?.trim() || (s.taskId && s.instruction?.trim() ? s.instruction.trim() : undefined);
+    const restoredInstruction = s.taskId && s.instruction === s.taskName ? '' : (s.instruction || '');
     gmap.get(label)!.push({
-      id: s.id || uid(), instruction: s.instruction || '',
+      id: s.id || uid(),
+      instruction: restoredInstruction,
       durationMinutes: s.durationMinutes || 0, temperatureCelsius: s.temperatureCelsius || 0,
       stepIngredients: (s.stepIngredients || []).map((si: any) => ({ ...si, id: si.id || uid() })),
       stepTools: (s.stepTools || []).map((st: any) => ({ ...st, id: st.id || uid() })),
+      taskId:     s.taskId     ?? undefined,
+      taskName:   restoredTaskName,
+      taskType:   (s.taskType as 'human' | 'machine' | 'passive' | undefined) ?? undefined,
+      taskFamily: s.taskFamily ?? undefined,
+      groupOutputQuantityValue: (s as any).groupOutputQuantityValue ?? undefined,
+      groupOutputQuantityUnit:  (s as any).groupOutputQuantityUnit  ?? undefined,
     });
   }
   const groups: Group[] = [];
-  gmap.forEach((steps, label) => groups.push({ id: uid(), outputName: label === '__default__' ? '' : label, outputIngId: '', toolInstances: [], steps, collapsed: false }));
+  gmap.forEach((steps, label) => {
+    const firstStep = steps[0] as any;
+    groups.push({
+      id: uid(),
+      outputName: label === '__default__' ? '' : label,
+      outputIngId: '',
+      toolInstances: [],
+      steps,
+      collapsed: false,
+      outputQuantityValue: firstStep?.groupOutputQuantityValue ?? undefined,
+      outputQuantityUnit:  firstStep?.groupOutputQuantityUnit  ?? undefined,
+    });
+  });
   return groups.length > 0 ? groups : [emptyGroup(title)];
 }
 
