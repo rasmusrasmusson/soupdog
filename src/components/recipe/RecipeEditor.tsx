@@ -246,26 +246,9 @@ function generateInstanceLabel(
   equipmentName: string,
   existing: ToolInstance[]
 ): string {
-  const SHORT_LABELS: Record<string, string> = {
-    'stock pot': 'Pot', 'saucepan': 'Pan', 'frying pan': 'Pan',
-    'saute pan': 'Pan', 'cast iron pan': 'Pan', 'wok': 'Wok',
-    'grill pan': 'Grill pan', 'roasting tin': 'Tin',
-    "chef's knife": 'Knife', 'santoku knife': 'Knife',
-    'paring knife': 'Knife', 'boning knife': 'Knife',
-    'blender': 'Blender', 'immersion blender': 'Blender',
-    'stand mixer': 'Mixer', 'food processor': 'Processor',
-    'conventional oven': 'Oven', 'convection oven': 'Oven',
-    'steam oven': 'Oven', 'combi steam oven': 'Oven',
-    'microwave': 'Microwave', 'sous vide circulator': 'Sous vide',
-    'chopping board': 'Board', 'mixing bowls': 'Bowl',
-    'whisk': 'Whisk', 'spatula': 'Spatula', 'colander': 'Colander',
-    'kitchen scale': 'Scale', 'probe thermometer': 'Thermometer',
-  };
-  const base  = SHORT_LABELS[equipmentName.toLowerCase()] ?? equipmentName;
-  const count = existing.filter(t =>
-    (SHORT_LABELS[t.name.toLowerCase()] ?? t.name) === base
-  ).length;
-  // Only add #N if there's more than one, or if this is already #2+
+  // Use the actual equipment name (capitalised), e.g. "Stock pot #1" not "Pot #1"
+  const base = equipmentName.charAt(0).toUpperCase() + equipmentName.slice(1);
+  const count = existing.filter(t => t.name.toLowerCase() === equipmentName.toLowerCase()).length;
   return count === 0 ? `${base} #1` : `${base} #${count + 1}`;
 }
 
@@ -1541,6 +1524,24 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   const updateTool = (i: number, v: StepTool) => onChange({ ...step, stepTools: step.stepTools.map((r, idx) => idx === i ? v : r) });
   const removeTool = (i: number) => onChange({ ...step, stepTools: step.stepTools.filter((_, idx) => idx !== i) });
 
+  // Tool equivalence groups — if the task suggests one, any in the group counts
+  const TOOL_EQUIV_GROUPS = [
+    ['stock pot','saucepan','frying pan','saute pan','wok','cast iron pan','grill pan','dutch oven'],
+    ["chef's knife",'santoku knife','paring knife','boning knife','bread knife'],
+    ['conventional oven','convection oven','steam oven','combi steam oven'],
+    ['blender','immersion blender','food processor'],
+  ];
+  const findCompatibleInstance = (toolName: string): ToolInstance | undefined => {
+    const nameLower = toolName.toLowerCase();
+    // Exact match first
+    const exact = groupInstances.find(i => i.name.toLowerCase() === nameLower);
+    if (exact) return exact;
+    // Equivalent group match — find which group this tool belongs to
+    const group = TOOL_EQUIV_GROUPS.find(g => g.includes(nameLower));
+    if (group) return groupInstances.find(i => group.includes(i.name.toLowerCase()));
+    return undefined;
+  };
+
   const selectTask = (task: TaskResult) => {
     const suggestedTools: StepTool[] = [];
     if (task.suggested_tool_slugs?.length) {
@@ -1552,8 +1553,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             const matchedAppliance = APPLIANCES.find(a =>
               a.id === node.slug || a.model.toLowerCase().includes(node.name.toLowerCase())
             );
-            // Check if instance already exists in group
-            const existingInst = groupInstances.find(i => i.name === node.name);
+            // Prefer existing compatible instance over creating a new one
+            const existingInst = findCompatibleInstance(node.name);
             let instanceId: string;
             if (existingInst) {
               instanceId = existingInst.instanceId;
@@ -1569,8 +1570,12 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               onAddInstance(newInst);
               instanceId = newInst.instanceId;
             }
+            // Use the existing instance's equipmentId/name if we matched a compatible one
+            const useInst = existingInst ?? null;
             suggestedTools.push({
-              id: uid(), instanceId, equipmentId: node.id, name: node.name,
+              id: uid(), instanceId,
+              equipmentId: useInst ? useInst.equipmentId : node.id,
+              name:        useInst ? useInst.name : node.name,
               applianceId: matchedAppliance?.id,
             });
           }
