@@ -319,6 +319,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
   const [query, setQuery]         = useState('');
   const [results, setResults]     = useState<TaskResult[]>([]);
   const [tree, setTree]           = useState<TaskTreeNode[]>([]);
+  const [personalTasks, setPersonalTasks] = useState<TaskResult[]>([]);
   const [selectedFamily, setFam]  = useState<string | null>(null);
   const [loading, setLoading]     = useState(false);
   const [savingTask, setSavingTask] = useState(false);
@@ -328,7 +329,15 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
   useEffect(() => {
     fetch('/api/tasks')
       .then(r => r.json())
-      .then(d => setTree(d.tree ?? []))
+      .then(d => {
+        setTree(d.tree ?? []);
+        // Also load personal tasks so they appear without needing to search
+        const personal = (d.tasks ?? []).filter((t: TaskResult) => t.status === 'personal');
+        // Merge with in-session cache
+        const allIds = new Set(personal.map((t: TaskResult) => t.id));
+        const cacheOnly = _personalTaskCache.filter(t => !allIds.has(t.id));
+        setPersonalTasks([...personal, ...cacheOnly]);
+      })
       .catch(() => {});
   }, []);
 
@@ -367,6 +376,10 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
   }, [selectedFamily, query]);
 
   const handleSelect = (task: TaskResult) => {
+    // If this is a personal task not yet in the list, add it
+    if (task.status === 'personal') {
+      setPersonalTasks(prev => prev.some(t => t.id === task.id) ? prev : [...prev, task]);
+    }
     onSelect(task);
     setOpen(false);
     setQuery('');
@@ -414,6 +427,30 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
           </button>
         )}
       </div>
+
+      {/* My tasks — personal tasks shown above family tiles */}
+      {!isSearching && !selectedFamily && personalTasks.length > 0 && (
+        <div style={{ borderBottom: '1px solid var(--border)' }}>
+          <div style={{ padding: '5px 10px 3px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--muted)' }}>
+            My tasks
+          </div>
+          {personalTasks.map(task => (
+            <button key={task.id}
+              onClick={() => handleSelect(task)}
+              style={{
+                width: '100%', textAlign: 'left', padding: '5px 10px',
+                background: 'none', border: 'none', cursor: 'pointer',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}
+              className="hover:bg-[var(--accent-subtle)]"
+            >
+              <span style={{ fontSize: 11, color: 'var(--fg)', flex: 1 }}>{task.name}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', border: '1px solid var(--accent)', padding: '1px 5px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>mine</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Family tiles */}
       {!isSearching && !selectedFamily && (
