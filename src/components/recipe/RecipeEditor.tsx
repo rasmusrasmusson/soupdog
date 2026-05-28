@@ -1656,7 +1656,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
           <FL>Task</FL>
 
-          {hasTask && step.taskName ? (
+          {hasTask && step.taskName?.trim() ? (
             /* Task selected: badge + note on same row */
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ flexShrink: 0, paddingTop: 1 }}>

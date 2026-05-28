@@ -405,9 +405,15 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   }, [recipe.ingredients]);
 
   // Top-level ingredients (no step link) for the Ingredients section
-  const topIngredients = recipe.ingredients.filter(i => !i.stepId);
-  // Show the top-level list only if it has content; otherwise show all ingredients
-  const displayIngredients = topIngredients.length > 0 ? topIngredients : recipe.ingredients;
+  // Show all ingredients in the top list (deduplicated by ingredientId)
+  // Step-linked ingredients are the primary source; top-level ones supplement
+  const seenIds = new Set<string>();
+  const displayIngredients = recipe.ingredients.filter(ing => {
+    const key = ing.ingredientId || ing.name;
+    if (seenIds.has(key)) return false;
+    seenIds.add(key);
+    return true;
+  });
 
   const groups: { label: string; steps: (RecipeStep & { globalIndex: number })[] }[] = [];
   recipe.steps.forEach((step, i) => {
