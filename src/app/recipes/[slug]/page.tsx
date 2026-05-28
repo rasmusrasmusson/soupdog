@@ -784,11 +784,19 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
         const { createClient } = await import('@/lib/supabase/client');
         const supabase = createClient() as any;
 
+        // Step 1: get canonical + current_version_id
         const { data: canonical, error: canonErr } = await supabase
           .from('recipe_canonicals')
-          .select(`
-            id, slug, created_at, updated_at,
-            recipe_versions (
+          .select('id, slug, created_at, updated_at, current_version_id')
+          .eq('slug', slug)
+          .eq('is_published', true)
+          .single();
+
+        if (!canonErr && canonical?.current_version_id) {
+          // Step 2: fetch that specific version with all relations
+          const { data: version, error: verErr } = await supabase
+            .from('recipe_versions')
+            .select(`
               id, title, description, cuisine, tags, base_servings,
               difficulty, total_time_seconds, active_time_seconds,
               version_ingredients (
@@ -806,26 +814,20 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
                 id, required,
                 equipment ( id, slug, name )
               )
-            )
-          `)
-          .eq('slug', slug)
-          .eq('is_published', true)
-          .order('created_at', { foreignTable: 'recipe_versions', ascending: false })
-          .limit(1, { foreignTable: 'recipe_versions' })
-          .single();
+            `)
+            .eq('id', canonical.current_version_id)
+            .single();
 
-        if (!canonErr && canonical) {
-          // Reshape to match mapNewSchemaRecipe expectations
-          const shaped = {
-            ...canonical,
-            version: 1,
-            recipe_versions: Array.isArray(canonical.recipe_versions)
-              ? canonical.recipe_versions[0]
-              : canonical.recipe_versions,
-          };
-          setRecipe(mapNewSchemaRecipe(shaped));
-          setLoading(false);
-          return;
+          if (!verErr && version) {
+            const shaped = {
+              ...canonical,
+              version: 1,
+              recipe_versions: version,
+            };
+            setRecipe(mapNewSchemaRecipe(shaped));
+            setLoading(false);
+            return;
+          }
         }
       } catch (err) {
         console.error('[RecipePage canonical]', err);

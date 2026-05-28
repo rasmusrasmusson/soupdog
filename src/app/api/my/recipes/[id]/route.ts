@@ -181,7 +181,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Insert steps + per-step ingredients
   for (let i = 0; i < (data.steps ?? []).length; i++) {
     const step = data.steps[i];
-    if (!step.instruction?.trim()) continue;
+    const hasStepContent = step.instruction?.trim() || step.taskId || (step.stepIngredients ?? []).some((si: any) => si.name?.trim() || si.ingredientId);
+    if (!hasStepContent) continue;
 
     const connectedTool = (step.stepTools ?? []).find(
       (t: any) => t.applianceId && t.applianceModeId
@@ -200,7 +201,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         version_id:          version.id,
         order_index:         i + 1,
         step_type:           step.stepType ?? 'human',
-        instruction:         step.instruction.trim(),
+        instruction:         step.instruction?.trim() || step.taskName || '',
         group_label:         step.groupLabel?.trim() || null,
         duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
         temperature_celsius: step.temperatureCelsius || null,

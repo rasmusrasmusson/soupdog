@@ -98,7 +98,9 @@ export async function POST(req: NextRequest) {
 
     for (let i = 0; i < (data.steps ?? []).length; i++) {
       const step = data.steps[i];
-      if (!step.instruction?.trim()) continue;
+      // Skip steps with no content at all (no instruction, no task, no ingredients)
+      const hasStepContent = step.instruction?.trim() || step.taskId || (step.stepIngredients ?? []).some((si: any) => si.name?.trim() || si.ingredientId);
+      if (!hasStepContent) continue;
 
       // Build appliance_settings JSONB if a connected appliance is configured on any tool
       const connectedTool = (step.stepTools ?? []).find(
@@ -118,7 +120,7 @@ export async function POST(req: NextRequest) {
           version_id:          version.id,
           order_index:         i + 1,
           step_type:           step.stepType ?? 'human',
-          instruction:         step.instruction.trim(),
+          instruction:         step.instruction?.trim() || step.taskName || '',
           group_label:         step.groupLabel?.trim() || null,
           duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
           temperature_celsius: step.temperatureCelsius || null,
