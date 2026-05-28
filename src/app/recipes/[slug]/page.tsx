@@ -417,7 +417,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
   const groups: { label: string; steps: (RecipeStep & { globalIndex: number })[] }[] = [];
   recipe.steps.forEach((step, i) => {
-    const label = step.group ?? 'General';
+    const label = step.group?.trim() || '';
     let g = groups.find(g => g.label === label);
     if (!g) { g = { label, steps: [] }; groups.push(g); }
     g.steps.push({ ...step, globalIndex: i });
@@ -562,14 +562,16 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
               {groups.map((group, gi) => (
                 <React.Fragment key={group.label}>
-                  <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>{group.label}</span>
-                    {timing.groupSeconds[group.label] > 0 && (
-                      <span style={{ fontWeight: 400, color: MUT }}>
-                        {formatDuration(timing.groupSeconds[group.label])}
-                      </span>
-                    )}
-                  </div>
+                  {(group.label || groups.length > 1) && (
+                    <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{group.label || `Group ${gi + 1}`}</span>
+                      {timing.groupSeconds[group.label] > 0 && (
+                        <span style={{ fontWeight: 400, color: MUT }}>
+                          {formatDuration(timing.groupSeconds[group.label])}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {group.steps.map(step => {
                     const gIdx = step.globalIndex;
                     const done = stepChecks.checked[gIdx];
@@ -631,10 +633,11 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                 {groups.map((group, gi) => (
                   <React.Fragment key={group.label}>
                     <tbody>
+                      {(group.label || groups.length > 1) && (
                       <tr>
                         <td colSpan={7} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
                           <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{group.label}</span>
+                            <span>{group.label || `Group ${gi + 1}`}</span>
                             {timing.groupSeconds[group.label] > 0 && (
                               <span style={{ fontWeight: 400, color: MUT, textTransform: 'none', letterSpacing: 0 }}>
                                 {formatDuration(timing.groupSeconds[group.label])}
@@ -643,6 +646,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                           </span>
                         </td>
                       </tr>
+                    )}
                       {group.steps.map(step => {
                         const gIdx = step.globalIndex;
                         const done = stepChecks.checked[gIdx];

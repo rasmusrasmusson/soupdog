@@ -2315,7 +2315,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
             taskName:    s.taskName,
             taskFamily:  s.taskFamily,
             instruction: s.instruction,
-            groupLabel:  groups.length > 1 ? (g.outputName || '') : '',
+            groupLabel:  g.outputName?.trim() || '',
             groupOutputQuantityValue: g.outputQuantityValue,
             groupOutputQuantityUnit:  g.outputQuantityUnit,
             durationMinutes:    s.durationMinutes,
@@ -2499,18 +2499,19 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
         </button>
       </section>
 
-      {/* Save */}
-      <section className="border-t border-[var(--border)] pt-6">
-        {error && <div className="mb-4 px-4 py-3 border border-red-300 text-red-600 text-[12px] font-mono bg-red-50">{error}</div>}
-        <div className="flex items-center gap-4">
-          <button onClick={handleSubmit} disabled={saving}
-            className="flex items-center gap-2 bg-[var(--accent)] text-white px-6 py-2.5 text-[12px] font-mono hover:opacity-90 disabled:opacity-60 transition-opacity tracking-wide">
-            {saving && <Loader2 size={13} className="animate-spin" />}
-            {saving ? 'Saving…' : 'Save recipe'}
-          </button>
-          <span className="text-[11px] text-[var(--muted)] font-mono">Saved as draft — publish from My Recipes</span>
-        </div>
-      </section>
+      {/* Save — spacer so content doesn't hide behind sticky bar */}
+      <div className="h-16" />
+
+      {/* Sticky save bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--border)] bg-[var(--surface)] px-4 md:px-8 py-3 flex items-center gap-4">
+        {error && <span className="text-[11px] font-mono text-red-600 flex-1 truncate">{error}</span>}
+        {!error && <span className="text-[11px] text-[var(--muted)] font-mono flex-1">Saved as draft — publish from My Recipes</span>}
+        <button onClick={handleSubmit} disabled={saving}
+          className="flex items-center gap-2 bg-[var(--accent)] text-white px-6 py-2.5 text-[12px] font-mono hover:opacity-90 disabled:opacity-60 transition-opacity tracking-wide flex-shrink-0">
+          {saving && <Loader2 size={13} className="animate-spin" />}
+          {saving ? 'Saving…' : 'Save recipe'}
+        </button>
+      </div>
     </div>
   );
 }
