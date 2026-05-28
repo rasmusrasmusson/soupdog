@@ -1371,8 +1371,24 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
     n.slug === tool.equipmentId ||
     (tool.name && n.name.toLowerCase() === tool.name.toLowerCase())
   );
-  const COOKING_FAMILIES = new Set(['heat_dry','heat_wet','heat_machine','passive']);
-  const taskNeedsCapability = !taskFamily || COOKING_FAMILIES.has(taskFamily);
+  // Map tool name keywords → task families that should show its controls
+  // e.g. a stock pot only shows heat/time for cooking tasks, not for "add to pot"
+  const TOOL_TASK_FAMILIES: { keywords: string[]; families: string[] }[] = [
+    { keywords: ['stock pot','saucepan','frying pan','saute pan','wok','cast iron','grill pan'], families: ['heat_dry','heat_wet','passive'] },
+    { keywords: ['oven','combi','steam oven'],     families: ['heat_dry','heat_machine','passive','heat_wet'] },
+    { keywords: ['microwave'],                     families: ['heat_machine','passive'] },
+    { keywords: ['blender','immersion blender','food processor'], families: ['mix'] },
+    { keywords: ['stand mixer'],                   families: ['mix','passive'] },
+    { keywords: ['sous vide'],                     families: ['heat_wet','passive'] },
+    { keywords: ['air fryer'],                     families: ['heat_dry','heat_machine'] },
+  ];
+  const toolNameLower = (tool.name ?? '').toLowerCase();
+  const matched = TOOL_TASK_FAMILIES.find(e => e.keywords.some(k => toolNameLower.includes(k)));
+  // If tool is known: only show controls when task family matches
+  // If tool is unknown: show for any cooking task (backwards compat)
+  const ALL_COOKING = new Set(['heat_dry','heat_wet','heat_machine','passive']);
+  const allowedFamilies = new Set(matched ? matched.families : [...ALL_COOKING]);
+  const taskNeedsCapability = !taskFamily || allowedFamilies.has(taskFamily);
   const hasCapability = !connectedAppliance &&
     taskNeedsCapability &&
     (equipNode?.capability_schema?.modes?.length ?? 0) > 0;
