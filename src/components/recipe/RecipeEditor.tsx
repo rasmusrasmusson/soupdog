@@ -972,9 +972,14 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
           <input
             ref={inputRef}
             value={query}
-            onChange={e => { setQuery(e.target.value); onChange({ ...row, ingredientId: '', name: e.target.value }); setShowDrop(true); }}
+            onChange={e => { setQuery(e.target.value); setShowDrop(true); }}
             onFocus={() => setShowDrop(query.length >= 1)}
-            onBlur={() => setTimeout(() => setShowDrop(false), 150)}
+            onBlur={() => {
+              setTimeout(() => {
+                setShowDrop(false);
+                if (query !== row.name) onChange({ ...row, ingredientId: '', name: query });
+              }, 150);
+            }}
             placeholder="Ingredient…"
             style={{
               width: '100%', background: 'var(--surface)',
@@ -2079,7 +2084,7 @@ function aggregateIngredients(groups: Group[]): IngredientRow[] {
   for (const g of groups) {
     for (const s of g.steps) {
       for (const si of s.stepIngredients) {
-        if (!si.name.trim()) continue;
+        if (!si.name.trim() || !si.quantityValue) continue;
         const key = si.ingredientId || si.name.toLowerCase().trim();
         if (outputKeys.has(key)) continue;
         const ex = map.get(key);
