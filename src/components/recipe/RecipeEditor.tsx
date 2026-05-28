@@ -821,9 +821,10 @@ function StepModeBadge({ taskName, taskFamily, onClear, onEdit }: {
 }) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 0,
+      display: 'flex', alignItems: 'stretch', gap: 0,
       border: '1px solid var(--border)',
       background: 'var(--surface-hover)',
+      height: '100%',
     }}>
       <button
         onClick={onEdit}
@@ -831,6 +832,7 @@ function StepModeBadge({ taskName, taskFamily, onClear, onEdit }: {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '3px 8px 3px 6px',
           background: 'none', border: 'none', cursor: 'pointer',
+          height: '100%',
         }}
         className="hover:bg-[var(--accent-subtle)] transition-colors"
         title="Change task"
@@ -1666,8 +1668,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
 
           {hasTask && step.taskName?.trim() ? (
             /* Task selected: badge + note on same row */
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ flexShrink: 0, paddingTop: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'stretch' }}>
                 <StepModeBadge
                   taskName={step.taskName}
                   taskFamily={step.taskFamily}
@@ -2356,7 +2358,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
             taskName:    s.taskName,
             taskFamily:  s.taskFamily,
             instruction: s.instruction,
-            groupLabel:  groups.length > 1 ? (g.outputName || '') : '',
+            groupLabel:  g.outputName?.trim() || '',
             groupOutputQuantityValue: g.outputQuantityValue,
             groupOutputQuantityUnit:  g.outputQuantityUnit,
             durationMinutes:    s.durationMinutes,
