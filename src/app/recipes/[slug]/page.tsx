@@ -56,6 +56,60 @@ function ApplianceBadge({ settings }: { settings: ApplianceStepSettings }) {
   );
 }
 
+// ── Tool/equipment cell — shows tool name + settings if present ──
+function ToolCell({ settings }: { settings: any }) {
+  if (!settings) return <span style={{ color: 'var(--muted)' }}>—</span>;
+
+  // Connected Panasonic appliance
+  if (settings.applianceId) {
+    const appliance = APPLIANCES.find((a: any) => a.id === settings.applianceId);
+    const mode = appliance?.modes.find((m: any) => m.id === settings.applianceModeId);
+    if (appliance && mode) {
+      const parts: string[] = [];
+      for (const ctrl of mode.controls) {
+        const val = settings.settings?.[ctrl.id];
+        if (val == null) continue;
+        if (ctrl.type === 'toggle') { if (val) parts.push(ctrl.label); }
+        else parts.push(`${val}${ctrl.unit ?? ''}`);
+      }
+      return (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 1 }}>
+            <Zap size={8} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', fontWeight: 600 }}>{appliance.model}</span>
+          </div>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg)', display: 'block' }}>{mode.label}</span>
+          {parts.length > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>{parts.join(' · ')}</span>}
+        </div>
+      );
+    }
+  }
+
+  // Generic tools from stepTools array (new format)
+  if (Array.isArray(settings.stepTools) && settings.stepTools.length > 0) {
+    const tool = settings.stepTools[0];
+    const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
+    return (
+      <div>
+        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{tool.name}</span>
+        {hasSettings && tool.applianceModeId && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
+            {Object.entries(tool.applianceSettings ?? {}).map(([k, v]) => `${v}`).join(' · ')}
+          </span>
+        )}
+        {settings.stepTools.length > 1 && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
+            +{settings.stepTools.length - 1} more
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // Temperature fallback
+  return <span style={{ color: 'var(--muted)' }}>—</span>;
+}
+
 // ── Compact appliance cell for table ─────────────────────────
 function ApplianceCell({ settings }: { settings: ApplianceStepSettings }) {
   const appliance = APPLIANCES.find(a => a.id === settings.applianceId);
@@ -535,10 +589,10 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                 })}
                               </div>
                             )}
-                            {/* Appliance settings */}
+                            {/* Tool / setting */}
                             {step.applianceSettings && (
-                              <div className="mt-2">
-                                <ApplianceBadge settings={step.applianceSettings} />
+                              <div className="mt-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
+                                <ToolCell settings={step.applianceSettings} />
                               </div>
                             )}
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -564,7 +618,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                 <thead>
                   <tr style={thead}>
                     <Th w={36} /><Th>Product</Th><Th w={80} right>Qty</Th>
-                    <Th w={50}>Unit</Th><Th w={160}>Appliance / Setting</Th>
+                    <Th w={50}>Unit</Th><Th w={160}>Tool / Setting</Th>
                     <Th w={70} right>Time</Th><Th>Instruction</Th>
                   </tr>
                 </thead>
@@ -596,12 +650,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontSize: 11 }}>
-                              {step.applianceSettings
-                                ? <ApplianceCell settings={step.applianceSettings} />
-                                : step.temperature
-                                  ? <span style={{ fontFamily: MONO, fontSize: 11 }}>{step.temperature.value}°{step.temperature.unit === 'celsius' ? 'C' : 'F'}</span>
-                                  : <span style={{ color: MUT }}>—</span>
-                              }
+                              <ToolCell settings={step.applianceSettings} />
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>
                               {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
@@ -619,12 +668,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                               <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                               {rowIdx === 0 && (
                                 <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}>
-                                  {step.applianceSettings
-                                    ? <ApplianceCell settings={step.applianceSettings} />
-                                    : step.temperature
-                                      ? <span style={{ fontFamily: MONO, fontSize: 11 }}>{step.temperature.value}°{step.temperature.unit === 'celsius' ? 'C' : 'F'}</span>
-                                      : <span style={{ color: MUT }}>—</span>
-                                  }
+                                  <ToolCell settings={step.applianceSettings} />
                                 </td>
                               )}
                               {rowIdx === 0 && (
