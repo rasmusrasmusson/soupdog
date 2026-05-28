@@ -1998,6 +1998,8 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   const [yieldUserEdited, setYieldUserEdited] = useState(
     !!(group.outputQuantityValue && group.outputQuantityValue > 0)
   );
+  // Sync yieldUserEdited if value changes from outside (e.g. on load)
+  const prevOutputVal = React.useRef(group.outputQuantityValue);
 
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
 
@@ -2106,26 +2108,25 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                 <select
                   value={group.outputQuantityUnit ?? 'g'}
                   onChange={e => {
-                    const fromUnit = group.outputQuantityUnit ?? 'g';
-                    const toUnit = e.target.value;
+                    const from = group.outputQuantityUnit ?? 'g';
+                    const to = e.target.value;
                     const val = group.outputQuantityValue ?? 0;
-                    // Convert between g/kg and ml/l
-                    const conversions: Record<string, Record<string, number>> = {
-                      g:   { kg: 0.001, g: 1 },
-                      kg:  { g: 1000,   kg: 1 },
-                      ml:  { l: 0.001,  ml: 1 },
-                      l:   { ml: 1000,  l: 1 },
-                    };
-                    const factor = conversions[fromUnit]?.[toUnit];
-                    const newVal = factor && val ? Math.round(val * factor * 1000) / 1000 : val;
-                    onChange({ ...group, outputQuantityUnit: toUnit, outputQuantityValue: newVal });
+                    // Only convert within the same dimension (mass or volume)
+                    let newVal = val;
+                    if (val > 0) {
+                      if (from === 'g'  && to === 'kg') newVal = Math.round(val / 1000 * 10000) / 10000;
+                      else if (from === 'kg' && to === 'g')  newVal = Math.round(val * 1000);
+                      else if (from === 'ml' && to === 'l')  newVal = Math.round(val / 1000 * 10000) / 10000;
+                      else if (from === 'l'  && to === 'ml') newVal = Math.round(val * 1000);
+                    }
+                    onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
                   }}
                   style={{
                     background: 'var(--surface)', border: '1px solid var(--border)',
                     padding: '4px 4px', fontSize: 11, color: 'var(--fg)', outline: 'none', cursor: 'pointer',
                   }}
                 >
-                  {['g','kg','ml','l','tsp','tbsp','cup','piece','portion'].map(u => (
+                  {['g','kg','ml','l'].map(u => (
                     <option key={u}>{u}</option>
                   ))}
                 </select>
@@ -2296,7 +2297,20 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
     });
   }
   const groups: Group[] = [];
-  gmap.forEach((steps, label) => groups.push({ id: uid(), outputName: label === '__default__' ? '' : label, outputIngId: '', toolInstances: [], steps, collapsed: false }));
+  gmap.forEach((steps, label) => {
+    // Restore group output yield from first step's saved data
+    const firstStep = steps[0] as any;
+    groups.push({
+      id: uid(),
+      outputName: label === '__default__' ? '' : label,
+      outputIngId: '',
+      toolInstances: [],
+      steps,
+      collapsed: false,
+      outputQuantityValue: firstStep?.groupOutputQuantityValue ?? undefined,
+      outputQuantityUnit:  firstStep?.groupOutputQuantityUnit  ?? undefined,
+    });
+  });
   return groups.length > 0 ? groups : [emptyGroup(title)];
 }
 
