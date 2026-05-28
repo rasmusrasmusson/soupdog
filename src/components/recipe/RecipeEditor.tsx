@@ -1118,8 +1118,8 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
           </div>
         )}
       </div>
-      <input type="number" min={0} step="any" value={row.quantityValue || ''} placeholder="0"
-        onChange={e => onChange({ ...row, quantityValue: parseFloat(e.target.value) || 0 })}
+      <input type="text" inputMode="decimal" value={row.quantityValue === 0 ? '' : String(row.quantityValue)} placeholder="0"
+        onChange={e => { const v = e.target.value; if (v === '' || v === '.' || /^\d*\.?\d*$/.test(v)) onChange({ ...row, quantityValue: parseFloat(v) || 0 }); }}
         className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
       <select value={row.quantityUnit} onChange={e => onChange({ ...row, quantityUnit: e.target.value })}
         className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
@@ -2282,6 +2282,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
           .map(s => ({
             stepType:    s.taskType ?? 'human',
             taskId:      s.taskId,
+            taskName:    s.taskName,
             taskFamily:  s.taskFamily,
             instruction: s.instruction,
             groupLabel:  groups.length > 1 ? (g.outputName || '') : '',
@@ -2448,8 +2449,8 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
             <span className="text-[12px] text-[var(--fg)] px-2 py-1">
               {row.name}{row.ingredientId && <span className="ml-1 text-[var(--accent)] text-[10px]">✓</span>}
             </span>
-            <input type="number" min={0} step="any" value={row.quantityValue || ''}
-              onChange={e => updateIng(i, { ...row, quantityValue: parseFloat(e.target.value) || 0 })}
+            <input type="text" inputMode="decimal" value={row.quantityValue === 0 ? '' : String(row.quantityValue)}
+              onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) updateIng(i, { ...row, quantityValue: parseFloat(v) || 0 }); }}
               className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
             <select value={row.quantityUnit} onChange={e => updateIng(i, { ...row, quantityUnit: e.target.value })}
               className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">

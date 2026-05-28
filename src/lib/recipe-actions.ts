@@ -27,6 +27,9 @@ export interface RecipeFormData {
   }[];
   steps: {
     stepType:           string;
+    taskId?:            string;
+    taskName?:          string;
+    taskFamily?:        string;
     instruction:        string;
     groupLabel:         string;
     durationMinutes:    number;
