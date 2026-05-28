@@ -3,7 +3,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
-         X, GripVertical, Zap, Search, BookOpen, PenLine } from 'lucide-react';
+         X, GripVertical, Zap, Search, BookOpen, PenLine,
+         Scissors, ArrowRightLeft, Flame, Waves, Cpu, Blend, Clock4,
+         Ruler, Star, Wrench, Leaf } from 'lucide-react';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
@@ -193,6 +195,18 @@ const FAMILY_LABELS: Record<string, string> = {
   finish:       'Finish & Serve',
 };
 
+const FAMILY_ICONS: Record<string, React.ElementType> = {
+  cut:          Scissors,
+  move:         ArrowRightLeft,
+  heat_dry:     Flame,
+  heat_wet:     Waves,
+  heat_machine: Cpu,
+  mix:          Blend,
+  passive:      Clock4,
+  prepare:      Ruler,
+  finish:       Star,
+};
+
 const FAMILY_ORDER = ['cut','move','heat_dry','heat_wet','heat_machine','mix','passive','prepare','finish'];
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -380,12 +394,13 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
               <button key={node.family}
                 onClick={() => setFam(node.family)}
                 style={{
-                  padding: '6px 4px', border: '1px solid var(--border)',
+                  padding: '8px 4px', border: '1px solid var(--border)',
                   background: 'var(--surface)', cursor: 'pointer', textAlign: 'center',
                   transition: 'all 0.15s',
                 }}
                 className="hover:border-[var(--accent)] hover:bg-[var(--accent-subtle)]"
               >
+                {(() => { const Icon = FAMILY_ICONS[node.family]; return Icon ? <Icon size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null; })()}
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 9,
                   textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -642,6 +657,7 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
                   }}
                   className="hover:border-[var(--accent)] hover:bg-[var(--accent-subtle)]"
                 >
+                  {(() => { const Icon = FAMILY_ICONS[node.family]; return Icon ? <Icon size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null; })()}
                   <span style={{
                     fontFamily: 'var(--font-mono)', fontSize: 9,
                     textTransform: 'uppercase', letterSpacing: '0.1em',
@@ -1523,8 +1539,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
               onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
           ))}
-          <button onClick={addIng} className="mt-1 flex items-center gap-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
-            <Plus size={10} /> Add ingredient
+          <button onClick={addIng} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
+            <Leaf size={11} /> Add ingredient
           </button>
         </div>
 
@@ -1586,8 +1602,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               💡 Multiple tools? If they are used at different times, add a separate step for each.
             </div>
           )}
-          <button onClick={addTool} className="mt-1 flex items-center gap-1 text-[10px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
-            <Plus size={10} /> Add tool
+          <button onClick={addTool} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
+            <Wrench size={11} /> Add tool
           </button>
         </div>
 
@@ -2362,8 +2378,8 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
             </button>
           </div>
         ))}
-        <button onClick={addManualIng} className="mt-2 flex items-center gap-1.5 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
-          <Plus size={11} /> Add ingredient manually
+        <button onClick={addManualIng} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
+          <Leaf size={11} /> Add ingredient manually
         </button>
       </section>
 
