@@ -2298,7 +2298,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     try {
       const steps = groups.flatMap(g =>
         g.steps
-          .filter(s => s.instruction.trim() || s.taskId)
+          .filter(s => s.instruction.trim() || s.taskId || s.stepIngredients.some(si => si.name.trim()))
           .map(s => ({
             stepType:    s.taskType ?? 'human',
             taskId:      s.taskId,
