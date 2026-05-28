@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
           version_id:          version.id,
           order_index:         i + 1,
           step_type:           step.stepType ?? 'human',
-          instruction:         step.instruction?.trim() || step.taskName || '',
+          instruction:         step.instruction?.trim() || '',
           group_label:         step.groupLabel?.trim() || null,
           duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
           temperature_celsius: step.temperatureCelsius || null,

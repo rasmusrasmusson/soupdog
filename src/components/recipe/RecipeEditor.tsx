@@ -1998,8 +1998,17 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   const [yieldUserEdited, setYieldUserEdited] = useState(
     !!(group.outputQuantityValue && group.outputQuantityValue > 0)
   );
-  // Sync yieldUserEdited if value changes from outside (e.g. on load)
-  const prevOutputVal = useRef(group.outputQuantityValue);
+
+  // On mount: if group has a name but no saved yield, auto-calculate
+  useEffect(() => {
+    if (group.outputName.trim() && !group.outputQuantityValue) {
+      const calc = calculateGroupYield(group.steps, ingredientTree);
+      if (calc > 0) {
+        onChange({ ...group, outputQuantityValue: calc, outputQuantityUnit: group.outputQuantityUnit ?? 'g' });
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
 
@@ -2111,13 +2120,21 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                     const from = group.outputQuantityUnit ?? 'g';
                     const to = e.target.value;
                     const val = group.outputQuantityValue ?? 0;
-                    // Only convert within the same dimension (mass or volume)
+                    // Convert within same dimension, recalc across dimensions
                     let newVal = val;
                     if (val > 0) {
                       if (from === 'g'  && to === 'kg') newVal = Math.round(val / 1000 * 10000) / 10000;
                       else if (from === 'kg' && to === 'g')  newVal = Math.round(val * 1000);
                       else if (from === 'ml' && to === 'l')  newVal = Math.round(val / 1000 * 10000) / 10000;
                       else if (from === 'l'  && to === 'ml') newVal = Math.round(val * 1000);
+                      else {
+                        // Cross-dimension change (g→ml etc): recalculate from ingredients
+                        const recalc = calculateGroupYield(group.steps, ingredientTree);
+                        newVal = recalc > 0 ? recalc : val;
+                        setYieldUserEdited(false);
+                        onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
+                        return;
+                      }
                     }
                     onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
                   }}
