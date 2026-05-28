@@ -3,8 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
-const uid = () => Math.random().toString(36).slice(2, 9);
-
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 }
@@ -82,28 +80,17 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       durationMinutes:    s.duration_seconds ? Math.round(s.duration_seconds / 60) : 0,
       temperatureCelsius: s.temperature_celsius ?? 0,
       stepIngredients:    stepIngMap[s.id] ?? [],
-      // Reconstruct stepTools from appliance_settings JSONB
-      // New format: { stepTools: [...] }  |  Legacy format: { applianceId, applianceModeId, settings }
-      stepTools: (() => {
-        const as = s.appliance_settings;
-        if (!as) return [];
-        // New format — full stepTools array stored
-        if (Array.isArray(as.stepTools)) {
-          return as.stepTools.map((t: any) => ({ ...t, id: t.id || ('loaded-' + uid()) }));
-        }
-        // Legacy format — single connected appliance only
-        if (as.applianceId) {
-          return [{
+      // Reconstruct stepTools from appliance_settings if present
+      stepTools: s.appliance_settings
+        ? [{
             id:               'loaded-' + s.id,
-            equipmentId:      as.applianceId ?? '',
-            name:             as.applianceId ?? '',
-            applianceId:      as.applianceId,
-            applianceModeId:  as.applianceModeId,
-            applianceSettings: as.settings ?? {},
-          }];
-        }
-        return [];
-      })(),
+            equipmentId:      s.appliance_settings.applianceId ?? '',
+            name:             s.appliance_settings.applianceId ?? '',
+            applianceId:      s.appliance_settings.applianceId,
+            applianceModeId:  s.appliance_settings.applianceModeId,
+            applianceSettings: s.appliance_settings.settings ?? {},
+          }]
+        : [],
     }));
 
   // Fall back: if no ingredients have step_ids (old data), put everything on first step
@@ -196,30 +183,16 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   // Insert steps + per-step ingredients
   for (let i = 0; i < (data.steps ?? []).length; i++) {
     const step = data.steps[i];
-    const hasStepContent = step.instruction?.trim() || step.taskId || (step.stepIngredients ?? []).some((si: any) => si.name?.trim() || si.ingredientId);
-    if (!hasStepContent) continue;
+    if (!step.instruction?.trim()) continue;
 
-    // Store all step tools in appliance_settings JSONB so they round-trip on edit
-    const tools = (step.stepTools ?? []).filter((t: any) => t.name?.trim() || t.equipmentId);
-    const connectedTool = tools.find((t: any) => t.applianceId && t.applianceModeId);
-    const applianceSettings = tools.length > 0
+    const connectedTool = (step.stepTools ?? []).find(
+      (t: any) => t.applianceId && t.applianceModeId
+    );
+    const applianceSettings = connectedTool
       ? {
-          // New format: full stepTools array
-          stepTools: tools.map((t: any) => ({
-            id:               t.id,
-            instanceId:       t.instanceId,
-            equipmentId:      t.equipmentId,
-            name:             t.name,
-            applianceId:      t.applianceId ?? null,
-            applianceModeId:  t.applianceModeId ?? null,
-            applianceSettings: t.applianceSettings ?? {},
-          })),
-          // Legacy compat: also store connected appliance at top level if present
-          ...(connectedTool ? {
-            applianceId:     connectedTool.applianceId,
-            applianceModeId: connectedTool.applianceModeId,
-            settings:        connectedTool.applianceSettings ?? {},
-          } : {}),
+          applianceId:     connectedTool.applianceId,
+          applianceModeId: connectedTool.applianceModeId,
+          settings:        connectedTool.applianceSettings ?? {},
         }
       : null;
 
@@ -229,7 +202,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         version_id:          version.id,
         order_index:         i + 1,
         step_type:           step.stepType ?? 'human',
-        instruction:         step.instruction?.trim() || step.taskName || '',
+        instruction:         step.instruction.trim(),
         group_label:         step.groupLabel?.trim() || null,
         duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
         temperature_celsius: step.temperatureCelsius || null,
