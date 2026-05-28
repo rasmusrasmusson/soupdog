@@ -50,6 +50,7 @@ interface TaskTreeNode {
 interface StepIngredient {
   id: string; ingredientId: string; name: string;
   quantityValue: number; quantityUnit: string; prepNote: string;
+  _qtyStr?: string;
 }
 
 // Tool instance — a specific physical tool in use during this recipe
@@ -1119,12 +1120,19 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
         )}
       </div>
       <input type="text" inputMode="decimal"
-        defaultValue={row.quantityValue === 0 ? '' : String(row.quantityValue)}
-        key={row.id + '-qty'}
+        value={row._qtyStr !== undefined ? row._qtyStr : (row.quantityValue === 0 ? '' : String(row.quantityValue))}
         placeholder="0"
-        onFocus={e => { if (e.target.value === '0') e.target.value = ''; }}
-        onChange={e => { const v = e.target.value; if (v === '' || v === '.' || /^\d*\.?\d*$/.test(v)) { /* allow while typing */ } else e.target.value = e.target.value.slice(0,-1); }}
-        onBlur={e => { const v = parseFloat(e.target.value); onChange({ ...row, quantityValue: isNaN(v) ? 0 : v }); e.target.value = isNaN(v) || v === 0 ? '' : String(v); }}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === '' || v === '.' || /^\d*\.?\d*$/.test(v)) {
+            onChange({ ...row, _qtyStr: v, quantityValue: v === '' || v === '.' ? 0 : parseFloat(v) || 0 });
+          }
+        }}
+        onBlur={e => {
+          const v = parseFloat(e.target.value);
+          const clean = isNaN(v) || v === 0 ? '' : String(v);
+          onChange({ ...row, _qtyStr: clean, quantityValue: isNaN(v) ? 0 : v });
+        }}
         className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
       <select value={row.quantityUnit} onChange={e => onChange({ ...row, quantityUnit: e.target.value })}
         className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
