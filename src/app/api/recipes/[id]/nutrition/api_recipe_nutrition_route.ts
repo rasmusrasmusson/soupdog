@@ -7,9 +7,8 @@ import { createClient } from '@/lib/supabase/server';
 import { applyRetentionFactors, calculateRecipeNutrition } from '@/lib/recipe-nutrition';
 
 export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+  _req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = context.params;
   const { id } = await params;
   const supabase = await createClient();
   const db = supabase as any;
