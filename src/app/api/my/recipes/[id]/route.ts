@@ -46,9 +46,24 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
 
   const { data: vIngredients } = await db
     .from('version_ingredients')
-    .select('id, order_index, quantity_value, quantity_unit, prep_note, optional, ingredient_id, step_id, ingredients(id, name)')
+    .select('id, order_index, quantity_value, quantity_unit, prep_note, optional, ingredient_id, step_id')
     .eq('version_id', v.id)
     .order('order_index');
+
+  // Fetch ingredient names separately to avoid RLS nested join issues
+  const ingIds = [...new Set((vIngredients ?? []).map((i: any) => i.ingredient_id).filter(Boolean))];
+  const ingNameMap: Record<string, string> = {};
+  if (ingIds.length > 0) {
+    const { data: ingRows } = await db
+      .from('ingredients')
+      .select('id, name')
+      .in('id', ingIds);
+    for (const r of (ingRows ?? [])) ingNameMap[r.id] = r.name;
+  }
+  // Attach names
+  for (const i of (vIngredients ?? [])) {
+    i.ingredients = { id: i.ingredient_id, name: ingNameMap[i.ingredient_id] ?? '' };
+  }
 
   const { data: vEquipment } = await db
     .from('version_equipment')
