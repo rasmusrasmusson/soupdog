@@ -1998,6 +1998,9 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
   const [yieldUserEdited, setYieldUserEdited] = useState(
     !!(group.outputQuantityValue && group.outputQuantityValue > 0)
   );
+  // Keep a ref to the latest group so unit onChange doesn't use stale closure
+  const groupRef = useRef(group);
+  useEffect(() => { groupRef.current = group; }, [group]);
 
   // On mount: if group has a name but no saved yield, auto-calculate
   useEffect(() => {
@@ -2117,6 +2120,7 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                 <select
                   value={group.outputQuantityUnit ?? 'g'}
                   onChange={e => {
+                    const group = groupRef.current;
                     const from = group.outputQuantityUnit ?? 'g';
                     const to = e.target.value;
                     const val = group.outputQuantityValue ?? 0;
