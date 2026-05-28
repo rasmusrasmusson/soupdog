@@ -1999,7 +1999,7 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
     !!(group.outputQuantityValue && group.outputQuantityValue > 0)
   );
   // Sync yieldUserEdited if value changes from outside (e.g. on load)
-  const prevOutputVal = React.useRef(group.outputQuantityValue);
+  const prevOutputVal = useRef(group.outputQuantityValue);
 
   const addStep    = () => onChange({ ...group, steps: [...group.steps, emptyStep()] });
 
