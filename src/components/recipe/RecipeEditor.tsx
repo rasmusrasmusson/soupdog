@@ -2043,8 +2043,22 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
             value={group.outputName}
             placeholder={totalGroups === 1 ? 'Group / output name (optional)…' : 'Group output (e.g. Chopped almonds and walnuts)…'}
             nodes={ingredientTree}
-            onChange={name => onChange({ ...group, outputName: name, outputIngId: '' })}
-            onSelect={n => onChange({ ...group, outputName: n.name, outputIngId: n.id })}
+            onChange={name => {
+              const updated = { ...group, outputName: name, outputIngId: '' };
+              if (name.trim() && !yieldUserEdited) {
+                const calc = calculateGroupYield(group.steps, ingredientTree);
+                if (calc > 0) { onChange({ ...updated, outputQuantityValue: calc, outputQuantityUnit: group.outputQuantityUnit ?? 'g' }); return; }
+              }
+              onChange(updated);
+            }}
+            onSelect={n => {
+              const updated = { ...group, outputName: n.name, outputIngId: n.id };
+              if (!yieldUserEdited) {
+                const calc = calculateGroupYield(group.steps, ingredientTree);
+                if (calc > 0) { onChange({ ...updated, outputQuantityValue: calc, outputQuantityUnit: group.outputQuantityUnit ?? 'g' }); return; }
+              }
+              onChange(updated);
+            }}
           />
           {/* Output quantity — shown when group has a name */}
           {group.outputName.trim() && (
