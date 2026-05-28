@@ -2128,12 +2128,17 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
                       else if (from === 'ml' && to === 'l')  newVal = Math.round(val / 1000 * 10000) / 10000;
                       else if (from === 'l'  && to === 'ml') newVal = Math.round(val * 1000);
                       else {
-                        // Cross-dimension change (g→ml etc): recalculate from ingredients
-                        const recalc = calculateGroupYield(group.steps, ingredientTree);
-                        newVal = recalc > 0 ? recalc : val;
-                        setYieldUserEdited(false);
-                        onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
-                        return;
+                        // Cross-dimension change (g→ml etc): recalculate in grams, then convert to target unit
+                        const recalcG = calculateGroupYield(group.steps, ingredientTree);
+                        if (recalcG > 0) {
+                          let converted = recalcG;
+                          if (to === 'kg') converted = Math.round(recalcG / 1000 * 10000) / 10000;
+                          else if (to === 'ml') converted = recalcG; // 1g ≈ 1ml for water-based
+                          else if (to === 'l')  converted = Math.round(recalcG / 1000 * 10000) / 10000;
+                          setYieldUserEdited(false);
+                          onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: converted });
+                          return;
+                        }
                       }
                     }
                     onChange({ ...group, outputQuantityUnit: to, outputQuantityValue: newVal });
