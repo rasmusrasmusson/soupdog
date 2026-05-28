@@ -804,9 +804,10 @@ function StepModeBadge({ taskName, taskFamily, onClear, onEdit }: {
 }) {
   return (
     <div style={{
-      display: 'inline-flex', alignItems: 'center', gap: 0,
+      display: 'flex', alignItems: 'stretch', gap: 0,
       border: '1px solid var(--border)',
       background: 'var(--surface-hover)',
+      height: '100%',
     }}>
       <button
         onClick={onEdit}
@@ -814,6 +815,7 @@ function StepModeBadge({ taskName, taskFamily, onClear, onEdit }: {
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '3px 8px 3px 6px',
           background: 'none', border: 'none', cursor: 'pointer',
+          height: '100%',
         }}
         className="hover:bg-[var(--accent-subtle)] transition-colors"
         title="Change task"
@@ -1429,48 +1431,67 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
   return (
     <div className="mb-2">
       <div className="flex items-center gap-1.5">
-        {/* Color dot for linked instance */}
         {instanceColor && (
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-            background: instanceColor,
-          }} />
+          <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: instanceColor }} />
         )}
         <div className="flex-1 relative">
-          <button
-            onClick={() => setOpen(o => !o)}
-            style={{
-              width: '100%', textAlign: 'left', background: 'var(--surface)',
-              border: '1px solid var(--border)', padding: '6px 10px',
-              fontSize: 12, color: displayName ? 'var(--fg)' : 'var(--muted)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-            }}
-          >
-            <span className="truncate">{displayName || 'Tool / equipment…'}</span>
-            {linkedInstance && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', flexShrink: 0 }}>
-                {linkedInstance.name}
-              </span>
-            )}
-            {tool.name && !linkedInstance && (
-              <span style={{ color: 'var(--accent)', fontSize: 10, flexShrink: 0 }}>✓</span>
-            )}
-          </button>
-          {open && (
-            <ToolInstancePicker
-              instances={groupInstances}
-              equipmentTree={equipmentTree}
-              currentName={tool.name}
-              onSelectInstance={handleSelectInstance}
-              onSelectNew={handleSelectNew}
-              onClose={() => setOpen(false)}
-            />
+          {tool.name && !open ? (
+            /* Badge style when tool selected — matches task badge */
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-hover)', minHeight: 30 }}>
+              <button
+                onClick={() => setOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
+                className="hover:bg-[var(--accent-subtle)] transition-colors"
+                title="Change tool"
+              >
+                <Wrench size={9} style={{ color: 'var(--muted)' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>
+                  {displayName}
+                </span>
+                {linkedInstance && (
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+                    · {linkedInstance.name}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={onRemove}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px', minHeight: 30 }}
+                title="Remove tool"
+                className="hover:bg-red-50 transition-colors"
+              >
+                <X size={9} style={{ color: 'var(--muted)' }} />
+              </button>
+            </div>
+          ) : (
+            /* Picker open or no tool selected */
+            <>
+              {!tool.name && (
+                <button
+                  onClick={() => setOpen(true)}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '6px 10px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}
+                >
+                  Tool / equipment…
+                </button>
+              )}
+              {open && (
+                <ToolInstancePicker
+                  instances={groupInstances}
+                  equipmentTree={equipmentTree}
+                  currentName={tool.name}
+                  onSelectInstance={handleSelectInstance}
+                  onSelectNew={handleSelectNew}
+                  onClose={() => setOpen(false)}
+                />
+              )}
+            </>
           )}
         </div>
-        <button onClick={onRemove}
-          className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
-          <Trash2 size={11} strokeWidth={1.5} />
-        </button>
+        {!tool.name && (
+          <button onClick={onRemove} className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
+            <Trash2 size={11} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
       {connectedAppliance && tool.name && (
         <AppliancePanel tool={tool} onChange={onChange} />
@@ -1658,8 +1679,8 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
 
           {hasTask && step.taskName?.trim() ? (
             /* Task selected: badge + note on same row */
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <div style={{ flexShrink: 0, paddingTop: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+              <div style={{ flexShrink: 0, display: 'flex', alignItems: 'stretch' }}>
                 <StepModeBadge
                   taskName={step.taskName}
                   taskFamily={step.taskFamily}
@@ -2066,22 +2087,39 @@ function GroupEditor({ group, groupIndex, totalGroups, ingredientTree, equipment
               <FL>Yield</FL>
               <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                 <input
-                  type="number" min={0} step="any"
-                  value={group.outputQuantityValue || ''}
+                  type="text" inputMode="decimal"
+                  value={group.outputQuantityValue ? group.outputQuantityValue.toLocaleString('en-US') : ''}
                   placeholder="auto"
                   onChange={e => {
-                    setYieldUserEdited(true);
-                    onChange({ ...group, outputQuantityValue: parseFloat(e.target.value) || 0 });
+                    const raw = e.target.value.replace(/,/g, '');
+                    if (raw === '' || /^\d*\.?\d*$/.test(raw)) {
+                      setYieldUserEdited(true);
+                      onChange({ ...group, outputQuantityValue: parseFloat(raw) || 0 });
+                    }
                   }}
                   style={{
-                    width: 72, background: 'transparent',
+                    width: 80, background: 'transparent',
                     border: '1px solid var(--border)', padding: '4px 8px',
                     fontSize: 11, textAlign: 'right', color: 'var(--fg)', outline: 'none',
                   }}
                 />
                 <select
                   value={group.outputQuantityUnit ?? 'g'}
-                  onChange={e => onChange({ ...group, outputQuantityUnit: e.target.value })}
+                  onChange={e => {
+                    const fromUnit = group.outputQuantityUnit ?? 'g';
+                    const toUnit = e.target.value;
+                    const val = group.outputQuantityValue ?? 0;
+                    // Convert between g/kg and ml/l
+                    const conversions: Record<string, Record<string, number>> = {
+                      g:   { kg: 0.001, g: 1 },
+                      kg:  { g: 1000,   kg: 1 },
+                      ml:  { l: 0.001,  ml: 1 },
+                      l:   { ml: 1000,  l: 1 },
+                    };
+                    const factor = conversions[fromUnit]?.[toUnit];
+                    const newVal = factor && val ? Math.round(val * factor * 1000) / 1000 : val;
+                    onChange({ ...group, outputQuantityUnit: toUnit, outputQuantityValue: newVal });
+                  }}
                   style={{
                     background: 'var(--surface)', border: '1px solid var(--border)',
                     padding: '4px 4px', fontSize: 11, color: 'var(--fg)', outline: 'none', cursor: 'pointer',
