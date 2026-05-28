@@ -2236,6 +2236,11 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
       durationMinutes: s.durationMinutes || 0, temperatureCelsius: s.temperatureCelsius || 0,
       stepIngredients: (s.stepIngredients || []).map((si: any) => ({ ...si, id: si.id || uid() })),
       stepTools: (s.stepTools || []).map((st: any) => ({ ...st, id: st.id || uid() })),
+      // Restore task fields saved in appliance_settings JSONB
+      taskId:     s.taskId     ?? undefined,
+      taskName:   s.taskName   ?? undefined,
+      taskType:   s.taskType   as 'human' | 'machine' | 'passive' | undefined ?? undefined,
+      taskFamily: s.taskFamily ?? undefined,
     });
   }
   const groups: Group[] = [];
