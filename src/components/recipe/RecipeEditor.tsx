@@ -1446,48 +1446,46 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
   return (
     <div className="mb-2">
       <div className="flex items-center gap-1.5">
-        {/* Color dot for linked instance */}
         {instanceColor && (
-          <span style={{
-            width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-            background: instanceColor,
-          }} />
+          <span style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: instanceColor }} />
         )}
         <div className="flex-1 relative">
-          <button
-            onClick={() => setOpen(o => !o)}
-            style={{
-              width: '100%', textAlign: 'left', background: 'var(--surface)',
-              border: '1px solid var(--border)', padding: '6px 10px',
-              fontSize: 12, color: displayName ? 'var(--fg)' : 'var(--muted)',
-              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-            }}
-          >
-            <span className="truncate">{displayName || 'Tool / equipment…'}</span>
-            {linkedInstance && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', flexShrink: 0 }}>
-                {linkedInstance.name}
-              </span>
-            )}
-            {tool.name && !linkedInstance && (
-              <span style={{ color: 'var(--accent)', fontSize: 10, flexShrink: 0 }}>✓</span>
-            )}
-          </button>
-          {open && (
-            <ToolInstancePicker
-              instances={groupInstances}
-              equipmentTree={equipmentTree}
-              currentName={tool.name}
-              onSelectInstance={handleSelectInstance}
-              onSelectNew={handleSelectNew}
-              onClose={() => setOpen(false)}
-            />
+          {tool.name && !open ? (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-hover)', minHeight: 30 }}>
+              <button onClick={() => setOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
+                className="hover:bg-[var(--accent-subtle)] transition-colors">
+                <Wrench size={9} style={{ color: 'var(--muted)' }} />
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{displayName}</span>
+                {linkedInstance && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {linkedInstance.name}</span>}
+              </button>
+              <button onClick={onRemove}
+                style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px', minHeight: 30 }}
+                className="hover:bg-red-50 transition-colors">
+                <X size={9} style={{ color: 'var(--muted)' }} />
+              </button>
+            </div>
+          ) : (
+            <>
+              {!tool.name && (
+                <button onClick={() => setOpen(true)}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', padding: '6px 10px', fontSize: 12, color: 'var(--muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}>
+                  Tool / equipment…
+                </button>
+              )}
+              {open && (
+                <ToolInstancePicker instances={groupInstances} equipmentTree={equipmentTree}
+                  currentName={tool.name} onSelectInstance={handleSelectInstance}
+                  onSelectNew={handleSelectNew} onClose={() => setOpen(false)} />
+              )}
+            </>
           )}
         </div>
-        <button onClick={onRemove}
-          className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
-          <Trash2 size={11} strokeWidth={1.5} />
-        </button>
+        {!tool.name && (
+          <button onClick={onRemove} className="p-1.5 text-[var(--muted)] hover:text-red-500 flex-shrink-0">
+            <Trash2 size={11} strokeWidth={1.5} />
+          </button>
+        )}
       </div>
       {connectedAppliance && tool.name && (
         <AppliancePanel tool={tool} onChange={onChange} />
@@ -1541,6 +1539,21 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
   const updateTool = (i: number, v: StepTool) => onChange({ ...step, stepTools: step.stepTools.map((r, idx) => idx === i ? v : r) });
   const removeTool = (i: number) => onChange({ ...step, stepTools: step.stepTools.filter((_, idx) => idx !== i) });
 
+  const TOOL_EQUIV_GROUPS = [
+    ['stock pot','saucepan','frying pan','saute pan','wok','cast iron pan','grill pan','dutch oven'],
+    ["chef's knife",'santoku knife','paring knife','boning knife','bread knife'],
+    ['conventional oven','convection oven','steam oven','combi steam oven'],
+    ['blender','immersion blender','food processor'],
+  ];
+  const findCompatibleInstance = (toolName: string): ToolInstance | undefined => {
+    const nameLower = toolName.toLowerCase();
+    const exact = groupInstances.find(i => i.name.toLowerCase() === nameLower);
+    if (exact) return exact;
+    const group = TOOL_EQUIV_GROUPS.find(g => g.includes(nameLower));
+    if (group) return groupInstances.find(i => group.includes(i.name.toLowerCase()));
+    return undefined;
+  };
+
   const selectTask = (task: TaskResult) => {
     const suggestedTools: StepTool[] = [];
     if (task.suggested_tool_slugs?.length) {
@@ -1553,7 +1566,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
               a.id === node.slug || a.model.toLowerCase().includes(node.name.toLowerCase())
             );
             // Check if instance already exists in group
-            const existingInst = groupInstances.find(i => i.name === node.name);
+            const existingInst = findCompatibleInstance(node.name);
             let instanceId: string;
             if (existingInst) {
               instanceId = existingInst.instanceId;
@@ -1651,7 +1664,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
           <FL>Task</FL>
 
-          {hasTask && step.taskName ? (
+          {hasTask && step.taskName?.trim() ? (
             /* Task selected: badge + note on same row */
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ flexShrink: 0, paddingTop: 1 }}>
@@ -2314,7 +2327,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
     try {
       const steps = groups.flatMap(g =>
         g.steps
-          .filter(s => s.instruction.trim() || s.taskId)
+          .filter(s => s.instruction.trim() || s.taskId || s.stepIngredients.some(si => si.name.trim()))
           .map(s => ({
             stepType:    s.taskType ?? 'human',
             taskId:      s.taskId,
@@ -2505,18 +2518,16 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
         </button>
       </section>
 
-      {/* Save */}
-      <section className="border-t border-[var(--border)] pt-6">
-        {error && <div className="mb-4 px-4 py-3 border border-red-300 text-red-600 text-[12px] font-mono bg-red-50">{error}</div>}
-        <div className="flex items-center gap-4">
-          <button onClick={handleSubmit} disabled={saving}
-            className="flex items-center gap-2 bg-[var(--accent)] text-white px-6 py-2.5 text-[12px] font-mono hover:opacity-90 disabled:opacity-60 transition-opacity tracking-wide">
-            {saving && <Loader2 size={13} className="animate-spin" />}
-            {saving ? 'Saving…' : 'Save recipe'}
-          </button>
-          <span className="text-[11px] text-[var(--muted)] font-mono">Saved as draft — publish from My Recipes</span>
-        </div>
-      </section>
+      <div className="h-16" />
+      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--border)] bg-[var(--surface)] px-4 md:px-8 py-3 flex items-center gap-4">
+        {error && <span className="text-[11px] font-mono text-red-600 flex-1 truncate">{error}</span>}
+        {!error && <span className="text-[11px] text-[var(--muted)] font-mono flex-1">Saved as draft — publish from My Recipes</span>}
+        <button onClick={handleSubmit} disabled={saving}
+          className="flex items-center gap-2 bg-[var(--accent)] text-white px-6 py-2.5 text-[12px] font-mono hover:opacity-90 disabled:opacity-60 transition-opacity tracking-wide flex-shrink-0">
+          {saving && <Loader2 size={13} className="animate-spin" />}
+          {saving ? 'Saving…' : 'Save recipe'}
+        </button>
+      </div>
     </div>
   );
 }
