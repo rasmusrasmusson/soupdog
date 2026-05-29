@@ -7,7 +7,7 @@ import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
          Loader2, Bookmark, BookmarkX, Sparkles } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 
-type Tab = 'mine' | 'saved';
+type Tab = 'created' | 'saved';
 
 interface MyRecipe {
   id: string; slug: string; title: string;
@@ -63,7 +63,7 @@ function EmptyState({ icon, label, action }: {
 }
 
 export default function MyRecipesPage() {
-  const [tab, setTab]           = useState<Tab>('mine');
+  const [tab, setTab]           = useState<Tab>('saved');
   const [recipes, setRecipes]   = useState<MyRecipe[]>([]);
   const [saved, setSaved]       = useState<SavedRecipe[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
@@ -72,20 +72,8 @@ export default function MyRecipesPage() {
   const [toggling, setToggling] = useState<string | null>(null);
   const [unsaving, setUnsaving] = useState<string | null>(null);
 
-  // Load my recipes on mount
+  // Load saved on mount (default tab) + on tab switch
   useEffect(() => {
-    (async () => {
-      setLoadingMine(true);
-      try {
-        const res = await fetch('/api/my/recipes');
-        if (res.ok) setRecipes(await res.json());
-      } finally { setLoadingMine(false); }
-    })();
-  }, []);
-
-  // Load saved recipes when tab switches
-  useEffect(() => {
-    if (tab !== 'saved') return;
     (async () => {
       setLoadingSaved(true);
       try {
@@ -93,6 +81,19 @@ export default function MyRecipesPage() {
         if (res.ok) setSaved(await res.json());
       } finally { setLoadingSaved(false); }
     })();
+  }, []);
+
+  // Load created recipes lazily when tab switches
+  useEffect(() => {
+    if (tab !== 'created' || recipes.length > 0) return;
+    (async () => {
+      setLoadingMine(true);
+      try {
+        const res = await fetch('/api/my/recipes');
+        if (res.ok) setRecipes(await res.json());
+      } finally { setLoadingMine(false); }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   const handleDelete = async (id: string, title: string) => {
@@ -165,16 +166,16 @@ export default function MyRecipesPage() {
 
       {/* Tabs */}
       <div style={{ borderBottom: B, marginBottom: 24, display: 'flex', gap: 0 }}>
-        <TabBtn active={tab === 'mine'} onClick={() => setTab('mine')}>
-          My recipes {recipes.length > 0 && `(${recipes.length})`}
-        </TabBtn>
         <TabBtn active={tab === 'saved'} onClick={() => setTab('saved')}>
           Saved {saved.length > 0 && `(${saved.length})`}
+        </TabBtn>
+        <TabBtn active={tab === 'created'} onClick={() => setTab('created')}>
+          Created {recipes.length > 0 && `(${recipes.length})`}
         </TabBtn>
       </div>
 
       {/* ── MY RECIPES TAB ── */}
-      {tab === 'mine' && (
+      {tab === 'created' && (
         <>
           {loadingMine ? (
             <div style={{ display: 'flex', gap: 8, ...MONO, fontSize: 12, color: 'var(--muted)', padding: '48px 0' }}>
