@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, use } from 'react';
 import { formatDuration } from '@/lib/utils';
-import { Bookmark, BookmarkCheck, Zap, Loader2, AlertTriangle } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
@@ -190,75 +190,6 @@ function ApplianceCell({ settings }: { settings: ApplianceStepSettings }) {
   );
 }
 
-// ── Scaled quantity display ───────────────────────────────────
-interface ScaledIngredient {
-  ingredientId:  string;
-  name:          string;
-  originalValue: number;
-  originalUnit:  string;
-  scaledValue:   number;
-  scaledUnit:    string;
-  scalingNote:   string | null;
-}
-
-function ScaledQty({
-  ingredientId, originalValue, originalUnit,
-  scaledMap, isScaled,
-}: {
-  ingredientId: string;
-  originalValue: number;
-  originalUnit: string;
-  scaledMap: Map<string, ScaledIngredient>;
-  isScaled: boolean;
-}) {
-  const MONO = 'var(--font-mono)';
-  const MUT  = 'var(--muted)';
-
-  if (!isScaled) {
-    return (
-      <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-        {originalValue}
-      </span>
-    );
-  }
-
-  const scaled = scaledMap.get(ingredientId);
-  if (!scaled) {
-    return <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{originalValue}</span>;
-  }
-
-  const changed = scaled.scaledValue !== originalValue || scaled.scaledUnit !== originalUnit;
-  return (
-    <span title={scaled.scalingNote ?? undefined}>
-      {changed && (
-        <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, textDecoration: 'line-through', marginRight: 4 }}>
-          {originalValue}
-        </span>
-      )}
-      <span style={{
-        fontFamily: MONO, fontVariantNumeric: 'tabular-nums',
-        color: changed ? 'var(--accent)' : 'var(--fg)',
-        fontWeight: changed ? 600 : 400,
-      }}>
-        {scaled.scaledValue}
-      </span>
-    </span>
-  );
-}
-
-function ScaledUnit({
-  ingredientId, originalUnit, scaledMap, isScaled,
-}: {
-  ingredientId: string;
-  originalUnit: string;
-  scaledMap: Map<string, ScaledIngredient>;
-  isScaled: boolean;
-}) {
-  if (!isScaled) return <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{originalUnit}</span>;
-  const scaled = scaledMap.get(ingredientId);
-  const unit = scaled?.scaledUnit ?? originalUnit;
-  return <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{unit}</span>;
-}
 
 // ── Map new-schema DB row to Recipe type ──────────────────────
 function mapNewSchemaRecipe(row: any): Recipe {
@@ -501,15 +432,6 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   );
 }
 
-// ── Scaling state type ────────────────────────────────────────
-interface ScalingState {
-  status:          'idle' | 'loading' | 'done' | 'error';
-  scaledMap:       Map<string, ScaledIngredient>;
-  methodChanges:   boolean;
-  methodNote:      string | null;
-  divergenceScore: number;
-  targetServings:  number;
-}
 
 function RecipeView({ recipe }: { recipe: Recipe }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
@@ -518,71 +440,8 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
   const [servings, setServings] = useState(recipe.servings);
   const [addedIngs, setAddedIngs] = useState<Record<string, boolean>>({});
   const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
+  const changeServings = (delta: number) => setServings(prev => Math.max(1, prev + delta));
 
-  // ── Scaling state ──────────────────────────────────────────
-  const [scaling, setScaling] = useState<ScalingState>({
-    status: 'idle', scaledMap: new Map(),
-    methodChanges: false, methodNote: null,
-    divergenceScore: 0, targetServings: recipe.servings,
-  });
-  // Cache: servings → ScalingState
-  const scaleCache = React.useRef<Map<number, ScalingState>>(new Map());
-  const isScaled = scaling.status === 'done' && scaling.targetServings === servings;
-
-  const triggerScale = React.useCallback(async (targetServings: number) => {
-    if (targetServings === recipe.servings) {
-      setScaling({ status: 'idle', scaledMap: new Map(), methodChanges: false, methodNote: null, divergenceScore: 0, targetServings: recipe.servings });
-      return;
-    }
-
-    // Check cache first
-    const cached = scaleCache.current.get(targetServings);
-    if (cached) { setScaling(cached); return; }
-
-    const versionId = (recipe as any).recipeVersionId;
-    const canonicalId = recipe.id;
-    if (!versionId || !canonicalId) return; // can't scale legacy/seed recipes
-
-    setScaling(prev => ({ ...prev, status: 'loading', targetServings }));
-
-    try {
-      const res = await fetch(`/api/recipes/${canonicalId}/scale`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ versionId, targetServings }),
-      });
-
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-
-      const scaledMap = new Map<string, ScaledIngredient>(
-        (data.ingredients ?? []).map((i: ScaledIngredient) => [i.ingredientId, i])
-      );
-
-      const newState: ScalingState = {
-        status: 'done',
-        scaledMap,
-        methodChanges:   data.methodChanges   ?? false,
-        methodNote:      data.methodNote       ?? null,
-        divergenceScore: data.divergenceScore  ?? 0,
-        targetServings,
-      };
-
-      scaleCache.current.set(targetServings, newState);
-      setScaling(newState);
-    } catch (err) {
-      console.error('[scale]', err);
-      setScaling(prev => ({ ...prev, status: 'error' }));
-    }
-  }, [recipe]);
-
-  const changeServings = React.useCallback((delta: number) => {
-    setServings(prev => {
-      const next = Math.max(1, prev + delta);
-      triggerScale(next);
-      return next;
-    });
-  }, [triggerScale]);
 
   // Build step → ingredients map
   const stepIngMap = React.useMemo(() => {
@@ -633,7 +492,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     ['CUISINE',     recipe.cuisine ?? '—'],
   ];
 
-  const canScale = !!(recipe as any).recipeVersionId;
 
   return (
     <div className="flex h-full">
@@ -674,40 +532,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
         <div className="px-4 md:px-8 py-6 space-y-8">
 
-          {/* Scaling banner */}
-          {scaling.status === 'loading' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', border: B, background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 11, color: MUT }}>
-              <Loader2 size={12} className="animate-spin" style={{ color: 'var(--accent)' }} />
-              Scaling to {servings} servings…
-            </div>
-          )}
-          {scaling.status === 'error' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', border: '1px solid #b45309', background: '#fef3c7', fontFamily: MONO, fontSize: 11, color: '#92400e' }}>
-              <AlertTriangle size={12} />
-              Could not scale recipe — showing original quantities
-            </div>
-          )}
-          {isScaled && scaling.methodChanges && scaling.methodNote && (
-            <div style={{ display: 'flex', alignItems: 'start', gap: 8, padding: '10px 14px', border: '1px solid var(--accent)', background: 'var(--accent-subtle)', fontFamily: MONO, fontSize: 11, color: 'var(--fg)' }}>
-              <AlertTriangle size={12} style={{ color: 'var(--accent)', flexShrink: 0, marginTop: 1 }} />
-              <span><strong>Method change at this scale:</strong> {scaling.methodNote}</span>
-            </div>
-          )}
-          {isScaled && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', border: B, background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, color: MUT }}>
-              <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Scaled</span>
-              <span>·</span>
-              <span>{recipe.servings} → {servings} servings</span>
-              <span>·</span>
-              <span>Quantities adjusted by AI — non-linear scaling applied where needed</span>
-              {scaling.divergenceScore > 0.3 && (
-                <>
-                  <span>·</span>
-                  <span style={{ color: '#b45309' }}>Significant variation from base recipe</span>
-                </>
-              )}
-            </div>
-          )}
 
           {/* Ingredients */}
           <section>
@@ -719,10 +543,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                   <Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} />
                   <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
                   <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
-                  <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>
-                    <ScaledQty ingredientId={ing.ingredientId} originalValue={ing.quantity.value} originalUnit={ing.quantity.unit} scaledMap={scaling.scaledMap} isScaled={isScaled} />
-                    <ScaledUnit ingredientId={ing.ingredientId} originalUnit={ing.quantity.unit} scaledMap={scaling.scaledMap} isScaled={isScaled} />
-                  </span>
+                  <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{ing.quantity.value}<span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{ing.quantity.unit}</span></span>
                   {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.prep}</span>}
                 </div>
               ))}
@@ -745,15 +566,11 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                         <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
                         {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
                       </td>
-                      <td style={{ ...td, borderRight: B, textAlign: 'right' }}>
-                        <ScaledQty ingredientId={ing.ingredientId} originalValue={ing.quantity.value} originalUnit={ing.quantity.unit} scaledMap={scaling.scaledMap} isScaled={isScaled} />
-                        {isScaled && scaling.scaledMap.get(ing.ingredientId)?.scalingNote && (
-                          <span title={scaling.scaledMap.get(ing.ingredientId)!.scalingNote!}
-                            style={{ marginLeft: 4, fontFamily: MONO, fontSize: 9, color: 'var(--accent)', cursor: 'help' }}>ⓘ</span>
-                        )}
+                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+                        {ing.quantity.value}
                       </td>
-                      <td style={{ ...td, borderRight: B }}>
-                        <ScaledUnit ingredientId={ing.ingredientId} originalUnit={ing.quantity.unit} scaledMap={scaling.scaledMap} isScaled={isScaled} />
+                      <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>
+                        {ing.quantity.unit}
                       </td>
                       <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
                       <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
@@ -819,13 +636,10 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                 {stepIngs.map((ing: RecipeIngredientRef) => {
                                   const key = `${step.id}-${ing.ingredientId}`;
                                   const added = addedIngs[key];
-                                  const scaledIng = isScaled ? scaling.scaledMap.get(ing.ingredientId) : null;
-                                  const dispVal = scaledIng ? scaledIng.scaledValue : ing.quantity.value;
-                                  const dispUnit = scaledIng ? scaledIng.scaledUnit : ing.quantity.unit;
                                   return (
                                     <button key={key} onClick={() => toggleAddedIng(key)}
                                       style={{ fontFamily: MONO, fontSize: 10, padding: '2px 8px', borderRadius: 3, border: `1px solid ${added ? 'var(--accent)' : 'var(--border)'}`, background: added ? 'var(--accent-subtle)' : 'var(--surface)', color: added ? 'var(--accent-text)' : 'var(--fg)', cursor: 'pointer', transition: 'all 0.15s', textDecoration: added ? 'line-through' : 'none' }}>
-                                      {ing.name} · {dispVal}{dispUnit}
+                                      {ing.name} · {ing.quantity.value}{ing.quantity.unit}
                                     </button>
                                   );
                                 })}
@@ -902,10 +716,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                           </tr>
                         ) : (
                           stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => {
-                            const scaledIng = isScaled ? scaling.scaledMap.get(ing.ingredientId) : null;
-                            const dispVal  = scaledIng ? scaledIng.scaledValue : ing.quantity.value;
-                            const dispUnit = scaledIng ? scaledIng.scaledUnit  : ing.quantity.unit;
-                            const changed  = scaledIng && (scaledIng.scaledValue !== ing.quantity.value || scaledIng.scaledUnit !== ing.quantity.unit);
                             return (
                               <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: rowIdx === 0 ? 'top' : 'middle' }}>
                                 {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} /></td>}
@@ -913,17 +723,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                   <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
                                 </td>
                                 <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                                  {isScaled && changed ? (
-                                    <span>
-                                      <span style={{ textDecoration: 'line-through', color: MUT, marginRight: 4, fontSize: 10 }}>{ing.quantity.value}</span>
-                                      <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{dispVal}</span>
-                                    </span>
-                                  ) : dispVal}
-                                  {scaledIng?.scalingNote && (
-                                    <span title={scaledIng.scalingNote} style={{ marginLeft: 4, fontFamily: MONO, fontSize: 9, color: 'var(--accent)', cursor: 'help' }}>ⓘ</span>
-                                  )}
+                                  {ing.quantity.value}
                                 </td>
-                                <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{dispUnit}</td>
+                                <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                                 {rowIdx === 0 && (
                                   <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}>
                                     <ToolCell settings={step.applianceSettings} />
@@ -978,21 +780,10 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
           <div className="flex items-center border border-[var(--border)]">
             <button onClick={() => changeServings(-1)} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">−</button>
             <span className="flex-1 text-center font-mono tabular-nums text-[13px]">
-              {scaling.status === 'loading' ? <Loader2 size={11} className="animate-spin mx-auto" /> : servings}
+              {servings}
             </span>
             <button onClick={() => changeServings(+1)} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">+</button>
           </div>
-          {!canScale && (
-            <p className="mt-2 font-mono text-[9px] text-[var(--muted)] leading-relaxed">
-              Scaling unavailable for this recipe
-            </p>
-          )}
-          {isScaled && (
-            <button onClick={() => { setServings(recipe.servings); setScaling({ status: 'idle', scaledMap: new Map(), methodChanges: false, methodNote: null, divergenceScore: 0, targetServings: recipe.servings }); }}
-              className="mt-2 w-full font-mono text-[10px] text-[var(--muted)] hover:text-[var(--accent)] transition-colors text-left">
-              ↩ Reset to {recipe.servings}
-            </button>
-          )}
         </PanelSection>
         <PanelSection title="Recipe Information">
           <table className="w-full text-[11px]">
@@ -1016,7 +807,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         <div className="flex items-center border border-[var(--border)] flex-shrink-0">
           <button onClick={() => changeServings(-1)} className="w-7 h-7 font-mono text-[var(--muted)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">−</button>
           <span className="px-2 font-mono tabular-nums text-[12px]">
-            {scaling.status === 'loading' ? <Loader2 size={10} className="animate-spin" /> : servings}
+            {servings}
           </span>
           <button onClick={() => changeServings(+1)} className="w-7 h-7 font-mono text-[var(--muted)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">+</button>
         </div>
