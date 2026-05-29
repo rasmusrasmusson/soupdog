@@ -22,7 +22,7 @@ interface ScaledIngredient {
 interface ScaleResponse {
   variantId:        string;
   baseServings:     number;
-  targetServings:   string;
+  targetServings:   number;
   scalingFactor:    number;
   divergenceScore:  number;       // 0–1: how different is this from the base recipe
   methodChanges:    boolean;      // true if the method itself needs to change at this scale
