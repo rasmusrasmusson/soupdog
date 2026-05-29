@@ -127,7 +127,7 @@ export async function POST(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-5-20251001',
+        model:      'claude-sonnet-4-6',
         max_tokens: 2000,
         system: `You are a professional chef and food scientist specialising in recipe scaling.
 You understand that many ingredients do not scale linearly:
