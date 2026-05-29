@@ -1,7 +1,8 @@
 'use client';
 import React, { useState, use } from 'react';
 import { formatDuration } from '@/lib/utils';
-import { Bookmark, Zap } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
@@ -457,9 +458,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
               {recipe.title}
             </h1>
-            <button className="flex items-center gap-1.5 border border-[var(--border)] px-3 py-1.5 text-[11px] font-mono text-[var(--fg)] hover:border-[var(--accent)] transition-colors flex-shrink-0">
-              <Bookmark size={11} strokeWidth={1.5} /> Bookmark
-            </button>
+            <BookmarkButton canonicalId={recipe.id} />
           </div>
           <div className="hidden md:grid border border-[var(--border)] text-[11px]"
             style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
