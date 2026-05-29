@@ -1,8 +1,7 @@
 'use client';
-import React, { useState, use } from 'react';
+import React, { useState, useEffect, use } from 'react';
 import { formatDuration } from '@/lib/utils';
 import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
@@ -54,6 +53,58 @@ function ApplianceBadge({ settings }: { settings: ApplianceStepSettings }) {
         </span>
       )}
     </div>
+  );
+}
+
+// ── Bookmark button ───────────────────────────────────────────
+function BookmarkButton({ canonicalId }: { canonicalId: string }) {
+  const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/my/saved-recipes')
+      .then(r => r.ok ? r.json() : [])
+      .then((list: any[]) => {
+        setSaved(list.some((s: any) => s.canonicalId === canonicalId));
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [canonicalId]);
+
+  const toggle = async () => {
+    if (loading) return;
+    setLoading(true);
+    if (saved) {
+      await fetch(`/api/my/saved-recipes/${canonicalId}`, { method: 'DELETE' });
+      setSaved(false);
+    } else {
+      await fetch('/api/my/saved-recipes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ canonicalId }),
+      });
+      setSaved(true);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <button onClick={toggle}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        border: `1px solid ${saved ? 'var(--accent)' : 'var(--border)'}`,
+        padding: '6px 12px', fontSize: 11, cursor: 'pointer',
+        fontFamily: 'var(--font-mono)', background: saved ? 'var(--accent-subtle)' : 'transparent',
+        color: saved ? 'var(--accent)' : 'var(--fg)',
+        flexShrink: 0, transition: 'all 0.15s', opacity: loading ? 0.6 : 1,
+      }}
+      title={saved ? 'Remove from saved' : 'Save recipe'}
+    >
+      {saved
+        ? <><BookmarkCheck size={11} strokeWidth={1.5} /> Saved</>
+        : <><Bookmark size={11} strokeWidth={1.5} /> Save</>
+      }
+    </button>
   );
 }
 
