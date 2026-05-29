@@ -297,7 +297,7 @@ export default function MyRecipesPage() {
                   <TH>Cuisine</TH>
                   <TH>Time</TH>
                   <TH>Saved</TH>
-                  <TH last></TH>
+                  <TH last>{''}</TH>
                 </tr>
               </thead>
               <tbody>
