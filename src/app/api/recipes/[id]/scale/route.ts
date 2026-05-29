@@ -155,7 +155,7 @@ Respond ONLY with valid JSON. No markdown, no explanation outside the JSON.`,
     if (!response.ok) {
       const err = await response.text();
       console.error('[scale] Anthropic API error:', err);
-      return NextResponse.json({ error: 'AI scaling service unavailable' }, { status: 502 });
+      return NextResponse.json({ error: 'AI scaling service unavailable', detail: err, anthropicStatus: response.status }, { status: 502 });
     }
 
     const data = await response.json();
