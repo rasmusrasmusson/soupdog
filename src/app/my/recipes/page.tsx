@@ -32,12 +32,12 @@ function TabBtn({ active, onClick, children }: {
   return (
     <button onClick={onClick} style={{
       ...MONO, fontSize: 11, padding: '6px 16px',
+      border: 'none',
       borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
       color: active ? 'var(--accent)' : 'var(--muted)',
-      background: 'none', border: 'none',
-      borderBottom: active ? '2px solid var(--accent)' : '2px solid transparent',
+      background: 'none',
       cursor: 'pointer', fontWeight: active ? 600 : 400,
-      textTransform: 'uppercase', letterSpacing: '0.12em',
+      textTransform: 'uppercase' as const, letterSpacing: '0.12em',
       transition: 'all 0.15s',
     }}>
       {children}
