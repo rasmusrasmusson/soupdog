@@ -5,29 +5,22 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useLocale } from '@/lib/locale-context';
 import {
-  BookOpen, Leaf, Zap, Package, FolderOpen,
-  BookMarked, Heart, Clock, Info, Code2,
-  HelpCircle, GitFork, ChevronLeft, ChevronRight, X
+  BookOpen, Leaf, Zap, Wrench,
+  BookMarked, Info, HelpCircle, ChevronLeft, ChevronRight
 } from 'lucide-react';
 
 const publicNav = [
   { key: 'recipes',     href: '/recipes',     icon: BookOpen },
   { key: 'ingredients', href: '/ingredients', icon: Leaf },
   { key: 'techniques',  href: '/techniques',  icon: Zap },
-  { key: 'collections', href: '/collections', icon: FolderOpen },
-  { key: 'equipment',   href: '/equipment',   icon: Package },
+  { key: 'tools',       href: '/equipment',   icon: Wrench },
 ];
 const privateNav = [
   { key: 'myRecipes',  href: '/my/recipes',   icon: BookMarked },
-  { key: 'cookbooks',  href: '/my/cookbooks', icon: BookOpen },
-  { key: 'favorites',  href: '/my/favorites', icon: Heart },
-  { key: 'history',    href: '/my/history',   icon: Clock },
 ];
 const metaNav = [
-  { key: 'aboutSoupdog', href: '/about',     icon: Info },
-  { key: 'api',          href: '/api-docs',  icon: Code2 },
-  { key: 'help',         href: '/help',      icon: HelpCircle },
-  { key: 'changelog',    href: '/changelog', icon: GitFork },
+  { key: 'aboutSoupdog', href: '/about', icon: Info },
+  { key: 'help',         href: '/help',  icon: HelpCircle },
 ];
 
 function NavItem({ navKey, href, icon: Icon, collapsed }: {
@@ -104,7 +97,7 @@ export function Sidebar() {
 
       {!collapsed && (
         <div className="px-3 py-2.5 border-t border-[var(--border)] text-[9px] text-[var(--muted)] font-mono">
-          {t('footer.copyright')}
+          © {new Date().getFullYear()} Soupdog
         </div>
       )}
     </aside>

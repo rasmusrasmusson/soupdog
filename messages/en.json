@@ -4,18 +4,12 @@
     "recipes": "Recipes",
     "ingredients": "Ingredients",
     "techniques": "Techniques",
-    "collections": "Collections",
-    "equipment": "Equipment",
     "myKitchen": "My Kitchen",
     "myRecipes": "My Recipes",
-    "cookbooks": "Cookbooks",
-    "favorites": "Favorites",
-    "history": "History",
     "about": "About",
     "aboutSoupdog": "About Soupdog",
-    "api": "API",
     "help": "Help",
-    "changelog": "Change Log"
+    "tools": "Tools"
   },
   "header": {
     "search": "Search recipes, ingredients, techniques...",
@@ -135,7 +129,5 @@
     "zh": "中文",
     "ar": "العربية"
   },
-  "footer": {
-    "copyright": "© 2025 soupdog"
-  }
+  "footer": {}
 }
