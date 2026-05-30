@@ -127,7 +127,7 @@ function buildToolLabelMap(steps: RecipeStep[]): Map<string, string> {
   const instanceOrder: { instanceId: string; name: string }[] = [];
   const seen = new Set<string>();
   for (const step of steps) {
-    const tools: any[] = step.applianceSettings?.stepTools ?? [];
+    const tools: any[] = (step.applianceSettings as any)?.stepTools ?? [];
     for (const t of tools) {
       const iid = t.instanceId ?? t.id ?? t.name;
       if (!iid || seen.has(iid)) continue;
