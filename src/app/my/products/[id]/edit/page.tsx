@@ -3,7 +3,7 @@
 // Register a product — an ingredient with is_product=true
 // Cooking instructions are added as regular recipes in the recipe editor
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Loader2, Check, ChevronRight } from 'lucide-react';
 
