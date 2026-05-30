@@ -72,7 +72,7 @@ Respond with ONLY valid JSON, no markdown, no backticks.
           "temperatureCelsius": number or null,
           "taskFamily": "cut" | "move" | "heat_dry" | "heat_wet" | "heat_machine" | "mix" | "passive" | "prepare" | "finish",
           "stepIngredients": ["ingredient name"],
-          "stepTools": ["tool name"]
+          "stepTools": ["large pot"]  // REQUIRED — always include at least one tool per step. Use [] only for purely mental steps like tasting.
         }
       ]
     }
@@ -91,8 +91,18 @@ taskFamily guide:
 - finish: garnish, serve, dress, plate
 
 TOOL NAMING RULES — critical for the system to track physical tools:
-Before writing steps, decide which physical tools are used in the recipe and assign them consistent names.
+stepTools is REQUIRED for almost every step. Steps without tools are rare (only mental actions like tasting).
+Before writing steps, decide which physical tools are used and assign them consistent names.
 Use the EXACT SAME string every time a step uses the same physical tool.
+
+EXAMPLE — correct tool assignment for pasta:
+step: "Fill large pot with water"     → stepTools: ["large pot"]
+step: "Add salt to water"             → stepTools: ["large pot"]  // same pot!
+step: "Bring water to a boil"         → stepTools: ["large pot"]  // same pot!
+step: "Add spaghetti to boiling water"→ stepTools: ["large pot"]  // same pot!
+step: "Crack eggs into mixing bowl"   → stepTools: ["mixing bowl"]
+step: "Whisk eggs and cheese"         → stepTools: ["mixing bowl", "whisk"]
+step: "Fry guanciale"                 → stepTools: ["frying pan"]
 
 Examples of consistent naming:
 - One pot used throughout: every step says "large pot" (not "pot" sometimes and "large pot" other times)
