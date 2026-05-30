@@ -1360,6 +1360,30 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
     ? groupInstances.find(i => i.instanceId === tool.instanceId)
     : undefined;
 
+  // Auto-register imported tools that have a name but no instanceId
+  const autoRegistered = React.useRef(false);
+  React.useEffect(() => {
+    if (autoRegistered.current) return;
+    if (!tool.name || tool.instanceId) return;
+    autoRegistered.current = true;
+    // Check if a compatible instance already exists
+    const nameLower = tool.name.toLowerCase();
+    const existing = groupInstances.find(i => i.name.toLowerCase() === nameLower);
+    if (existing) {
+      onChange({ ...tool, instanceId: existing.instanceId, equipmentId: existing.equipmentId || tool.equipmentId });
+    } else {
+      const newInst: ToolInstance = {
+        instanceId:  uid(),
+        equipmentId: tool.equipmentId || '',
+        name:        tool.name,
+        label:       generateInstanceLabel(tool.name, groupInstances),
+        colorIndex:  groupInstances.length % INSTANCE_COLORS.length,
+      };
+      onAddInstance(newInst);
+      onChange({ ...tool, instanceId: newInst.instanceId });
+    }
+  }, []);
+
   // Match connected Panasonic by slug or id
   const connectedAppliance = APPLIANCES.find(a =>
     a.id === tool.applianceId ||
