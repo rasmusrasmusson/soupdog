@@ -198,7 +198,7 @@ export default function NewProductPage() {
     setSaving(true);
     setSaveErr(null);
     try {
-      const res = await fetch('/api/my/products', {
+      const res = await fetch('/api/ingredients', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -534,7 +534,7 @@ export default function NewProductPage() {
                 onChange={e => setParentSearch(e.target.value)}
                 placeholder="Search ingredients... e.g. Frozen pizza"
               />
-              {parentResults.length > 0 && (
+              {(parentResults.length > 0 || parentSearch.length >= 2) && (
                 <div style={{ position: 'absolute', top: '100%', left: 0, right: 0,
                   border: B, background: 'var(--surface)', zIndex: 20,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
@@ -551,6 +551,28 @@ export default function NewProductPage() {
                       {r.name}
                     </button>
                   ))}
+                  {parentSearch.length >= 2 && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await fetch('/api/ingredients', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: parentSearch.trim() }),
+                          });
+                          if (res.ok) {
+                            const d = await res.json();
+                            setParentId(d.id); setParentName(parentSearch.trim()); setParentSearch(''); setParentResults([]);
+                          }
+                        } catch {}
+                      }}
+                      style={{ width: '100%', padding: '9px 12px',
+                        borderTop: B, background: 'none', border: 'none', cursor: 'pointer',
+                        textAlign: 'left' as const, fontFamily: MONO, fontSize: 12,
+                        color: 'var(--accent)' }}>
+                      + Create &quot;{parentSearch}&quot; as new category
+                    </button>
+                  )}
                 </div>
               )}
             </div>
