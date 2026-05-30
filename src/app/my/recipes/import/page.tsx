@@ -126,6 +126,8 @@ export default function ImportRecipePage() {
 
             if (event.type === 'chunk') {
               setStreamingText(t => t + event.text);
+            } else if (event.type === 'progress') {
+              // modification in progress — spinner stays, no text shown
             } else if (event.type === 'done') {
               setStreamingText('');
               if (event.responseType === 'answer') {

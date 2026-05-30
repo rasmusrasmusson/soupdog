@@ -162,8 +162,22 @@ export async function POST(req: NextRequest) {
                 if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
                   const text = event.delta.text;
                   fullText += text;
-                  // Stream text chunks to client
-                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text })}\n\n`));
+                  // Only stream visible text if we can tell it's an answer (starts with {"type":"answer")
+                  // For modifications (JSON recipe data), don't stream — show spinner instead
+                  const looksLikeAnswer = fullText.trimStart().startsWith('{"type":"answer"') || 
+                                          (!fullText.trimStart().startsWith('{') && fullText.length > 0);
+                  if (looksLikeAnswer) {
+                    // Extract just the answer text portion for streaming display
+                    const answerMatch = fullText.match(/"answer"\s*:\s*"([\s\S]*?)(?:"(?:\s*\})?$|$)/);
+                    const visibleText = answerMatch ? answerMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"') : '';
+                    if (visibleText) {
+                      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text: visibleText })}\n\n`));
+                    }
+                  }
+                  // For modifications, just send a progress ping so client shows spinner
+                  else if (fullText.trimStart().startsWith('{"type":"modification"') || fullText.trimStart().startsWith('{"type": "modification"')) {
+                    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'progress' })}\n\n`));
+                  }
                 }
               } catch { /* skip malformed events */ }
             }

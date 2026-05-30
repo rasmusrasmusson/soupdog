@@ -226,6 +226,8 @@ export default function EditRecipePage() {
 
             if (event.type === 'chunk') {
               setStreamingText(t => t + event.text);
+            } else if (event.type === 'progress') {
+              // modification in progress — spinner stays
             } else if (event.type === 'done') {
               setStreamingText('');
               if (event.responseType === 'answer') {
@@ -381,21 +383,21 @@ export default function EditRecipePage() {
                       </div>
                     );
                   })}
-                  {(chatLoading || streamingText) && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {streamingText ? (
-                        <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
-                          padding: '6px 10px', maxWidth: '75%', fontFamily: MONO, fontSize: 10,
-                          color: 'var(--fg)', lineHeight: 1.6 }}>
-                          {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-                          <Loader2 size={11} className="animate-spin" /> Thinking…
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {(chatLoading || streamingText) && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {streamingText ? (
+                          <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                            padding: '6px 10px', maxWidth: '75%', fontFamily: MONO, fontSize: 10,
+                            color: 'var(--fg)', lineHeight: 1.6 }}>
+                            {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+                            <Loader2 size={11} className="animate-spin" /> Thinking…
+                          </div>
+                        )}
+                      </div>
+                    )}
                   {chatError && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
                       border: '1px solid #b45309', background: '#fef3c7', fontFamily: MONO, fontSize: 10, color: '#92400e' }}>
