@@ -4,8 +4,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          X, GripVertical, Zap, Search, BookOpen, PenLine,
-         UtensilsCrossed, Pipette, Flame, Droplets, Microwave,
-         Soup, Hourglass, Scale, ChefHat, Leaf, Wrench } from 'lucide-react';
+         Leaf, Wrench } from 'lucide-react';
+import { SoupdogIcon, type SoupdogIconName } from '@/components/icons/SoupdogIcon';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
@@ -196,16 +196,16 @@ const FAMILY_LABELS: Record<string, string> = {
   finish:       'Finish & Serve',
 };
 
-const FAMILY_ICONS: Record<string, React.ElementType> = {
-  cut:          UtensilsCrossed, // knife work — chop, slice, dice, mince, peel
-  move:         Pipette,         // pour, transfer, strain, drain
-  heat_dry:     Flame,           // roast, sear, fry, grill, toast
-  heat_wet:     Soup,            // boil, simmer, steam, poach, blanch
-  heat_machine: Microwave,       // oven, microwave, sous vide, appliance
-  mix:          Droplets,        // stir, whisk, fold, knead, emulsify
-  passive:      Hourglass,       // rest, marinate, ferment, proof, chill
-  prepare:      Scale,           // measure, weigh, season, wash, preheat
-  finish:       ChefHat,         // plate, garnish, serve, dress
+const FAMILY_ICONS: Record<string, SoupdogIconName> = {
+  cut:          'cut_prepare',     // knife work — chop, slice, dice, mince, peel
+  move:         'move_transfer',   // pour, transfer, strain, drain
+  heat_dry:     'cook_dry_heat',   // roast, sear, fry, grill, toast
+  heat_wet:     'cook_wet_heat',   // boil, simmer, steam, poach, blanch
+  heat_machine: 'cook_appliance',  // oven, microwave, sous vide, appliance
+  mix:          'mix_combine',     // stir, whisk, fold, knead, emulsify
+  passive:      'passive_process', // rest, marinate, ferment, proof, chill
+  prepare:      'measure_clean',   // measure, weigh, season, wash, preheat
+  finish:       'finish_serve',    // plate, garnish, serve, dress
 };
 
 const FAMILY_ORDER = ['cut','move','heat_dry','heat_wet','heat_machine','mix','passive','prepare','finish'];
@@ -467,7 +467,7 @@ function TaskPickerInline({ selected, equipmentTree, onSelect, onFreeText }: {
                 }}
                 className="hover:border-[var(--accent)] hover:bg-[var(--accent-subtle)]"
               >
-                {(() => { const Icon = FAMILY_ICONS[node.family]; return Icon ? <Icon size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null; })()}
+                {FAMILY_ICONS[node.family] ? <SoupdogIcon name={FAMILY_ICONS[node.family]} size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null}
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 9,
                   textTransform: 'uppercase', letterSpacing: '0.08em',
@@ -711,7 +711,7 @@ function TaskPicker({ onSelect, onClose, onFreeText }: {
                   }}
                   className="hover:border-[var(--accent)] hover:bg-[var(--accent-subtle)]"
                 >
-                  {(() => { const Icon = FAMILY_ICONS[node.family]; return Icon ? <Icon size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null; })()}
+                  {FAMILY_ICONS[node.family] ? <SoupdogIcon name={FAMILY_ICONS[node.family]} size={14} style={{ color: 'var(--muted)', margin: '0 auto 4px' }} /> : null}
                   <span style={{
                     fontFamily: 'var(--font-mono)', fontSize: 9,
                     textTransform: 'uppercase', letterSpacing: '0.1em',
