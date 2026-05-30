@@ -1361,8 +1361,8 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
     : undefined;
 
   // Auto-register imported tools that have a name but no instanceId
-  const autoRegistered = React.useRef(false);
-  React.useEffect(() => {
+  const autoRegistered = useRef(false);
+  useEffect(() => {
     if (autoRegistered.current) return;
     if (!tool.name || tool.instanceId) return;
     autoRegistered.current = true;
