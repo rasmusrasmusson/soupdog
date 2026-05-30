@@ -354,7 +354,7 @@ export default function EditRecipePage() {
       if (newSteps !== prevSteps) changes.push(`${Math.abs(newSteps - prevSteps)} step${Math.abs(newSteps - prevSteps) !== 1 ? 's' : ''} ${newSteps > prevSteps ? 'added' : 'removed'}`);
       if (changes.length === 0) changes.push('recipe updated');
 
-      setChatHistory(prev => [...prev, { user: message, recipe: updated, assistantSummary: changes.join(', ') }]);
+      setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: updated, assistantSummary: changes.join(', ') }]);
       setImportJson(updated);
 
       // Convert to editor initial and remount the editor
