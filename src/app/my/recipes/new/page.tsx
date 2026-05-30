@@ -9,65 +9,76 @@ import { RecipeEditor } from '@/components/recipe/RecipeEditor';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 
 // Convert imported recipe JSON into RecipeEditor initial format
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
 function importToInitial(imp: any) {
   if (!imp) return undefined;
 
-  // Build steps from groups — each step gets stepIngredients linked by name
   const allIngredients = imp.ingredients ?? [];
 
+  // Track which ingredient names are used in steps (to avoid duplicating them)
+  const usedInSteps = new Set<string>();
+
+  // Build steps — groupLabel is what initialToGroups uses to group them
   const steps = (imp.groups ?? []).flatMap((group: any) =>
-    (group.steps ?? []).map((step: any, si: number) => ({
-      id:           `import-${Math.random().toString(36).slice(2)}`,
-      instruction:  step.instruction ?? '',
-      durationMinutes: step.durationMinutes ?? 0,
-      temperatureCelsius: 0,
-      taskFamily:   step.taskFamily ?? null,
-      taskId:       null,
-      taskName:     null,
-      group:        group.outputName ?? '',
-      stepIngredients: (step.stepIngredients ?? []).map((name: string) => {
+    (group.steps ?? []).map((step: any) => {
+      const stepIngs = (step.stepIngredients ?? []).map((name: string) => {
+        usedInSteps.add(name.toLowerCase().trim());
         const match = allIngredients.find((i: any) =>
           i.name.toLowerCase().trim() === name.toLowerCase().trim()
         );
         return {
-          ingredientId:   null,
-          ingredientSlug: null,
+          id:            uid(),
+          ingredientId:  '',
           name,
-          quantityValue:  match?.quantityValue ?? 0,
-          quantityUnit:   match?.quantityUnit ?? 'g',
-          prepNote:       match?.prepNote ?? '',
-          optional:       match?.optional ?? false,
+          quantityValue: match?.quantityValue ?? 0,
+          quantityUnit:  match?.quantityUnit ?? 'g',
+          prepNote:      match?.prepNote ?? '',
         };
-      }),
-      stepTools: [],
-    }))
+      });
+      return {
+        id:                 uid(),
+        instruction:        step.instruction ?? '',
+        durationMinutes:    step.durationMinutes ?? 0,
+        temperatureCelsius: 0,
+        taskFamily:         step.taskFamily ?? undefined,
+        taskId:             undefined,
+        taskName:           undefined,
+        groupLabel:         group.outputName || '__default__',
+        stepIngredients:    stepIngs,
+        stepTools:          [],
+      };
+    })
   );
 
-  const ingredients = allIngredients.map((ing: any) => ({
-    ingredientId:   null,
-    ingredientSlug: null,
-    name:           ing.name,
-    quantityValue:  ing.quantityValue ?? 0,
-    quantityUnit:   ing.quantityUnit ?? 'g',
-    prepNote:       ing.prepNote ?? '',
-    optional:       ing.optional ?? false,
-  }));
+  // Only include ingredients NOT already referenced in a step
+  const ingredients = allIngredients
+    .filter((ing: any) => !usedInSteps.has(ing.name.toLowerCase().trim()))
+    .map((ing: any) => ({
+      ingredientId:   '',
+      ingredientSlug: '',
+      name:           ing.name,
+      quantityValue:  ing.quantityValue ?? 0,
+      quantityUnit:   ing.quantityUnit ?? 'g',
+      prepNote:       ing.prepNote ?? '',
+      optional:       ing.optional ?? false,
+    }));
 
   return {
-    canonicalId:      '',
-    versionId:        '',
-    title:            imp.title ?? '',
-    description:      imp.description ?? '',
-    cuisine:          imp.cuisine ?? '',
-    tags:             (imp.tags ?? []).join(', '),
-    servings:         imp.servings ?? 4,
-    difficulty:       imp.difficulty ?? 'medium',
-    totalTimeMinutes: imp.totalTimeMinutes ?? 0,
+    canonicalId:       '',
+    versionId:         '',
+    title:             imp.title ?? '',
+    description:       imp.description ?? '',
+    cuisine:           imp.cuisine ?? '',
+    tags:              (imp.tags ?? []).join(', '),
+    servings:          imp.servings ?? 4,
+    difficulty:        imp.difficulty ?? 'medium',
+    totalTimeMinutes:  imp.totalTimeMinutes ?? 0,
     activeTimeMinutes: imp.activeTimeMinutes ?? 0,
     ingredients,
     steps,
-    equipmentIds:     [],
-    isPublished:      false,
+    equipmentIds:      [],
+    isPublished:       false,
   };
 }
 
