@@ -26,7 +26,7 @@ export async function GET() {
     .from('ingredients')
     .select(`
       id, slug, name, brand, barcode, net_weight_g,
-      base_state, base_temp_celsius, packaging_type,
+      base_temp_celsius, packaging_type,
       source, confidence, is_verified,
       parent_id,
       created_at
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     packaging_type, producer, country_of_origin,
     ingredient_list, allergens, additives,
     nutrition_per_100g, off_id,
-    base_state, base_temp_celsius,
+    base_temp_celsius,
     parent_id, linked_canonical_id,
     source = 'human_authored',
     confidence = 1.0,
@@ -83,7 +83,6 @@ export async function POST(req: NextRequest) {
       additives:          additives          ?? null,
       nutrition_per_100g: nutrition_per_100g ?? null,
       off_id:             off_id             ?? null,
-      base_state:         base_state         ?? 'ambient',
       base_temp_celsius:  base_temp_celsius  ?? null,
       parent_id:          parent_id          ?? null,
       linked_canonical_id: linked_canonical_id ?? null,
