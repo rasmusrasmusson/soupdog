@@ -96,12 +96,13 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
 export default function NewRecipePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const isImport   = typeof window !== 'undefined'
-    ? new URLSearchParams(window.location.search).get('import') === '1'
-    : false;
   const [saving,    setSaving]   = useState(false);
   const [initial,   setInitial]  = useState<any>(undefined);
-  const [importing, setImporting] = useState(isImport);
+  // Start in importing state if ?import=1 — prevents editor mounting before data ready
+  const [importing, setImporting] = useState(() =>
+    typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('import') === '1'
+  );
 
   // Load import data from sessionStorage if redirected from import page
   useEffect(() => {
