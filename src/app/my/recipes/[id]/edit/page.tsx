@@ -558,7 +558,7 @@ export default function EditRecipePage() {
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)',
                   marginTop: 5, opacity: 0.7 }}>
-                  Enter to send · Shift+Enter for new line · Editor reloads after each change
+                  Ask questions or give instructions · Enter to send
                 </div>
               </div>
             )}

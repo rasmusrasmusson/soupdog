@@ -409,7 +409,7 @@ export default function ImportRecipePage() {
                 {chatHistory.length === 0 && !chatLoading && (
                   <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
                     lineHeight: 1.6, textAlign: 'center', padding: '20px 0' }}>
-                    Ask Soupdog to adjust the recipe.<br />
+                    Ask questions or give instructions — 'What can I substitute for guanciale?' or 'Make it vegetarian'<br />
                     <span style={{ opacity: 0.7 }}>Changes update the preview in real time.</span>
                   </div>
                 )}
@@ -485,7 +485,7 @@ export default function ImportRecipePage() {
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={handleChatKeyDown}
-                  placeholder="Ask Soupdog…"
+                  placeholder="Ask a question or give an instruction…"
                   rows={2}
                   disabled={chatLoading}
                   style={{
@@ -517,7 +517,7 @@ export default function ImportRecipePage() {
               {/* Hint */}
               <div style={{ padding: '6px 12px', borderTop: B,
                 fontFamily: MONO, fontSize: 9, color: 'var(--muted)', opacity: 0.7 }}>
-                Enter to send · Shift+Enter for new line
+                Ask questions or give instructions · Enter to send
               </div>
             </div>
           </div>
