@@ -109,17 +109,17 @@ export default function NewRecipePage() {
     let imp: any;
     try { imp = JSON.parse(raw); } catch { return; }
 
-    // Hardcoded family → representative task (from seeded global tasks)
+    // Hardcoded family → representative task (real UUIDs from tasks table)
     const familyMap = new Map<string, any>([
-      ['cut',          { id: 'task-cut-0000-0000-0000-000000000001', name: 'Chop',         family: 'cut',          task_type: 'human'   }],
-      ['move',         { id: 'task-move-0000-0000-0000-000000000004', name: 'Transfer',    family: 'move',         task_type: 'human'   }],
-      ['heat_dry',     { id: 'task-hdry-0000-0000-0000-000000000006', name: 'Sauté',       family: 'heat_dry',     task_type: 'human'   }],
-      ['heat_wet',     { id: 'task-hwet-0000-0000-0000-000000000001', name: 'Boil',        family: 'heat_wet',     task_type: 'human'   }],
-      ['heat_machine', { id: 'task-hmac-0000-0000-0000-000000000001', name: 'Bake (oven)', family: 'heat_machine', task_type: 'machine' }],
-      ['mix',          { id: 'task-mix-0000-0000-0000-000000000006',  name: 'Mix',         family: 'mix',          task_type: 'human'   }],
-      ['passive',      { id: 'task-pass-0000-0000-0000-000000000001', name: 'Rest',        family: 'passive',      task_type: 'passive' }],
-      ['prepare',      { id: 'task-prep-0000-0000-0000-000000000001', name: 'Measure',     family: 'prepare',      task_type: 'human'   }],
-      ['finish',       { id: 'task-fin-0000-0000-0000-000000000002',  name: 'Serve',       family: 'finish',       task_type: 'human'   }],
+      ['cut',          { id: '31132714-14a6-4f36-984a-308683d059bb', name: 'Brunoise',     family: 'cut',          task_type: 'human'   }],
+      ['finish',       { id: 'a9574682-9da1-4da8-a130-fe6ac78d7b06', name: 'Deglaze',     family: 'finish',       task_type: 'human'   }],
+      ['heat_dry',     { id: '4a6f0b2d-7679-4b03-8983-1ad41ccb5e2b', name: 'Bake',        family: 'heat_dry',     task_type: 'machine' }],
+      ['heat_machine', { id: '3c2ec27b-2c93-4363-a322-a5180c21af72', name: 'Combi steam', family: 'heat_machine', task_type: 'machine' }],
+      ['heat_wet',     { id: '2f600f22-57f9-4d86-abbd-f06146a50626', name: 'Blanch',      family: 'heat_wet',     task_type: 'human'   }],
+      ['mix',          { id: 'cdc58767-e42a-4206-9c27-2c82e3fdc395', name: 'Beat',        family: 'mix',          task_type: 'human'   }],
+      ['move',         { id: '45b0f2b6-7897-4b28-91a8-03f5a43dbc10', name: 'Add',         family: 'move',         task_type: 'human'   }],
+      ['passive',      { id: '193d41a3-521c-41c0-88f5-e44a48005d2e', name: 'Brine',       family: 'passive',      task_type: 'passive' }],
+      ['prepare',      { id: '24a9b746-e572-41e2-b601-cdfad7850c33', name: 'Measure',     family: 'prepare',      task_type: 'human'   }],
     ]);
 
     setInitial(importToInitial(imp, familyMap));
