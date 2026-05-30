@@ -305,13 +305,14 @@ export default function EditRecipePage() {
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-          {/* Left — Recipe editor (takes remaining width) */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Left — Recipe editor (takes remaining width, padded so content doesn't go under sidebar) */}
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 300 }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
           </div>
 
-          {/* Right — Chat panel (fixed width sidebar) */}
-          <div style={{ width: 300, flexShrink: 0, borderLeft: B, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', background: 'var(--surface)', display: 'flex', flexDirection: 'column' }}>
+          {/* Right — Chat panel (fixed right sidebar) */}
+          <div style={{ width: 300, flexShrink: 0 }}>
+            <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
             {/* Header */}
             <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -442,6 +443,7 @@ export default function EditRecipePage() {
               <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', opacity: 0.6 }}>
                 Enter to send · Shift+Enter for new line
               </div>
+            </div>
             </div>
           </div>
         </div>
