@@ -1,58 +1,51 @@
 // src/app/api/recipes/import/chat/route.ts
-// POST — conversational recipe assistant
-// Handles both questions (returns text answer) and instructions (returns updated recipe)
+// POST — streaming conversational recipe assistant
+// Haiku for questions/answers, Sonnet for modifications
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-const SYSTEM_PROMPT = `You are a recipe assistant for Soupdog, a structured food execution platform.
+const HAIKU_MODEL  = 'claude-haiku-4-5-20251001';
+const SONNET_MODEL = 'claude-sonnet-4-6';
 
-The user may ask questions about the recipe OR give instructions to modify it.
-You must detect the intent and respond accordingly.
+const SYSTEM_PROMPT = `You are Soupdog's assistant — a knowledgeable helper for the Soupdog food platform.
 
-QUESTIONS (answer only, do not modify the recipe):
-- "What can I use instead of X?"
-- "Why do we do X?"
-- "What wine pairs with this?"
-- "How do I know when X is done?"
-- "What does X mean?"
-- Any question asking for information, explanation, or suggestions
+You help users with:
+- Recipes: modifications, substitutions, scaling, techniques, timing
+- Food & cooking: ingredients, flavour pairings, cooking methods, cuisines
+- Nutrition: calories, macros, dietary needs, allergens, health considerations
+- Kitchen appliances & equipment: usage, settings, recommendations
+- Soupdog platform: how to use the site, import recipes, edit recipes, save recipes, navigation
 
-INSTRUCTIONS (modify the recipe):
-- "Make it vegetarian"
-- "Scale to 6 servings"
-- "Add timing to each step"
-- "Replace guanciale with pancetta"
-- Any imperative sentence asking for a change
+You do NOT help with topics unrelated to food, cooking, nutrition, appliances, or Soupdog. If asked about anything else, politely say you can only help with food and Soupdog-related questions.
 
-Respond with a JSON object. The structure depends on intent:
+The user is currently working on a recipe. They may ask questions OR give instructions to modify it.
+Detect the intent and respond in one of two ways:
 
-FOR QUESTIONS — return:
-{
-  "type": "answer",
-  "answer": "Your conversational response here. Be helpful and specific to this recipe."
-}
+FOR QUESTIONS / CONVERSATIONAL (anything asking for information, explanation, advice, or suggestions):
+Return JSON: { "type": "answer", "answer": "your helpful response here" }
+Keep answers concise and practical. Use plain text — no markdown bold or bullets in the answer string.
 
-FOR INSTRUCTIONS — return:
+FOR MODIFICATION INSTRUCTIONS (imperative requests to change the recipe):
+Return JSON:
 {
   "type": "modification",
-  "requiresConfirmation": true/false,
-  "changeSummary": "Short description of what changed",
-  "recipe": { ...complete updated recipe JSON... }
+  "requiresConfirmation": boolean,
+  "changeSummary": "short plain-English description of what changed",
+  "recipe": { ...complete updated recipe... }
 }
 
-requiresConfirmation should be true for large/destructive changes (substituting main ingredients,
-changing cooking method, restructuring the recipe, affecting more than ~4 steps).
-It should be false for small precise changes (scaling, adding timing, single ingredient tweak).
+requiresConfirmation = true for large/destructive changes (substituting main ingredients, changing cooking method, restructuring the recipe, affecting more than ~4 steps).
+requiresConfirmation = false for small precise changes (scaling, adding timing, single tweak).
 
-SOUPDOG RECIPE RULES (for modifications only):
-- Each step is ONE ATOMIC ACTION (one verb, one action)
+SOUPDOG RECIPE RULES (modifications only):
+- Each step is ONE ATOMIC ACTION
 - stepTools REQUIRED for almost every step — consistent names across steps
 - taskFamily: cut | move | heat_dry | heat_wet | heat_machine | mix | passive | prepare | finish
-- All quantities metric, duration in minutes, temperature in Celsius
+- Quantities metric, duration in minutes, temperature in Celsius
 - Always update top-level ingredients array to match steps
 
-Recipe JSON structure for modifications:
+Recipe JSON structure:
 {
   "title": string,
   "description": string,
@@ -77,17 +70,29 @@ Recipe JSON structure for modifications:
   }]
 }
 
-Respond with ONLY valid JSON — no markdown, no backticks, no text outside the JSON.`;
+Respond with ONLY valid JSON — no markdown, no backticks.`;
+
+// Heuristic: is this likely a question or a modification?
+function looksLikeQuestion(message: string): boolean {
+  const q = message.trim().toLowerCase();
+  if (q.endsWith('?')) return true;
+  const questionStarters = ['what', 'why', 'how', 'when', 'where', 'which', 'who', 'can i', 'could i', 'is it', 'are there', 'do i', 'should i', 'tell me', 'explain', 'help me understand'];
+  return questionStarters.some(s => q.startsWith(s));
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!user) return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401 });
 
   const { recipe, message, history } = await req.json();
   if (!recipe || !message?.trim()) {
-    return NextResponse.json({ error: 'recipe and message required' }, { status: 400 });
+    return new Response(JSON.stringify({ error: 'recipe and message required' }), { status: 400 });
   }
+
+  // Choose model based on likely intent — Haiku for questions, Sonnet for modifications
+  const useHaiku = looksLikeQuestion(message);
+  const model    = useHaiku ? HAIKU_MODEL : SONNET_MODEL;
 
   const messages: { role: 'user' | 'assistant'; content: string }[] = [];
 
@@ -115,50 +120,101 @@ export async function POST(req: NextRequest) {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 6000,
+        model,
+        max_tokens: useHaiku ? 2000 : 6000,
         system:     SYSTEM_PROMPT,
         messages,
+        stream:     true,
       }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      console.error('[import/chat] error:', err);
-      return NextResponse.json({ error: 'Request failed' }, { status: 502 });
+      console.error('[chat] Anthropic error:', err);
+      return new Response(JSON.stringify({ error: 'Request failed' }), { status: 502 });
     }
 
-    const data = await res.json();
-    const raw  = data.content?.[0]?.text ?? '';
-    const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    // Stream the response back, collecting the full text as we go
+    // We send a special header so the client knows to expect streaming
+    const encoder = new TextEncoder();
 
-    let parsed: any;
-    try {
-      parsed = JSON.parse(clean);
-    } catch {
-      console.error('[import/chat] JSON parse failed:', clean.slice(0, 200));
-      return NextResponse.json({ error: 'Could not parse response' }, { status: 500 });
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        const reader = res.body!.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
 
-    if (parsed.type === 'answer') {
-      return NextResponse.json({ type: 'answer', answer: parsed.answer });
-    }
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-    // modification
-    const updated = parsed.recipe ?? parsed;
-    if (!updated.title || !Array.isArray(updated.ingredients) || !Array.isArray(updated.groups)) {
-      return NextResponse.json({ error: 'Incomplete recipe structure' }, { status: 500 });
-    }
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n').filter(l => l.trim());
 
-    return NextResponse.json({
-      type:                 'modification',
-      recipe:               updated,
-      requiresConfirmation: parsed.requiresConfirmation ?? false,
-      changeSummary:        parsed.changeSummary ?? 'Recipe updated',
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const data = line.slice(6);
+              if (data === '[DONE]') continue;
+
+              try {
+                const event = JSON.parse(data);
+                if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+                  const text = event.delta.text;
+                  fullText += text;
+                  // Stream text chunks to client
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'chunk', text })}\n\n`));
+                }
+              } catch { /* skip malformed events */ }
+            }
+          }
+
+          // Parse the complete response and send the final parsed result
+          const clean = fullText.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+
+          let parsed: any;
+          try {
+            parsed = JSON.parse(clean);
+          } catch {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Could not parse response' })}\n\n`));
+            controller.close();
+            return;
+          }
+
+          if (parsed.type === 'answer') {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', responseType: 'answer', answer: parsed.answer })}\n\n`));
+          } else {
+            const updated = parsed.recipe ?? parsed;
+            if (!updated.title || !Array.isArray(updated.ingredients) || !Array.isArray(updated.groups)) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Incomplete recipe structure' })}\n\n`));
+            } else {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({
+                type:                 'done',
+                responseType:         'modification',
+                recipe:               updated,
+                requiresConfirmation: parsed.requiresConfirmation ?? false,
+                changeSummary:        parsed.changeSummary ?? 'Recipe updated',
+              })}\n\n`));
+            }
+          }
+        } catch (err) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`));
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type':  'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection':    'keep-alive',
+      },
     });
 
   } catch (err: any) {
-    console.error('[import/chat]', err);
-    return NextResponse.json({ error: err.message ?? 'Request failed' }, { status: 500 });
+    console.error('[chat]', err);
+    return new Response(JSON.stringify({ error: err.message ?? 'Request failed' }), { status: 500 });
   }
 }

@@ -191,38 +191,67 @@ export default function EditRecipePage() {
     } finally { setSaving(false); }
   };
 
+  const [streamingText, setStreamingText] = useState('');
+
   const handleChatSend = async () => {
     if (!chatInput.trim() || chatLoading || !importJson) return;
     const message = chatInput.trim();
     setChatInput(''); setChatError(null); setChatLoading(true); setPending(null);
+    setStreamingText('');
 
     try {
       const res = await fetch('/api/recipes/import/chat', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipe: importJson, message, history: chatHistory }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Request failed');
 
-      if (data.type === 'answer') {
-        setChatHistory(prev => [...prev, { type: 'answer', user: message, recipe: importJson, assistantSummary: data.answer }]);
-      } else {
-        const updated = data.recipe;
-        updated._canonicalId = importJson._canonicalId; updated._versionId = importJson._versionId;
-        updated._equipmentIds = importJson._equipmentIds; updated._isPublished = importJson._isPublished;
+      if (!res.ok) throw new Error('Request failed');
 
-        setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: updated, assistantSummary: data.changeSummary }]);
+      const reader  = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-        if (data.requiresConfirmation) {
-          setPending({ recipe: updated, summary: data.changeSummary });
-        } else {
-          setImportJson(updated);
-          setEditorInitial(importToInitial(updated));
-          setEditorKey(k => k + 1);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === 'chunk') {
+              setStreamingText(t => t + event.text);
+            } else if (event.type === 'done') {
+              setStreamingText('');
+              if (event.responseType === 'answer') {
+                setChatHistory(prev => [...prev, { type: 'answer', user: message, recipe: importJson, assistantSummary: event.answer }]);
+              } else {
+                const updated = event.recipe;
+                updated._canonicalId = importJson._canonicalId; updated._versionId = importJson._versionId;
+                updated._equipmentIds = importJson._equipmentIds; updated._isPublished = importJson._isPublished;
+                setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: updated, assistantSummary: event.changeSummary }]);
+                if (event.requiresConfirmation) {
+                  setPending({ recipe: updated, summary: event.changeSummary });
+                } else {
+                  setImportJson(updated);
+                  setEditorInitial(importToInitial(updated));
+                  setEditorKey(k => k + 1);
+                }
+              }
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (parseErr) { /* skip malformed events */ }
         }
       }
     } catch (err: any) {
       setChatError(err.message ?? 'Request failed');
+      setStreamingText('');
     } finally {
       setChatLoading(false);
       chatInputRef.current?.focus();
@@ -352,9 +381,19 @@ export default function EditRecipePage() {
                       </div>
                     );
                   })}
-                  {chatLoading && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-                      <Loader2 size={11} className="animate-spin" /> Thinking…
+                  {(chatLoading || streamingText) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {streamingText ? (
+                        <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                          padding: '6px 10px', maxWidth: '75%', fontFamily: MONO, fontSize: 10,
+                          color: 'var(--fg)', lineHeight: 1.6 }}>
+                          {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+                          <Loader2 size={11} className="animate-spin" /> Thinking…
+                        </div>
+                      )}
                     </div>
                   )}
                   {chatError && (

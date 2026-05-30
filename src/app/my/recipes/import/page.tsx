@@ -87,12 +87,15 @@ export default function ImportRecipePage() {
     }
   };
 
+  const [streamingText, setStreamingText] = useState('');
+
   const handleChatSend = async () => {
     if (!chatInput.trim() || chatLoading || !preview) return;
     const message = chatInput.trim();
     setChatInput('');
     setChatError(null);
     setChatLoading(true);
+    setStreamingText('');
     setPending(null);
 
     try {
@@ -101,20 +104,48 @@ export default function ImportRecipePage() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ recipe: preview, message, history: chatHistory }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Request failed');
 
-      if (data.type === 'answer') {
-        setChatHistory(prev => [...prev, { type: 'answer', user: message, recipe: preview, assistantSummary: data.answer }]);
-      } else if (data.requiresConfirmation) {
-        setPending({ recipe: data.recipe, summary: data.changeSummary });
-        setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: data.recipe, assistantSummary: data.changeSummary }]);
-      } else {
-        setPreview(data.recipe);
-        setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: data.recipe, assistantSummary: data.changeSummary }]);
+      if (!res.ok) throw new Error('Request failed');
+
+      const reader  = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === 'chunk') {
+              setStreamingText(t => t + event.text);
+            } else if (event.type === 'done') {
+              setStreamingText('');
+              if (event.responseType === 'answer') {
+                setChatHistory(prev => [...prev, { type: 'answer', user: message, recipe: preview, assistantSummary: event.answer }]);
+              } else if (event.requiresConfirmation) {
+                setPending({ recipe: event.recipe, summary: event.changeSummary });
+                setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: event.recipe, assistantSummary: event.changeSummary }]);
+              } else {
+                setPreview(event.recipe);
+                setChatHistory(prev => [...prev, { type: 'modification', user: message, recipe: event.recipe, assistantSummary: event.changeSummary }]);
+              }
+            } else if (event.type === 'error') {
+              throw new Error(event.error);
+            }
+          } catch (parseErr) { /* skip malformed events */ }
+        }
       }
     } catch (err: any) {
       setChatError(err.message ?? 'Request failed');
+      setStreamingText('');
     } finally {
       setChatLoading(false);
       chatInputRef.current?.focus();
@@ -382,9 +413,19 @@ export default function ImportRecipePage() {
                   );
                 })}
 
-                {chatLoading && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-                    <Loader2 size={11} className="animate-spin" /> Thinking…
+                {(chatLoading || streamingText) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {streamingText ? (
+                      <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                        padding: '8px 12px', maxWidth: '85%', fontFamily: MONO, fontSize: 10,
+                        color: 'var(--fg)', lineHeight: 1.6 }}>
+                        {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+                        <Loader2 size={11} className="animate-spin" /> Thinking…
+                      </div>
+                    )}
                   </div>
                 )}
 
