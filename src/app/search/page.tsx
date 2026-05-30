@@ -9,13 +9,14 @@ import Link from 'next/link';
 const TYPES = ['All', 'Recipes', 'Ingredients', 'Techniques', 'Equipment'] as const;
 type ContentType = typeof TYPES[number];
 
-// Map UI type labels to search_index type values
-const TYPE_MAP: Record<ContentType, string | null> = {
+// Map UI labels to search_index type values
+// Ingredients now includes both 'ingredient' and 'product' types
+const TYPE_MAP: Record<ContentType, string[] | null> = {
   All:        null,
-  Recipes:    'recipe',
-  Ingredients:'ingredient',
-  Techniques: 'technique',
-  Equipment:  'equipment',
+  Recipes:    ['recipe'],
+  Ingredients:['ingredient', 'product'],
+  Techniques: ['technique'],
+  Equipment:  ['equipment'],
 };
 
 interface SearchResult {
@@ -25,8 +26,13 @@ interface SearchResult {
   title: string;
 }
 
+// Detect if a query looks like a barcode (8-14 digits)
+function isBarcode(q: string) {
+  return /^\d{8,14}$/.test(q.trim());
+}
+
 export default function SearchPage() {
-  const router      = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
 
   const [query,       setQuery]       = useState('');
@@ -34,33 +40,65 @@ export default function SearchPage() {
   const [results,     setResults]     = useState<SearchResult[]>([]);
   const [loading,     setLoading]     = useState(false);
 
-  // Sync state from URL params on load
+  // Sync state from URL params on load — default 'All' not 'Recipes'
   useEffect(() => {
-    setQuery(searchParams.get('q') ?? '');
-    setContentType((searchParams.get('type') as ContentType) ?? 'Recipes');
+    const q    = searchParams.get('q') ?? '';
+    const type = searchParams.get('type') as ContentType | null;
+    setQuery(q);
+    setContentType(type ?? 'All');
   }, [searchParams]);
 
-  // Run search against Supabase search_index
   const runSearch = useCallback(async (q: string, type: ContentType) => {
-    if (!q.trim()) {
-      setResults([]);
-      return;
-    }
+    if (!q.trim()) { setResults([]); return; }
     setLoading(true);
     try {
       const supabase = createClient();
-      let db = (supabase as any)
+      const db = supabase as any;
+
+      // ── Barcode lookup ──────────────────────────────────────
+      if (isBarcode(q)) {
+        const { data: barcodeResult } = await db
+          .from('ingredients')
+          .select('id, slug, name, is_product')
+          .eq('barcode', q.trim())
+          .eq('is_product', true)
+          .limit(5);
+
+        if (barcodeResult?.length) {
+          setResults(barcodeResult.map((r: any) => ({
+            id:    r.id,
+            slug:  r.slug,
+            type:  'product',
+            title: r.name,
+          })));
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ── Full-text search ────────────────────────────────────
+      let query = db
         .from('search_index')
         .select('id, slug, type, title')
         .textSearch('tsv', q, { type: 'websearch', config: 'english' })
         .limit(50);
 
       const mapped = TYPE_MAP[type];
-      if (mapped) db = db.eq('type', mapped);
+      if (mapped) query = query.in('type', mapped);
 
-      const { data, error } = await db;
+      const { data, error } = await query;
       if (error) throw error;
-      setResults(data || []);
+
+      // Deduplicate by id (search_index may have duplicates if ingredient
+      // exists multiple times)
+      const seen = new Set<string>();
+      const deduped = (data ?? []).filter((r: SearchResult) => {
+        if (seen.has(r.id)) return false;
+        seen.add(r.id);
+        return true;
+      });
+
+      setResults(deduped);
     } catch (err) {
       console.error('Search error:', err);
       setResults([]);
@@ -69,7 +107,6 @@ export default function SearchPage() {
     }
   }, []);
 
-  // Re-run search whenever query or type changes
   useEffect(() => {
     runSearch(query, contentType);
   }, [query, contentType, runSearch]);
@@ -78,6 +115,7 @@ export default function SearchPage() {
     setQuery(value);
     const params = new URLSearchParams();
     if (value) params.set('q', value);
+    // Only set type param if not 'All' (so 'All' is the default)
     if (contentType !== 'All') params.set('type', contentType);
     router.push(`/search${params.size > 0 ? `?${params.toString()}` : ''}`, { scroll: false });
   };
@@ -90,15 +128,20 @@ export default function SearchPage() {
     router.push(`/search${params.size > 0 ? `?${params.toString()}` : ''}`, { scroll: false });
   };
 
-  // URL for a result based on its type
   const resultUrl = (r: SearchResult) => {
     switch (r.type) {
       case 'recipe':     return `/recipes/${r.slug}`;
-      case 'ingredient': return `/ingredients/${r.slug}`;
+      case 'ingredient':
+      case 'product':    return `/ingredients/${r.slug}`;
       case 'technique':  return `/techniques/${r.slug}`;
       case 'equipment':  return `/equipment/${r.slug}`;
       default:           return `/${r.slug}`;
     }
+  };
+
+  const typeLabel = (type: string) => {
+    if (type === 'product') return 'Product';
+    return type.charAt(0).toUpperCase() + type.slice(1);
   };
 
   return (
@@ -112,7 +155,7 @@ export default function SearchPage() {
           autoFocus
           value={query}
           onChange={e => handleQueryChange(e.target.value)}
-          placeholder="Search recipes, ingredients, techniques, equipment…"
+          placeholder="Search recipes, ingredients, products, barcodes…"
           className="flex-1 bg-transparent text-sm text-[var(--fg)] placeholder:text-[var(--muted)] outline-none"
         />
         <kbd className="text-[10px] font-mono border border-[var(--border)] px-1.5 py-0.5 rounded text-[var(--muted)]">ESC</kbd>
@@ -168,7 +211,7 @@ export default function SearchPage() {
                   </td>
                   <td className="py-3 text-right">
                     <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">
-                      {r.type}
+                      {typeLabel(r.type)}
                     </span>
                   </td>
                 </tr>
@@ -179,7 +222,7 @@ export default function SearchPage() {
       ) : (
         <div className="py-12 text-center">
           <p className="font-mono text-[12px] text-[var(--muted)] uppercase tracking-widest">
-            {query ? 'No results found' : 'Enter a search query'}
+            {query ? 'No results found' : 'Enter a search term or barcode'}
           </p>
         </div>
       )}
