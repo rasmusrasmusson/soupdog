@@ -11,7 +11,7 @@ import type { RecipeFormData } from '@/lib/recipe-actions';
 // Convert imported recipe JSON into RecipeEditor initial format
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function importToInitial(imp: any) {
+function importToInitial(imp: any, familyMap?: Map<string, any>) {
   if (!imp) return undefined;
 
   const allIngredients = imp.ingredients ?? [];
@@ -36,14 +36,16 @@ function importToInitial(imp: any) {
           prepNote:      match?.prepNote ?? '',
         };
       });
+      const matchedTask = familyMap?.get(step.taskFamily ?? '');
       return {
         id:                 uid(),
         instruction:        step.instruction ?? '',
         durationMinutes:    step.durationMinutes ?? 0,
         temperatureCelsius: 0,
-        taskFamily:         step.taskFamily ?? undefined,
-        taskId:             undefined,
-        taskName:           undefined,
+        taskFamily:         matchedTask?.family ?? step.taskFamily ?? undefined,
+        taskId:             matchedTask?.id ?? undefined,
+        taskName:           matchedTask?.name ?? undefined,
+        taskType:           matchedTask?.task_type ?? undefined,
         groupLabel:         group.outputName || '__default__',
         stepIngredients:    stepIngs,
         stepTools:          [],
@@ -90,18 +92,26 @@ export default function NewRecipePage() {
 
   // Load import data from sessionStorage if redirected from import page
   useEffect(() => {
-    if (searchParams.get('import') === '1') {
-      try {
-        const raw = sessionStorage.getItem('soupdog_import');
-        if (raw) {
-          const imp = JSON.parse(raw);
-          setInitial(importToInitial(imp));
-          sessionStorage.removeItem('soupdog_import');
+    if (searchParams.get('import') !== '1') return;
+    const raw = sessionStorage.getItem('soupdog_import');
+    if (!raw) return;
+    sessionStorage.removeItem('soupdog_import');
+
+    let imp: any;
+    try { imp = JSON.parse(raw); } catch { return; }
+
+    // Fetch tasks so we can pre-select the right task per family
+    fetch('/api/tasks')
+      .then(r => r.ok ? r.json() : [])
+      .then((tasks: any[]) => {
+        // Build family → first matching task map
+        const familyMap = new Map<string, any>();
+        for (const t of (tasks ?? [])) {
+          if (t.family && !familyMap.has(t.family)) familyMap.set(t.family, t);
         }
-      } catch (e) {
-        console.warn('Failed to load import data', e);
-      }
-    }
+        setInitial(importToInitial(imp, familyMap));
+      })
+      .catch(() => setInitial(importToInitial(imp)));
   }, [searchParams]);
 
   const handleSave = async (data: RecipeFormData) => {
