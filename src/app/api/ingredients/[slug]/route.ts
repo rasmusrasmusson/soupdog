@@ -22,11 +22,39 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  // ── Count recipes using this ingredient ──────────────────────
-  const { count: recipeCount } = await db
+  // ── Fetch recipes using this ingredient ──────────────────────
+  const { data: vIngredients } = await db
     .from('version_ingredients')
-    .select('version_id', { count: 'exact', head: true })
-    .eq('ingredient_id', ing.id);
+    .select('version_id')
+    .eq('ingredient_id', ing.id)
+    .limit(20);
+
+  let linkedRecipes: any[] = [];
+  const recipeCount = (vIngredients ?? []).length;
+
+  if (vIngredients?.length) {
+    const versionIds = vIngredients.map((v: any) => v.version_id);
+    const { data: versions } = await db
+      .from('recipe_versions')
+      .select('id, title, canonical_id')
+      .in('id', versionIds);
+
+    if (versions?.length) {
+      const canonicalIds = [...new Set(versions.map((v: any) => v.canonical_id))];
+      const { data: canonicals } = await db
+        .from('recipe_canonicals')
+        .select('id, slug, is_published')
+        .in('id', canonicalIds)
+        .eq('is_published', true);
+
+      if (canonicals?.length) {
+        linkedRecipes = canonicals.map((rc: any) => {
+          const v = versions.find((v: any) => v.canonical_id === rc.id);
+          return { id: rc.id, slug: rc.slug, title: v?.title ?? '(untitled)' };
+        });
+      }
+    }
+  }
 
   // ── Fetch siblings (same parent) ─────────────────────────────
   let siblings: any[] = [];
@@ -92,6 +120,7 @@ export async function GET(
     ingredient: {
       ...ing,
       recipeCount:          recipeCount ?? 0,
+      linkedRecipes,
       parent,
       siblings,
       children:             children ?? [],

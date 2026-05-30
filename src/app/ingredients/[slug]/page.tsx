@@ -87,6 +87,7 @@ interface Ingredient {
   siblings:             { id: string; slug: string; name: string }[];
   children:             { id: string; slug: string; name: string }[];
   transformationRecipe?: { title: string; slug: string } | null;
+  linkedRecipes?: { id: string; slug: string; title: string }[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -859,19 +860,21 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
               letterSpacing: '0.18em', color: MUT, marginBottom: 10 }}>
               In recipes
             </div>
-            {ing.recipeCount > 0 ? (
-              <a href={`/search?q=${encodeURIComponent(ing.name)}&type=recipe`}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '8px 12px', border: B, textDecoration: 'none',
-                  background: 'var(--surface)', transition: 'border-color 0.15s',
-                }}
-                className="hover:border-[var(--accent)] transition-colors">
-                <span style={{ fontSize: 12, color: 'var(--fg)' }}>
-                  Recipes ({ing.recipeCount})
-                </span>
-                <ChevronRight size={11} style={{ color: MUT }} />
-              </a>
+            {(ing.linkedRecipes?.length ?? 0) > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {ing.linkedRecipes!.map(r => (
+                  <a key={r.id} href={`/recipes/${r.slug}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', border: B, textDecoration: 'none',
+                      background: 'var(--surface)',
+                    }}
+                    className="hover:border-[var(--accent)] transition-colors">
+                    <span style={{ fontSize: 12, color: 'var(--fg)' }}>{r.title}</span>
+                    <ChevronRight size={11} style={{ color: MUT }} />
+                  </a>
+                ))}
+              </div>
             ) : (
               <span style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>
                 No recipes yet.
