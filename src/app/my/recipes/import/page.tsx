@@ -311,6 +311,63 @@ export default function ImportRecipePage() {
           {/* Bottom action bar */}
         </div>
       )}
+
+      {/* Fixed bottom bar — preview state */}
+      {status === 'done' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
+          <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+            Review the parsed recipe then open in editor to save
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => { setStatus('idle'); setPreview(null); }}
+              style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+              ← Try again
+            </button>
+            <button
+              onClick={handleOpenInEditor}
+              style={{ display: 'flex', alignItems: 'center', gap: 7,
+                padding: '8px 20px', border: 'none',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>
+              Open in editor <ChevronRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Fixed bottom bar — input state */}
+      {status !== 'done' && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
+          <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+            {status === 'loading' ? 'Parsing recipe…' : 'Paste a recipe and click Import with AI'}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => router.back()}
+              style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={status === 'loading' || !text.trim()}
+              style={{
+                padding: '8px 20px', border: 'none',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: MONO, fontSize: 11,
+                cursor: status === 'loading' || !text.trim() ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 7,
+                opacity: status === 'loading' || !text.trim() ? 0.6 : 1,
+              }}>
+              {status === 'loading'
+                ? <><Loader2 size={12} className="animate-spin" /> Parsing…</>
+                : <><Sparkles size={12} /> Import with AI</>
+              }
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
