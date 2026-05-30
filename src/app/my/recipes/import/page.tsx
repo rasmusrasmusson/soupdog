@@ -4,7 +4,8 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Sparkles, AlertTriangle, ChevronRight } from 'lucide-react';
+import { Loader2, Sparkles, AlertTriangle, ChevronRight, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
 
 const MONO = 'var(--font-mono)';
 const B    = '1px solid var(--border)';
@@ -72,29 +73,25 @@ export default function ImportRecipePage() {
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '24px 24px 80px' }}>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 24px 80px' }}>
 
-      {/* Header */}
-      <div style={{ marginBottom: 28, borderBottom: B, paddingBottom: 16 }}>
-        <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase',
-          letterSpacing: '0.22em', color: 'var(--muted)', marginBottom: 6 }}>
-          My Recipes
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24,
-            fontWeight: 400, margin: 0 }}>Import recipe</h1>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4,
-            fontFamily: MONO, fontSize: 9, padding: '2px 8px',
-            border: '1px solid var(--accent)', color: 'var(--accent)',
-            textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-            <Sparkles size={9} /> AI
-          </span>
-        </div>
-        <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
-          Paste any recipe text — from a website, cookbook, or your own notes.
-          Claude will parse it into Soupdog's structured format for you to review and edit.
-        </p>
+      {/* Breadcrumb */}
+      <div className="border-b border-[var(--border)] px-4 md:px-8 py-3 flex items-center gap-3 -mx-6 mb-8">
+        <Link href="/my/recipes"
+          className="flex items-center gap-1.5 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
+          <ArrowLeft size={12} /> My Recipes
+        </Link>
+        <span className="text-[var(--border)]">/</span>
+        <span className="text-[11px] font-mono text-[var(--fg)] flex items-center gap-1.5">
+          Import recipe <Sparkles size={10} style={{ color: 'var(--accent)' }} />
+        </span>
       </div>
+
+      {/* Description */}
+      <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
+        Paste any recipe text — from a website, cookbook, or your own notes.
+        Claude will parse it into Soupdog's structured format for you to review and edit.
+      </p>
 
       {status !== 'done' && (
         <>
@@ -308,6 +305,12 @@ export default function ImportRecipePage() {
                           {(step.stepIngredients ?? []).length > 0 && (
                             <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>
                               {step.stepIngredients.join(', ')}
+                            </span>
+                          )}
+                          {(step.stepTools ?? []).length > 0 && (
+                            <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)',
+                              border: '1px solid var(--border)', padding: '1px 5px' }}>
+                              🔧 {step.stepTools.join(', ')}
                             </span>
                           )}
                         </div>
