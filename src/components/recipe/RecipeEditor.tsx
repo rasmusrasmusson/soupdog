@@ -2279,7 +2279,7 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
       id: uid(),
       outputName: label === '__default__' ? '' : label,
       outputIngId: '',
-      toolInstances: [],
+      toolInstances: firstStep?.groupToolInstances ?? [],
       steps,
       collapsed: false,
       outputQuantityValue: firstStep?.groupOutputQuantityValue ?? undefined,

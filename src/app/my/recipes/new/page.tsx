@@ -22,51 +22,86 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
   const assignedToStep = new Set<string>();
 
   // Build steps — groupLabel is what initialToGroups uses to group them
-  const steps = (imp.groups ?? []).flatMap((group: any) =>
-    (group.steps ?? []).map((step: any) => {
+  // Also build tool instances per group — same tool name = same instance
+  const steps = (imp.groups ?? []).flatMap((group: any) => {
+    // Build tool instance registry for this group
+    const toolInstanceMap = new Map<string, any>(); // name.lower → ToolInstance
+    let instanceCounter = 0;
+
+    // First pass: collect all unique tool names in this group
+    for (const step of (group.steps ?? [])) {
+      for (const toolName of (step.stepTools ?? [])) {
+        const key = toolName.toLowerCase().trim();
+        if (!toolInstanceMap.has(key)) {
+          const instanceId = uid();
+          const count = instanceCounter + 1;
+          instanceCounter++;
+          toolInstanceMap.set(key, {
+            instanceId,
+            equipmentId: '',
+            name:        toolName,
+            label:       toolName + '  #' + count,
+            colorIndex:  toolInstanceMap.size % 8,
+          });
+        }
+      }
+    }
+
+    // Attach instances to group (stored separately, initialToGroups reads firstStep.groupToolInstances)
+    const toolInstances = Array.from(toolInstanceMap.values());
+
+    return (group.steps ?? []).map((step: any, si: number) => {
       const stepIngs = (step.stepIngredients ?? [])
         .filter((name: string) => {
           const key = name.toLowerCase().trim();
-          if (assignedToStep.has(key)) return false; // already in an earlier step
+          if (assignedToStep.has(key)) return false;
           assignedToStep.add(key);
           return true;
         })
         .map((name: string) => {
-        usedInSteps.add(name.toLowerCase().trim());
-        const match = allIngredients.find((i: any) =>
-          i.name.toLowerCase().trim() === name.toLowerCase().trim()
-        );
+          usedInSteps.add(name.toLowerCase().trim());
+          const match = allIngredients.find((i: any) =>
+            i.name.toLowerCase().trim() === name.toLowerCase().trim()
+          );
+          return {
+            id:            uid(),
+            ingredientId:  '',
+            name,
+            quantityValue: match?.quantityValue ?? 0,
+            quantityUnit:  match?.quantityUnit ?? 'g',
+            prepNote:      match?.prepNote ?? '',
+          };
+        });
+
+      const matchedTask = familyMap?.get(step.taskFamily ?? '');
+
+      // Link step tools to instances
+      const stepTools = (step.stepTools ?? []).map((toolName: string) => {
+        const inst = toolInstanceMap.get(toolName.toLowerCase().trim());
         return {
-          id:            uid(),
-          ingredientId:  '',
-          name,
-          quantityValue: match?.quantityValue ?? 0,
-          quantityUnit:  match?.quantityUnit ?? 'g',
-          prepNote:      match?.prepNote ?? '',
+          id:          uid(),
+          instanceId:  inst?.instanceId,
+          equipmentId: '',
+          name:        toolName,
         };
       });
-      const matchedTask = familyMap?.get(step.taskFamily ?? '');
-      // Map freetext tool names to StepTool objects (no equipmentId — user can link later)
-      const stepTools = (step.stepTools ?? []).map((toolName: string) => ({
-        id:          uid(),
-        equipmentId: '',
-        name:        toolName,
-      }));
+
       return {
-        id:                 uid(),
-        instruction:        step.instruction ?? '',
-        durationMinutes:    step.durationMinutes ?? 0,
-        temperatureCelsius: step.temperatureCelsius ?? 0,
-        taskFamily:         matchedTask?.family ?? step.taskFamily ?? undefined,
-        taskId:             matchedTask?.id ?? undefined,
-        taskName:           matchedTask?.name ?? undefined,
-        taskType:           matchedTask?.task_type ?? undefined,
-        groupLabel:         group.outputName || '__default__',
-        stepIngredients:    stepIngs,
+        id:                  uid(),
+        instruction:         step.instruction ?? '',
+        durationMinutes:     step.durationMinutes ?? 0,
+        temperatureCelsius:  step.temperatureCelsius ?? 0,
+        taskFamily:          matchedTask?.family ?? step.taskFamily ?? undefined,
+        taskId:              matchedTask?.id ?? undefined,
+        taskName:            matchedTask?.name ?? undefined,
+        taskType:            matchedTask?.task_type ?? undefined,
+        groupLabel:          group.outputName || '__default__',
+        groupToolInstances:  si === 0 ? toolInstances : undefined,
+        stepIngredients:     stepIngs,
         stepTools,
       };
-    })
-  );
+    });
+  });
 
   // Only include ingredients NOT already referenced in a step
   const ingredients = allIngredients
