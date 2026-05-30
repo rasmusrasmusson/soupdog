@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff, Sparkles,
+import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
          Loader2, Bookmark, BookmarkX, Sparkles } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 
