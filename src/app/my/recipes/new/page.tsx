@@ -18,11 +18,20 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
 
   // Track which ingredient names are used in steps (to avoid duplicating them)
   const usedInSteps = new Set<string>();
+  // Track which ingredients have been assigned to a step already (avoid double-counting)
+  const assignedToStep = new Set<string>();
 
   // Build steps — groupLabel is what initialToGroups uses to group them
   const steps = (imp.groups ?? []).flatMap((group: any) =>
     (group.steps ?? []).map((step: any) => {
-      const stepIngs = (step.stepIngredients ?? []).map((name: string) => {
+      const stepIngs = (step.stepIngredients ?? [])
+        .filter((name: string) => {
+          const key = name.toLowerCase().trim();
+          if (assignedToStep.has(key)) return false; // already in an earlier step
+          assignedToStep.add(key);
+          return true;
+        })
+        .map((name: string) => {
         usedInSteps.add(name.toLowerCase().trim());
         const match = allIngredients.find((i: any) =>
           i.name.toLowerCase().trim() === name.toLowerCase().trim()
@@ -100,18 +109,20 @@ export default function NewRecipePage() {
     let imp: any;
     try { imp = JSON.parse(raw); } catch { return; }
 
-    // Fetch tasks so we can pre-select the right task per family
-    fetch('/api/tasks')
-      .then(r => r.ok ? r.json() : [])
-      .then((tasks: any[]) => {
-        // Build family → first matching task map
-        const familyMap = new Map<string, any>();
-        for (const t of (tasks ?? [])) {
-          if (t.family && !familyMap.has(t.family)) familyMap.set(t.family, t);
-        }
-        setInitial(importToInitial(imp, familyMap));
-      })
-      .catch(() => setInitial(importToInitial(imp)));
+    // Hardcoded family → representative task (from seeded global tasks)
+    const familyMap = new Map<string, any>([
+      ['cut',          { id: 'task-cut-0000-0000-0000-000000000001', name: 'Chop',         family: 'cut',          task_type: 'human'   }],
+      ['move',         { id: 'task-move-0000-0000-0000-000000000004', name: 'Transfer',    family: 'move',         task_type: 'human'   }],
+      ['heat_dry',     { id: 'task-hdry-0000-0000-0000-000000000006', name: 'Sauté',       family: 'heat_dry',     task_type: 'human'   }],
+      ['heat_wet',     { id: 'task-hwet-0000-0000-0000-000000000001', name: 'Boil',        family: 'heat_wet',     task_type: 'human'   }],
+      ['heat_machine', { id: 'task-hmac-0000-0000-0000-000000000001', name: 'Bake (oven)', family: 'heat_machine', task_type: 'machine' }],
+      ['mix',          { id: 'task-mix-0000-0000-0000-000000000006',  name: 'Mix',         family: 'mix',          task_type: 'human'   }],
+      ['passive',      { id: 'task-pass-0000-0000-0000-000000000001', name: 'Rest',        family: 'passive',      task_type: 'passive' }],
+      ['prepare',      { id: 'task-prep-0000-0000-0000-000000000001', name: 'Measure',     family: 'prepare',      task_type: 'human'   }],
+      ['finish',       { id: 'task-fin-0000-0000-0000-000000000002',  name: 'Serve',       family: 'finish',       task_type: 'human'   }],
+    ]);
+
+    setInitial(importToInitial(imp, familyMap));
   }, [searchParams]);
 
   const handleSave = async (data: RecipeFormData) => {
