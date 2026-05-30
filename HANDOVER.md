@@ -229,3 +229,5 @@ Fixed bottom bar pattern (used on edit, new, import pages):
 | `supabase/migration_v4_consolidate_products.sql` | Products → ingredients merge |
 | `supabase/seed_grocery_taxonomy_v2.sql` | ~80 grocery taxonomy nodes (g- prefix) |
 | `supabase/seed_tasks.sql` | ~40 global tasks |
+
+<!-- build: 2026-05-30 19:03 -->
