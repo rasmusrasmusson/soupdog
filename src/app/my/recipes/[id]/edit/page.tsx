@@ -303,140 +303,147 @@ export default function EditRecipePage() {
       ) : error ? (
         <div className="px-8 py-16 text-[var(--error)] text-[12px] font-mono">{error}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-          {/* Chat panel — always visible */}
-          <div style={{ borderBottom: B, background: 'var(--surface)' }}>
-            <div style={{ maxWidth: 760, padding: '12px 24px 14px' }}>
+          {/* Left — Recipe editor (takes remaining width) */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
+          </div>
 
-              {/* Header */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
-                  Adjust recipe
-                </span>
-                {chatHistory.length > 0 && (
-                  <button onClick={() => { setChatHistory([]); setPending(null); }}
-                    title="Clear history"
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, fontFamily: MONO, fontSize: 9 }}>
-                    <RotateCcw size={10} /> Clear
-                  </button>
-                )}
-              </div>
+          {/* Right — Chat panel (fixed width sidebar) */}
+          <div style={{ width: 300, flexShrink: 0, borderLeft: B, position: 'sticky', top: 0, height: '100vh', overflowY: 'auto', background: 'var(--surface)', display: 'flex', flexDirection: 'column' }}>
 
-              {/* Suggestion chips — only when no history */}
+            {/* Header */}
+            <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
+                Adjust recipe
+              </span>
+              {chatHistory.length > 0 && (
+                <button onClick={() => { setChatHistory([]); setPending(null); }}
+                  title="Clear history"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, fontFamily: MONO, fontSize: 9 }}>
+                  <RotateCcw size={10} /> Clear
+                </button>
+              )}
+            </div>
+
+            {/* Messages area */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Suggestion chips */}
               {chatHistory.length === 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {['Make it vegetarian', 'Scale to 6 servings', 'Break down steps further', 'Add timing to steps', 'Simplify for beginners'].map(s => (
-                    <button key={s} onClick={() => { setChatInput(s); chatInputRef.current?.focus(); }}
-                      style={{ background: 'var(--surface-hover)', border: B, padding: '5px 10px',
-                        cursor: 'pointer', fontFamily: MONO, fontSize: 10, color: 'var(--muted)', transition: 'color 0.15s' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
-                      onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
+                <>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', lineHeight: 1.6, textAlign: 'center', padding: '12px 0' }}>
+                    Ask questions or give instructions — <em>'What can I substitute?'</em> or <em>'Make it vegetarian'</em>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {['Make it vegetarian', 'Scale to 6 servings', 'Break down steps further', 'Add timing to steps', 'Simplify for beginners'].map(s => (
+                      <button key={s} onClick={() => { setChatInput(s); chatInputRef.current?.focus(); }}
+                        style={{ textAlign: 'left', background: 'var(--surface-hover)', border: B, padding: '7px 10px',
+                          cursor: 'pointer', fontFamily: MONO, fontSize: 10, color: 'var(--muted)', transition: 'color 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.color = 'var(--fg)')}
+                        onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
 
               {/* Conversation */}
-              {chatHistory.length > 0 && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10,
-                  maxHeight: 200, overflowY: 'auto' }}>
-                  {chatHistory.map((turn, i) => {
-                    const isPending = pending && i === chatHistory.length - 1;
-                    return (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ alignSelf: 'flex-end', background: 'var(--accent)', color: '#fff',
-                          padding: '5px 9px', maxWidth: '75%', fontFamily: MONO, fontSize: 10, lineHeight: 1.5 }}>
-                          {turn.user}
+              {chatHistory.map((turn, i) => {
+                const isPending = pending && i === chatHistory.length - 1;
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ alignSelf: 'flex-end', background: 'var(--accent)', color: '#fff',
+                      padding: '5px 9px', maxWidth: '85%', fontFamily: MONO, fontSize: 10, lineHeight: 1.5 }}>
+                      {turn.user}
+                    </div>
+                    {isPending ? (
+                      <div style={{ border: '1px solid var(--accent)', background: 'var(--accent-subtle)',
+                        padding: '8px 10px', fontFamily: MONO, fontSize: 10, lineHeight: 1.5 }}>
+                        <div style={{ color: 'var(--fg)', marginBottom: 8 }}>{turn.assistantSummary}</div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={handleApply}
+                            style={{ flex: 1, padding: '5px 0', background: 'var(--accent)', color: '#fff',
+                              border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 10 }}>
+                            Apply
+                          </button>
+                          <button onClick={handleCancel}
+                            style={{ flex: 1, padding: '5px 0', background: 'none', color: 'var(--muted)',
+                              border: B, cursor: 'pointer', fontFamily: MONO, fontSize: 10 }}>
+                            Cancel
+                          </button>
                         </div>
-                        {isPending ? (
-                          <div style={{ border: '1px solid var(--accent)', background: 'var(--accent-subtle)',
-                            padding: '8px 10px', fontFamily: MONO, fontSize: 10, lineHeight: 1.5 }}>
-                            <div style={{ color: 'var(--fg)', marginBottom: 8 }}>{turn.assistantSummary}</div>
-                            <div style={{ display: 'flex', gap: 8 }}>
-                              <button onClick={handleApply}
-                                style={{ flex: 1, padding: '5px 0', background: 'var(--accent)', color: '#fff',
-                                  border: 'none', cursor: 'pointer', fontFamily: MONO, fontSize: 10 }}>
-                                Apply
-                              </button>
-                              <button onClick={handleCancel}
-                                style={{ flex: 1, padding: '5px 0', background: 'none', color: 'var(--muted)',
-                                  border: B, cursor: 'pointer', fontFamily: MONO, fontSize: 10 }}>
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : turn.type === 'answer' ? (
-                          <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
-                            padding: '8px 12px', maxWidth: '85%', fontFamily: MONO, fontSize: 10,
-                            color: 'var(--fg)', lineHeight: 1.6 }}>
-                            {turn.assistantSummary}
-                          </div>
-                        ) : (
-                          <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
-                            padding: '5px 9px', maxWidth: '75%', fontFamily: MONO, fontSize: 10,
-                            color: 'var(--muted)', lineHeight: 1.5 }}>
-                            ✓ {turn.assistantSummary} — editor reloaded
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
-                    {(chatLoading || streamingText) && (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {streamingText ? (
-                          <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
-                            padding: '6px 10px', maxWidth: '75%', fontFamily: MONO, fontSize: 10,
-                            color: 'var(--fg)', lineHeight: 1.6 }}>
-                            {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
-                          </div>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-                            <Loader2 size={11} className="animate-spin" /> Thinking…
-                          </div>
-                        )}
+                    ) : turn.type === 'answer' ? (
+                      <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                        padding: '8px 10px', maxWidth: '85%', fontFamily: MONO, fontSize: 10,
+                        color: 'var(--fg)', lineHeight: 1.6 }}>
+                        {turn.assistantSummary}
+                      </div>
+                    ) : (
+                      <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                        padding: '5px 9px', maxWidth: '85%', fontFamily: MONO, fontSize: 10,
+                        color: 'var(--muted)', lineHeight: 1.5 }}>
+                        ✓ {turn.assistantSummary}
                       </div>
                     )}
-                  {chatError && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
-                      border: '1px solid #b45309', background: '#fef3c7', fontFamily: MONO, fontSize: 10, color: '#92400e' }}>
-                      <AlertTriangle size={10} />{chatError}
+                  </div>
+                );
+              })}
+
+              {(chatLoading || streamingText) && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {streamingText ? (
+                    <div style={{ alignSelf: 'flex-start', background: 'var(--surface-hover)', border: B,
+                      padding: '6px 10px', maxWidth: '85%', fontFamily: MONO, fontSize: 10,
+                      color: 'var(--fg)', lineHeight: 1.6 }}>
+                      {streamingText}<span style={{ opacity: 0.4 }}>▋</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
+                      <Loader2 size={11} className="animate-spin" /> Thinking…
                     </div>
                   )}
-                  <div ref={chatEndRef} />
                 </div>
               )}
 
-              {/* Input row */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              {chatError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+                  border: '1px solid #b45309', background: '#fef3c7', fontFamily: MONO, fontSize: 10, color: '#92400e' }}>
+                  <AlertTriangle size={10} />{chatError}
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input — pinned to bottom of sidebar */}
+            <div style={{ borderTop: B, padding: '10px 12px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', marginBottom: 6 }}>
                 <textarea ref={chatInputRef} value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={handleChatKeyDown}
-                  placeholder="Ask Soupdog…"
-                  rows={1} disabled={chatLoading || !!pending}
+                  placeholder="Ask a question or give an instruction…"
+                  rows={2} disabled={chatLoading || !!pending}
                   style={{ flex: 1, padding: '8px 10px', border: B, background: 'var(--bg)',
                     color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none',
                     resize: 'none', lineHeight: 1.5, opacity: (chatLoading || !!pending) ? 0.5 : 1 }} />
                 <button onClick={handleChatSend}
                   disabled={chatLoading || !chatInput.trim() || !!pending}
-                  style={{ padding: '8px 12px', border: 'none', background: 'var(--accent)', color: '#fff',
+                  style={{ padding: '8px 10px', border: 'none', background: 'var(--accent)', color: '#fff',
                     cursor: (chatLoading || !chatInput.trim() || !!pending) ? 'not-allowed' : 'pointer',
                     opacity: (chatLoading || !chatInput.trim() || !!pending) ? 0.5 : 1,
-                    display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 11, flexShrink: 0 }}>
-                  {chatLoading ? <Loader2 size={12} className="animate-spin" /> : <><Send size={12} /> Send</>}
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {chatLoading ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                 </button>
               </div>
-              {chatHistory.length === 0 && (
-                <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 5, opacity: 0.6 }}>
-                  Enter to send · Shift+Enter for new line · Editor reloads after each change
-                </div>
-              )}
+              <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', opacity: 0.6 }}>
+                Enter to send · Shift+Enter for new line
+              </div>
             </div>
           </div>
-
-          {/* Recipe editor */}
-          <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
         </div>
       )}
     </div>
