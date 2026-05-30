@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          X, GripVertical, Zap, Search, BookOpen, PenLine,
-         Leaf, Wrench } from 'lucide-react';
+         Leaf } from 'lucide-react';
 import { SoupdogIcon, type SoupdogIconName } from '@/components/icons/SoupdogIcon';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
@@ -1457,7 +1457,7 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
               <button onClick={() => setOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
                 className="hover:bg-[var(--accent-subtle)] transition-colors">
-                <Wrench size={9} style={{ color: 'var(--muted)' }} />
+                <SoupdogIcon name="tools" size={9} style={{ color: 'var(--muted)' }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{displayName}</span>
                 {linkedInstance && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {linkedInstance.name}</span>}
               </button>
@@ -1723,7 +1723,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             </div>
           )}
           <button onClick={addTool} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
-            <Wrench size={11} /> Add tool
+            <SoupdogIcon name="tools" size={11} /> Add tool
           </button>
         </div>
 
