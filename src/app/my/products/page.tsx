@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, ExternalLink, Loader2 } from 'lucide-react';
+import { Plus, ExternalLink, Loader2, Pencil } from 'lucide-react';
 
 const MONO = { fontFamily: 'var(--font-mono)' } as const;
 const B    = '1px solid var(--border)';
@@ -109,11 +109,18 @@ export default function MyProductsPage() {
                   {p.packaging_type ?? '—'}
                 </td>
                 <td style={{ padding: '10px 14px' }}>
-                  <Link href={`/products/${p.slug}`}
-                    style={{ display: 'flex', alignItems: 'center', gap: 4,
-                      ...MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
-                    <ExternalLink size={10} /> View
-                  </Link>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <Link href={`/my/products/${p.id}/edit`}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4,
+                        ...MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
+                      <Pencil size={10} /> Edit
+                    </Link>
+                    <Link href={`/products/${p.slug}`}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4,
+                        ...MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
+                      <ExternalLink size={10} /> View
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
