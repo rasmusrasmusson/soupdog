@@ -2260,7 +2260,7 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
     // taskName: use saved value, or fall back to instruction for old saves
     const restoredTaskName = s.taskName?.trim() || (s.taskId && s.instruction?.trim() ? s.instruction.trim() : undefined);
     const restoredInstruction = s.taskId && s.instruction === s.taskName ? '' : (s.instruction || '');
-    gmap.get(label)!.push({
+    const stepObj: any = {
       id: s.id || uid(),
       instruction: restoredInstruction,
       durationMinutes: s.durationMinutes || 0, temperatureCelsius: s.temperatureCelsius || 0,
@@ -2270,7 +2270,10 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
       taskName:   restoredTaskName,
       taskType:   (s.taskType as 'human' | 'machine' | 'passive' | undefined) ?? undefined,
       taskFamily: s.taskFamily ?? undefined,
-    });
+    };
+    // Preserve groupToolInstances for import pre-population
+    if (s.groupToolInstances) stepObj.groupToolInstances = s.groupToolInstances;
+    gmap.get(label)!.push(stepObj);
   }
   const groups: Group[] = [];
   gmap.forEach((steps, label) => {
