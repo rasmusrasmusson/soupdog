@@ -67,6 +67,16 @@ interface Ingredient {
   is_gluten_free?:      boolean;
   brand?:               string;
   manufacturer?:        string;
+  is_product?:          boolean;
+  barcode?:             string;
+  net_weight_g?:        number;
+  serving_size_g?:      number;
+  packaging_type?:      string;
+  producer?:            string;
+  country_of_origin?:   string;
+  ingredient_list?:     string;
+  base_temp_celsius?:   number;
+  off_id?:              string;
   image_url?:           string;
   image_credit?:        string;
   content_reviewed?:    boolean;
@@ -651,6 +661,136 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
               </span>
             </div>
           </Section>
+
+          {/* ── Product information (only when is_product=true) ── */}
+          {ing.is_product && (
+            <Section title="Product information" defaultOpen>
+              <table style={{ width: '100%', borderCollapse: 'collapse', border: B }}>
+                <tbody>
+                  {ing.barcode && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Barcode</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.barcode}</td>
+                    </tr>
+                  )}
+                  {ing.net_weight_g != null && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Net weight</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.net_weight_g}g</td>
+                    </tr>
+                  )}
+                  {ing.serving_size_g != null && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Serving size</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.serving_size_g}g</td>
+                    </tr>
+                  )}
+                  {ing.packaging_type && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Packaging</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.packaging_type}</td>
+                    </tr>
+                  )}
+                  {ing.base_temp_celsius != null && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Storage</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>
+                        {ing.base_temp_celsius <= -15 ? `Frozen (${ing.base_temp_celsius}°C)`
+                          : ing.base_temp_celsius <= 8 ? `Refrigerated (${ing.base_temp_celsius}°C)`
+                          : `Ambient (${ing.base_temp_celsius}°C)`}
+                      </td>
+                    </tr>
+                  )}
+                  {ing.producer && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Producer</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.producer}</td>
+                    </tr>
+                  )}
+                  {ing.country_of_origin && (
+                    <tr style={{ borderTop: B }}>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 10,
+                        textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT,
+                        borderRight: B, whiteSpace: 'nowrap' }}>Country</td>
+                      <td style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 12 }}>{ing.country_of_origin}</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+
+              {/* Ingredient list from packaging */}
+              {ing.ingredient_list && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase',
+                    letterSpacing: '0.15em', color: MUT, marginBottom: 6 }}>
+                    Ingredient list
+                  </div>
+                  <div style={{ padding: '10px 12px', border: B,
+                    fontFamily: MONO, fontSize: 11, color: MUT, lineHeight: 1.7 }}>
+                    {ing.ingredient_list}
+                  </div>
+                </div>
+              )}
+
+              {/* Linked recipes */}
+              {ing.recipeCount > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase',
+                    letterSpacing: '0.15em', color: MUT, marginBottom: 6 }}>
+                    Cooking recipes
+                  </div>
+                  <a href={`/search?q=${encodeURIComponent(ing.name)}&type=recipe`}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '8px 12px', border: B, textDecoration: 'none',
+                      background: 'var(--surface)', color: 'var(--fg)' }}
+                    className="hover:border-[var(--accent)] transition-colors">
+                    <span style={{ fontFamily: MONO, fontSize: 12 }}>
+                      View {ing.recipeCount} recipe{ing.recipeCount !== 1 ? 's' : ''}
+                    </span>
+                    <ExternalLink size={11} style={{ color: MUT }} />
+                  </a>
+                </div>
+              )}
+              {ing.recipeCount === 0 && (
+                <div style={{ marginTop: 12, padding: '16px', border: '1px dashed var(--border)',
+                  textAlign: 'center' }}>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: MUT,
+                    textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
+                    No cooking recipes yet
+                  </div>
+                  <a href="/my/recipes/new"
+                    style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)',
+                      textDecoration: 'none', padding: '5px 12px', border: B }}>
+                    Create a recipe using this product →
+                  </a>
+                </div>
+              )}
+
+              {/* Open Food Facts link */}
+              {ing.off_id && (
+                <div style={{ marginTop: 12 }}>
+                  <a href={`https://world.openfoodfacts.org/product/${ing.off_id}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{ fontFamily: MONO, fontSize: 10, color: MUT,
+                      textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <ExternalLink size={9} /> View on Open Food Facts
+                  </a>
+                </div>
+              )}
+            </Section>
+          )}
 
         </div>
 

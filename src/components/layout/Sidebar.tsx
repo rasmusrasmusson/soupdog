@@ -116,7 +116,7 @@ export function Sidebar() {
         ))}
         <SectionLabel navKey="myKitchen" collapsed={collapsed} />
         <LucideNavItem navKey="myRecipes" href="/my/recipes" icon={BookMarked} collapsed={collapsed} />
-        <LucideNavItem navKey="myProducts" href="/my/products" icon={BookMarked} collapsed={collapsed} />
+        <LucideNavItem navKey="myIngredients" href="/my/ingredients" icon={BookMarked} collapsed={collapsed} />
         <SectionLabel navKey="about" collapsed={collapsed} />
         <LucideNavItem navKey="aboutSoupdog" href="/about" icon={Info} collapsed={collapsed} />
         <LucideNavItem navKey="help" href="/help" icon={HelpCircle} collapsed={collapsed} />
