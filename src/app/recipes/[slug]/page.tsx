@@ -107,8 +107,62 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
   );
 }
 
+// ── Tool label map — built once from all steps ────────────────
+// instanceId → display label (e.g. "Pot #1")
+// Only adds the #N suffix when multiple instances of the same base type exist.
+const SHORT_LABELS: Record<string, string> = {
+  'stock pot': 'Pot', 'large pot': 'Pot', 'saucepan': 'Pan',
+  'frying pan': 'Pan', 'saute pan': 'Pan', 'pan': 'Pan', 'pot': 'Pot',
+  "chef's knife": 'Knife', 'knife': 'Knife', 'wok': 'Wok',
+  'blender': 'Blender', 'stand mixer': 'Mixer', 'food processor': 'Processor',
+  'oven': 'Oven', 'microwave': 'Microwave',
+  'mixing bowl': 'Bowl', 'bowl': 'Bowl',
+  'whisk': 'Whisk', 'spatula': 'Spatula',
+  'colander': 'Colander', 'grater': 'Grater', 'cheese grater': 'Grater',
+  'chopping board': 'Board', 'cutting board': 'Board',
+};
+
+function buildToolLabelMap(steps: RecipeStep[]): Map<string, string> {
+  // First pass: collect unique instanceIds and their names, preserving order
+  const instanceOrder: { instanceId: string; name: string }[] = [];
+  const seen = new Set<string>();
+  for (const step of steps) {
+    const tools: any[] = step.applianceSettings?.stepTools ?? [];
+    for (const t of tools) {
+      const iid = t.instanceId ?? t.id ?? t.name;
+      if (!iid || seen.has(iid)) continue;
+      seen.add(iid);
+      instanceOrder.push({ instanceId: iid, name: t.name ?? '' });
+    }
+  }
+
+  // Second pass: group by base label, count per base
+  const baseCount = new Map<string, number>();
+  for (const { name } of instanceOrder) {
+    const base = SHORT_LABELS[name.toLowerCase().trim()] ?? name;
+    baseCount.set(base, (baseCount.get(base) ?? 0) + 1);
+  }
+
+  // Third pass: assign labels — only add #N if base appears more than once
+  const baseIndex = new Map<string, number>();
+  const labelMap = new Map<string, string>();
+  for (const { instanceId, name } of instanceOrder) {
+    const base = SHORT_LABELS[name.toLowerCase().trim()] ?? name;
+    const count = baseCount.get(base) ?? 1;
+    if (count > 1) {
+      const idx = (baseIndex.get(base) ?? 0) + 1;
+      baseIndex.set(base, idx);
+      labelMap.set(instanceId, `${base} #${idx}`);
+    } else {
+      // Single instance — use the raw name as-is (e.g. "chopping board")
+      labelMap.set(instanceId, name);
+    }
+  }
+  return labelMap;
+}
+
 // ── Tool/equipment cell ───────────────────────────────────────
-function ToolCell({ settings }: { settings: any }) {
+function ToolCell({ settings, toolLabelMap }: { settings: any; toolLabelMap?: Map<string, string> }) {
   if (!settings) return <span style={{ color: 'var(--muted)' }}>—</span>;
 
   if (settings.applianceId) {
@@ -136,21 +190,23 @@ function ToolCell({ settings }: { settings: any }) {
   }
 
   if (Array.isArray(settings.stepTools) && settings.stepTools.length > 0) {
-    const tool = settings.stepTools[0];
-    const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
     return (
-      <div>
-        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{tool.name}</span>
-        {hasSettings && tool.applianceModeId && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-            {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
-          </span>
-        )}
-        {settings.stepTools.length > 1 && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-            +{settings.stepTools.length - 1} more
-          </span>
-        )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {settings.stepTools.map((tool: any, i: number) => {
+          const iid = tool.instanceId ?? tool.id ?? tool.name;
+          const displayName = toolLabelMap?.get(iid) ?? tool.name ?? '—';
+          const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
+          return (
+            <div key={i}>
+              <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{displayName}</span>
+              {hasSettings && tool.applianceModeId && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
+                  {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -470,6 +526,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     g.steps.push({ ...step, globalIndex: i });
   });
 
+  const toolLabelMap = buildToolLabelMap(recipe.steps);
   const timing = calculateRecipeTiming(recipe.steps);
   const displayTotalSeconds = recipe.totalTimeSeconds > 0
     ? recipe.totalTimeSeconds
@@ -647,7 +704,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             )}
                             {step.applianceSettings && (
                               <div className="mt-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-                                <ToolCell settings={step.applianceSettings} />
+                                <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
                               </div>
                             )}
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -707,7 +764,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontSize: 11 }}>
-                              <ToolCell settings={step.applianceSettings} />
+                              <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>
                               {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
@@ -728,7 +785,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                 <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                                 {rowIdx === 0 && (
                                   <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}>
-                                    <ToolCell settings={step.applianceSettings} />
+                                    <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
                                   </td>
                                 )}
                                 {rowIdx === 0 && (
