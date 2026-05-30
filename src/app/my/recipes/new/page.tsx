@@ -96,8 +96,12 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
 export default function NewRecipePage() {
   const router       = useRouter();
   const searchParams = useSearchParams();
-  const [saving,  setSaving]  = useState(false);
-  const [initial, setInitial] = useState<any>(undefined);
+  const isImport   = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('import') === '1'
+    : false;
+  const [saving,    setSaving]   = useState(false);
+  const [initial,   setInitial]  = useState<any>(undefined);
+  const [importing, setImporting] = useState(isImport);
 
   // Load import data from sessionStorage if redirected from import page
   useEffect(() => {
@@ -122,7 +126,12 @@ export default function NewRecipePage() {
       ['prepare',      { id: '24a9b746-e572-41e2-b601-cdfad7850c33', name: 'Measure',     family: 'prepare',      task_type: 'human'   }],
     ]);
 
-    setInitial(importToInitial(imp, familyMap));
+    // Use setTimeout to ensure setInitial and the re-render complete
+    // before the editor mounts, so useState initializes with correct data
+    setTimeout(() => {
+      setInitial(importToInitial(imp, familyMap));
+      setImporting(false);
+    }, 0);
   }, [searchParams]);
 
   const handleSave = async (data: RecipeFormData) => {
@@ -156,7 +165,14 @@ export default function NewRecipePage() {
         </span>
       </div>
 
-      <RecipeEditor key={initial ? 'imported' : 'empty'} initial={initial} onSave={handleSave} saving={saving} />
+      {importing ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 64,
+          fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
+          Loading imported recipe…
+        </div>
+      ) : (
+        <RecipeEditor key={initial ? 'imported' : 'empty'} initial={initial} onSave={handleSave} saving={saving} />
+      )}
     </div>
   );
 }
