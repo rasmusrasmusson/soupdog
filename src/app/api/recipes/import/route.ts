@@ -88,7 +88,22 @@ taskFamily guide:
 - mix: stir, whisk, fold, knead, blend, toss, combine
 - passive: rest, marinate, chill, proof, soak, cool
 - prepare: preheat, measure, wash, season (before cooking)
-- finish: garnish, serve, dress, plate`;
+- finish: garnish, serve, dress, plate
+
+TOOL NAMING RULES — critical for the system to track physical tools:
+Before writing steps, decide which physical tools are used in the recipe and assign them consistent names.
+Use the EXACT SAME string every time a step uses the same physical tool.
+
+Examples of consistent naming:
+- One pot used throughout: every step says "large pot" (not "pot" sometimes and "large pot" other times)
+- Two pots: name them "large pot" and "small pot" and use those exact strings consistently
+- Two bowls: "large mixing bowl" and "small bowl"
+- One pan: "frying pan" throughout
+
+Common tool names to use: "large pot", "small pot", "frying pan", "large mixing bowl", "small bowl",
+"whisk", "chef's knife", "colander", "grater", "wooden spoon", "spatula", "ladle", "baking tray"
+
+Never vary spelling or add/remove words between steps for the same tool.`;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
