@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
+import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff, Sparkles,
          Loader2, Bookmark, BookmarkX, Sparkles } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 
@@ -150,6 +150,17 @@ export default function MyRecipesPage() {
           My Recipes
         </h1>
         <div style={{ display: 'flex', gap: 8 }}>
+          <Link href="/my/recipes/import"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              border: B, background: 'none', color: 'var(--fg)',
+              padding: '7px 14px', ...MONO, fontSize: 11,
+              textDecoration: 'none', letterSpacing: '0.08em',
+            }}
+            className="hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+          >
+            <Sparkles size={12} /> Import
+          </Link>
           <Link href="/my/recipes/new"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,

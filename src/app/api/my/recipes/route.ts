@@ -3,6 +3,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
+
+// Find existing ingredient by name (case-insensitive) or create new one
+async function findOrCreateIngredient(db: any, name: string): Promise<string | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  // Check if already exists
+  const { data: existing } = await db
+    .from('ingredients')
+    .select('id')
+    .ilike('name', trimmed)
+    .eq('is_product', false)
+    .limit(1)
+    .single();
+  if (existing?.id) return existing.id;
+  // Create new
+  const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
+  const { data: newIng } = await db
+    .from('ingredients')
+    .insert({ slug, name: trimmed, category: 'other', is_product: false })
+    .select('id')
+    .single();
+  return newIng?.id ?? null;
+}
+
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 }
@@ -155,11 +179,7 @@ export async function POST(req: NextRequest) {
 
         let ingredientId = si.ingredientId;
         if (!ingredientId && si.name?.trim()) {
-          const { data: newIng } = await db
-            .from('ingredients')
-            .insert({ slug: slugify(si.name) + '-' + Date.now().toString(36).slice(-4), name: si.name.trim(), category: 'other' })
-            .select('id').single();
-          ingredientId = newIng?.id;
+          ingredientId = await findOrCreateIngredient(db, si.name);
         }
         if (!ingredientId) continue;
 
@@ -184,11 +204,7 @@ export async function POST(req: NextRequest) {
 
       let ingredientId = ing.ingredientId;
       if (!ingredientId && ing.name?.trim()) {
-        const { data: newIng } = await db
-          .from('ingredients')
-          .insert({ slug: slugify(ing.name) + '-' + Date.now().toString(36).slice(-4), name: ing.name.trim(), category: 'other' })
-          .select('id').single();
-        ingredientId = newIng?.id;
+        ingredientId = await findOrCreateIngredient(db, ing.name);
       }
       if (!ingredientId || stepIngredientIds.has(ingredientId)) continue;
 
