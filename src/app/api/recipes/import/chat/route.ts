@@ -1,48 +1,58 @@
 // src/app/api/recipes/import/chat/route.ts
-// POST — conversational recipe modification via Claude
-// Takes current recipe JSON + conversation history + user message
-// Returns updated recipe JSON
+// POST — conversational recipe assistant
+// Handles both questions (returns text answer) and instructions (returns updated recipe)
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-const SYSTEM_PROMPT = `You are a recipe editing assistant for Soupdog, a structured food execution platform.
+const SYSTEM_PROMPT = `You are a recipe assistant for Soupdog, a structured food execution platform.
 
-You will receive the current recipe as JSON and a user instruction to modify it.
-Return the COMPLETE updated recipe JSON — not just the changed parts.
+The user may ask questions about the recipe OR give instructions to modify it.
+You must detect the intent and respond accordingly.
 
-SOUPDOG RECIPE RULES:
+QUESTIONS (answer only, do not modify the recipe):
+- "What can I use instead of X?"
+- "Why do we do X?"
+- "What wine pairs with this?"
+- "How do I know when X is done?"
+- "What does X mean?"
+- Any question asking for information, explanation, or suggestions
+
+INSTRUCTIONS (modify the recipe):
+- "Make it vegetarian"
+- "Scale to 6 servings"
+- "Add timing to each step"
+- "Replace guanciale with pancetta"
+- Any imperative sentence asking for a change
+
+Respond with a JSON object. The structure depends on intent:
+
+FOR QUESTIONS — return:
+{
+  "type": "answer",
+  "answer": "Your conversational response here. Be helpful and specific to this recipe."
+}
+
+FOR INSTRUCTIONS — return:
+{
+  "type": "modification",
+  "requiresConfirmation": true/false,
+  "changeSummary": "Short description of what changed",
+  "recipe": { ...complete updated recipe JSON... }
+}
+
+requiresConfirmation should be true for large/destructive changes (substituting main ingredients,
+changing cooking method, restructuring the recipe, affecting more than ~4 steps).
+It should be false for small precise changes (scaling, adding timing, single ingredient tweak).
+
+SOUPDOG RECIPE RULES (for modifications only):
 - Each step is ONE ATOMIC ACTION (one verb, one action)
-- stepTools is REQUIRED for almost every step — use consistent tool names across steps
-- taskFamily must be one of: cut | move | heat_dry | heat_wet | heat_machine | mix | passive | prepare | finish
-- All quantities in metric (g, kg, ml, l, tsp, tbsp, cup, piece, clove, slice, pinch, bunch, to taste, as needed)
-- Duration in minutes, temperature in Celsius
+- stepTools REQUIRED for almost every step — consistent names across steps
+- taskFamily: cut | move | heat_dry | heat_wet | heat_machine | mix | passive | prepare | finish
+- All quantities metric, duration in minutes, temperature in Celsius
+- Always update top-level ingredients array to match steps
 
-taskFamily guide:
-- cut: chop, slice, dice, peel, mince, grate, zest
-- move: add to, pour, transfer, drain, strain, plate, remove from heat
-- heat_dry: fry, sear, roast, grill, toast, bake, sauté
-- heat_wet: boil, simmer, steam, poach, blanch, reduce
-- heat_machine: oven, microwave, air fryer, sous vide
-- mix: stir, whisk, fold, knead, blend, toss, combine
-- passive: rest, marinate, chill, proof, soak, cool
-- prepare: preheat, measure, wash, season (before cooking)
-- finish: garnish, serve, dress, plate
-
-TOOL NAMING: Use the EXACT SAME string every time a step uses the same physical tool.
-Example: every step using the same pot must say "large pot" — not "pot" sometimes and "large pot" other times.
-
-When modifying recipes:
-- If making vegetarian/vegan: replace meat/fish with appropriate substitutes, update all affected steps and ingredients
-- If scaling: adjust all quantities, and note that spices (~0.7x), salt (~0.85x), leavening (~0.8x) scale non-linearly
-- If splitting steps: maintain atomic action principle — one verb per step
-- If changing method: update taskFamily and tools accordingly
-- Always update the top-level ingredients array to match what's actually used in steps
-- Keep description and tags consistent with any changes
-
-Respond with ONLY valid JSON — the complete updated recipe. No markdown, no backticks, no explanation outside the JSON.
-
-The JSON structure must be:
+Recipe JSON structure for modifications:
 {
   "title": string,
   "description": string,
@@ -65,7 +75,9 @@ The JSON structure must be:
       "stepTools": string[]
     }]
   }]
-}`;
+}
+
+Respond with ONLY valid JSON — no markdown, no backticks, no text outside the JSON.`;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -73,26 +85,24 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const { recipe, message, history } = await req.json();
-
   if (!recipe || !message?.trim()) {
     return NextResponse.json({ error: 'recipe and message required' }, { status: 400 });
   }
 
-  // Build conversation history for Claude — previous turns show context
   const messages: { role: 'user' | 'assistant'; content: string }[] = [];
 
-  // Add prior turns from history
   for (const turn of (history ?? [])) {
     messages.push({ role: 'user', content: turn.user });
-    messages.push({ role: 'assistant', content: JSON.stringify(turn.recipe) });
+    if (turn.type === 'answer') {
+      messages.push({ role: 'assistant', content: JSON.stringify({ type: 'answer', answer: turn.assistantSummary }) });
+    } else {
+      messages.push({ role: 'assistant', content: JSON.stringify({ type: 'modification', changeSummary: turn.assistantSummary, recipe: turn.recipe }) });
+    }
   }
 
-  // Add the current user message with recipe context
   const userContent = history?.length > 0
-    // Subsequent turns: just the instruction (Claude has context from history)
     ? `${message.trim()}\n\nCurrent recipe JSON:\n${JSON.stringify(recipe)}`
-    // First turn: include the full recipe
-    : `Here is the current recipe:\n\n${JSON.stringify(recipe)}\n\nPlease make this change: ${message.trim()}`;
+    : `Here is the current recipe:\n\n${JSON.stringify(recipe)}\n\nUser message: ${message.trim()}`;
 
   messages.push({ role: 'user', content: userContent });
 
@@ -114,29 +124,38 @@ export async function POST(req: NextRequest) {
 
     if (!res.ok) {
       const err = await res.text();
-      console.error('[import/chat] Anthropic error:', err);
-      return NextResponse.json({ error: 'AI request failed' }, { status: 502 });
+      console.error('[import/chat] error:', err);
+      return NextResponse.json({ error: 'Request failed' }, { status: 502 });
     }
 
     const data = await res.json();
     const raw  = data.content?.[0]?.text ?? '';
-
-    // Strip any accidental markdown fences
     const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 
-    let updated: any;
+    let parsed: any;
     try {
-      updated = JSON.parse(clean);
+      parsed = JSON.parse(clean);
     } catch {
       console.error('[import/chat] JSON parse failed:', clean.slice(0, 200));
-      return NextResponse.json({ error: 'Could not parse AI response' }, { status: 500 });
+      return NextResponse.json({ error: 'Could not parse response' }, { status: 500 });
     }
 
+    if (parsed.type === 'answer') {
+      return NextResponse.json({ type: 'answer', answer: parsed.answer });
+    }
+
+    // modification
+    const updated = parsed.recipe ?? parsed;
     if (!updated.title || !Array.isArray(updated.ingredients) || !Array.isArray(updated.groups)) {
-      return NextResponse.json({ error: 'Incomplete recipe structure returned' }, { status: 500 });
+      return NextResponse.json({ error: 'Incomplete recipe structure' }, { status: 500 });
     }
 
-    return NextResponse.json({ recipe: updated });
+    return NextResponse.json({
+      type:                 'modification',
+      recipe:               updated,
+      requiresConfirmation: parsed.requiresConfirmation ?? false,
+      changeSummary:        parsed.changeSummary ?? 'Recipe updated',
+    });
 
   } catch (err: any) {
     console.error('[import/chat]', err);
