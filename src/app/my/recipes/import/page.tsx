@@ -73,7 +73,7 @@ export default function ImportRecipePage() {
   };
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 24px 100px' }}>
+    <div style={{ maxWidth: 760, margin: '0 auto', padding: '0 24px 80px' }}>
 
       {/* Breadcrumb */}
       <div className="border-b border-[var(--border)] px-4 md:px-8 py-3 flex items-center gap-3 -mx-6 mb-8">
@@ -162,7 +162,31 @@ export default function ImportRecipePage() {
             </div>
           )}
 
-
+          {/* Import button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button onClick={() => router.back()}
+              style={{ padding: '9px 18px', border: B, background: 'none',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+              Cancel
+            </button>
+            <button
+              onClick={handleImport}
+              disabled={status === 'loading' || !text.trim()}
+              style={{
+                padding: '9px 20px', border: 'none',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: MONO, fontSize: 11,
+                cursor: status === 'loading' || !text.trim() ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: 7,
+                opacity: status === 'loading' || !text.trim() ? 0.6 : 1,
+              }}>
+              {status === 'loading' ? (
+                <><Loader2 size={12} className="animate-spin" /> Parsing recipe…</>
+              ) : (
+                <><Sparkles size={12} /> Import with AI</>
+              )}
+            </button>
+          </div>
         </>
       )}
 
@@ -302,13 +326,30 @@ export default function ImportRecipePage() {
           {preview?.groups?.[0]?.steps?.[0] && (
             <div style={{ padding: '8px 12px', background: 'var(--surface-hover)',
               border: B, fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
-              marginBottom: 16 }}>
-              <strong>Debug step 1 tools:</strong>{' '}
+              marginBottom: 12 }}>
+              <strong>Debug — step 1 stepTools:</strong>{' '}
               {JSON.stringify(preview.groups[0].steps[0].stepTools ?? 'none')}
             </div>
           )}
 
-          {/* Bottom action bar */}
+          {/* Actions */}
+          <div style={{ display: 'flex', justifyContent: 'space-between',
+            alignItems: 'center' }}>
+            <button
+              onClick={() => { setStatus('idle'); setPreview(null); }}
+              style={{ padding: '9px 18px', border: B, background: 'none',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
+              ← Try again
+            </button>
+            <button
+              onClick={handleOpenInEditor}
+              style={{ display: 'flex', alignItems: 'center', gap: 7,
+                padding: '9px 20px', border: 'none',
+                background: 'var(--accent)', color: '#fff',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>
+              Open in editor <ChevronRight size={12} />
+            </button>
+          </div>
         </div>
       )}
     </div>
