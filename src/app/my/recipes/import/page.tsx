@@ -168,7 +168,7 @@ export default function ImportRecipePage() {
       {/* Description */}
       <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
         Paste any recipe text — from a website, cookbook, or your own notes.
-        Claude will parse it into Soupdog's structured format for you to review and edit.
+        Soupdog will parse it into Soupdog's structured format for you to review and edit.
       </p>
 
       {/* Input state */}
@@ -388,7 +388,7 @@ export default function ImportRecipePage() {
                 <Sparkles size={12} style={{ color: 'var(--accent)' }} />
                 <span style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600,
                   textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)' }}>
-                  Refine with AI
+                  ADJUST RECIPE
                 </span>
                 {chatHistory.length > 0 && (
                   <button
@@ -409,7 +409,7 @@ export default function ImportRecipePage() {
                 {chatHistory.length === 0 && !chatLoading && (
                   <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
                     lineHeight: 1.6, textAlign: 'center', padding: '20px 0' }}>
-                    Ask Claude to modify the recipe.<br />
+                    Ask Soupdog to adjust the recipe.<br />
                     <span style={{ opacity: 0.7 }}>Changes update the preview in real time.</span>
                   </div>
                 )}
@@ -485,7 +485,7 @@ export default function ImportRecipePage() {
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
                   onKeyDown={handleChatKeyDown}
-                  placeholder="Ask Claude to modify…"
+                  placeholder="Ask Soupdog…"
                   rows={2}
                   disabled={chatLoading}
                   style={{
@@ -557,7 +557,7 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {status === 'loading' ? 'Parsing recipe…' : 'Paste a recipe and click Import with AI'}
+            {status === 'loading' ? 'Parsing recipe…' : 'Paste a recipe and click Import'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => router.back()}
@@ -578,7 +578,7 @@ export default function ImportRecipePage() {
               }}>
               {status === 'loading'
                 ? <><Loader2 size={12} className="animate-spin" /> Parsing…</>
-                : <><Sparkles size={12} /> Import with AI</>
+                : <><Sparkles size={12} /> Import</>
               }
             </button>
           </div>
