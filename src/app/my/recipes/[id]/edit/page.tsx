@@ -235,7 +235,7 @@ function importToInitial(imp: any): any {
   };
 }
 
-interface ChatTurn {
+interface ChatTurn { type: 'answer' | 'modification';
   user: string;
   recipe: any;
   assistantSummary: string;

@@ -32,7 +32,7 @@ Method:
 6. Serve immediately with extra cheese and black pepper.`;
 
 // Chat history entry — each turn stores the message and the resulting recipe state
-interface ChatTurn {
+interface ChatTurn { type: 'answer' | 'modification';
   user: string;
   recipe: any;
   // for display only:
