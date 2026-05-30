@@ -12,6 +12,12 @@ All quantities should be in metric (grams, ml, celsius) where possible.
 Duration should always be in minutes.
 Temperature always in celsius.
 
+IMPORTANT RULES:
+- Include ALL ingredients, even implied ones like water, oil for the pan, salt for pasta water, etc.
+- If a step uses water, oil, butter or similar that wasn't listed but is clearly needed, add it to ingredients.
+- Extract tools/equipment used in each step (e.g. pot, pan, blender, knife, bowl, whisk).
+- Each step should reference the tools actually used in that step.
+
 Respond with ONLY a valid JSON object, no markdown, no backticks, no explanation.
 
 The JSON structure:
@@ -28,11 +34,12 @@ The JSON structure:
     {
       "name": "ingredient name",
       "quantityValue": number,
-      "quantityUnit": "g" | "ml" | "tsp" | "tbsp" | "cup" | "piece" | "clove" | "slice" | "pinch" | "bunch" | "to taste",
+      "quantityUnit": "g" | "ml" | "tsp" | "tbsp" | "cup" | "piece" | "clove" | "slice" | "pinch" | "bunch" | "to taste" | "as needed",
       "prepNote": "chopped, diced, etc. or null",
       "optional": false
     }
   ],
+  "equipment": ["pot", "pan", "knife", "blender"],
   "groups": [
     {
       "outputName": "e.g. Sauce, Dough, or empty string for single-group recipes",
@@ -40,8 +47,10 @@ The JSON structure:
         {
           "instruction": "Clear step instruction",
           "durationMinutes": number or 0 if not specified,
+          "temperatureCelsius": number or null,
           "taskFamily": "cut" | "move" | "heat_dry" | "heat_wet" | "heat_machine" | "mix" | "passive" | "prepare" | "finish",
-          "stepIngredients": ["ingredient name 1", "ingredient name 2"]
+          "stepIngredients": ["ingredient name 1", "ingredient name 2"],
+          "stepTools": ["tool name 1", "tool name 2"]
         }
       ]
     }
@@ -49,17 +58,18 @@ The JSON structure:
 }
 
 Task family guide:
-- cut: chopping, slicing, dicing, peeling, mincing
-- move: pouring, transferring, straining, draining, plating
-- heat_dry: roasting, searing, frying, grilling, toasting, baking
+- cut: chopping, slicing, dicing, peeling, mincing, grating
+- move: pouring, transferring, straining, draining, plating, adding to pan
+- heat_dry: roasting, searing, frying, grilling, toasting, baking, sautéing
 - heat_wet: boiling, simmering, steaming, poaching, blanching
 - heat_machine: oven, microwave, air fryer, sous vide
-- mix: stirring, whisking, folding, kneading, blending, mixing
+- mix: stirring, whisking, folding, kneading, blending, mixing, tossing
 - passive: resting, marinating, fermenting, proofing, chilling, soaking
-- prepare: measuring, weighing, seasoning, washing, preheating
+- prepare: measuring, weighing, seasoning, washing, preheating, combining dry ingredients
 - finish: plating, garnishing, serving, dressing
 
-For stepIngredients, only list ingredient names that are actively used in that specific step.
+For stepIngredients, list ingredient names actively used in that step.
+For stepTools, list equipment names actively used in that step (e.g. "large pot", "frying pan", "whisk").
 Groups should reflect natural recipe sections (e.g. "Sauce", "Pasta", "Assembly").
 Single-section recipes should have one group with an empty outputName.`;
 

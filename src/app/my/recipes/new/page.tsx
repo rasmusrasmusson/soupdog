@@ -46,18 +46,24 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
         };
       });
       const matchedTask = familyMap?.get(step.taskFamily ?? '');
+      // Map freetext tool names to StepTool objects (no equipmentId — user can link later)
+      const stepTools = (step.stepTools ?? []).map((toolName: string) => ({
+        id:          uid(),
+        equipmentId: '',
+        name:        toolName,
+      }));
       return {
         id:                 uid(),
         instruction:        step.instruction ?? '',
         durationMinutes:    step.durationMinutes ?? 0,
-        temperatureCelsius: 0,
+        temperatureCelsius: step.temperatureCelsius ?? 0,
         taskFamily:         matchedTask?.family ?? step.taskFamily ?? undefined,
         taskId:             matchedTask?.id ?? undefined,
         taskName:           matchedTask?.name ?? undefined,
         taskType:           matchedTask?.task_type ?? undefined,
         groupLabel:         group.outputName || '__default__',
         stepIngredients:    stepIngs,
-        stepTools:          [],
+        stepTools,
       };
     })
   );
