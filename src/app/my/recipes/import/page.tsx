@@ -322,6 +322,16 @@ export default function ImportRecipePage() {
             </div>
           </div>
 
+          {/* Debug — raw first step tools */}
+          {preview?.groups?.[0]?.steps?.[0] && (
+            <div style={{ padding: '8px 12px', background: 'var(--surface-hover)',
+              border: B, fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
+              marginBottom: 12 }}>
+              <strong>Debug — step 1 stepTools:</strong>{' '}
+              {JSON.stringify(preview.groups[0].steps[0].stepTools ?? 'none')}
+            </div>
+          )}
+
           {/* Actions */}
           <div style={{ display: 'flex', justifyContent: 'space-between',
             alignItems: 'center' }}>
