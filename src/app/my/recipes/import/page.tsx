@@ -186,12 +186,19 @@ export default function ImportRecipePage() {
           <ArrowLeft size={12} /> My Recipes
         </Link>
         <span className="text-[var(--border)]">/</span>
-        <span className="text-[11px] font-mono text-[var(--fg)]">Import recipe</span>
+        <span className="text-[11px] font-mono text-[var(--fg)]">Add recipe</span>
+        <span style={{ marginLeft: 'auto' }}>
+          <Link href="/my/recipes/new"
+            style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}
+            className="hover:text-[var(--accent)] transition-colors">
+            Use form editor →
+          </Link>
+        </span>
       </div>
 
       <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
-        Paste any recipe text — from a website, cookbook, or your own notes.
-        Soupdog will parse it into structured format for you to review and adjust.
+        Paste a recipe from anywhere — a website, cookbook, or your own notes — and Soupdog will structure it for you.
+        You can adjust it before saving.
       </p>
 
       {status !== 'done' && (

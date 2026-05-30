@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
-         Loader2, Bookmark, BookmarkX, Sparkles } from 'lucide-react';
+         Loader2, Bookmark, BookmarkX } from 'lucide-react';
 import { formatDuration } from '@/lib/utils';
 
 type Tab = 'created' | 'saved';
@@ -153,24 +153,13 @@ export default function MyRecipesPage() {
           <Link href="/my/recipes/import"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              border: B, background: 'none', color: 'var(--fg)',
-              padding: '7px 14px', ...MONO, fontSize: 11,
-              textDecoration: 'none', letterSpacing: '0.08em',
-            }}
-            className="hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
-          >
-            <Sparkles size={12} /> Import
-          </Link>
-          <Link href="/my/recipes/new"
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
               background: 'var(--accent)', color: '#fff',
-              padding: '7px 14px', ...MONO, fontSize: 11,
+              padding: '7px 16px', ...MONO, fontSize: 11,
               textDecoration: 'none', letterSpacing: '0.08em',
             }}
             className="hover:opacity-90 transition-opacity"
           >
-            <Plus size={12} /> New recipe
+            <Plus size={12} /> Add recipe
           </Link>
         </div>
       </div>
@@ -197,10 +186,10 @@ export default function MyRecipesPage() {
               icon={<Plus size={32} />}
               label="No recipes yet"
               action={
-                <Link href="/my/recipes/new"
+                <Link href="/my/recipes/import"
                   style={{ ...MONO, fontSize: 11, color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   className="hover:underline">
-                  <Plus size={12} /> Create your first recipe
+                  <Plus size={12} /> Add your first recipe
                 </Link>
               }
             />
