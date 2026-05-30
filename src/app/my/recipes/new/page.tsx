@@ -24,31 +24,41 @@ function importToInitial(imp: any, familyMap?: Map<string, any>) {
   // Build steps — groupLabel is what initialToGroups uses to group them
   // Also build tool instances per group — same tool name = same instance
   const steps = (imp.groups ?? []).flatMap((group: any) => {
-    // Build tool instance registry for this group
-    const toolInstanceMap = new Map<string, any>(); // name.lower → ToolInstance
-    let instanceCounter = 0;
+    // Build tool instance registry — same label logic as the editor
+    const SHORT_LABELS: Record<string, string> = {
+      'stock pot': 'Pot', 'large pot': 'Pot', 'saucepan': 'Pan',
+      'frying pan': 'Pan', 'saute pan': 'Pan', 'pan': 'Pan', 'pot': 'Pot',
+      "chef's knife": 'Knife', 'knife': 'Knife', 'wok': 'Wok',
+      'blender': 'Blender', 'stand mixer': 'Mixer', 'food processor': 'Processor',
+      'oven': 'Oven', 'microwave': 'Microwave',
+      'mixing bowl': 'Bowl', 'bowl': 'Bowl',
+      'whisk': 'Whisk', 'spatula': 'Spatula',
+      'colander': 'Colander', 'grater': 'Grater', 'cheese grater': 'Grater',
+      'chopping board': 'Board', 'cutting board': 'Board',
+    };
+    const toolInstanceMap = new Map<string, any>();
+    const toolInstances: any[] = [];
 
-    // First pass: collect all unique tool names in this group
     for (const step of (group.steps ?? [])) {
       for (const toolName of (step.stepTools ?? [])) {
         const key = toolName.toLowerCase().trim();
         if (!toolInstanceMap.has(key)) {
-          const instanceId = uid();
-          const count = instanceCounter + 1;
-          instanceCounter++;
-          toolInstanceMap.set(key, {
-            instanceId,
+          const base  = SHORT_LABELS[key] ?? toolName;
+          const count = toolInstances.filter(t =>
+            (SHORT_LABELS[t.name.toLowerCase()] ?? t.name) === base
+          ).length;
+          const inst = {
+            instanceId:  uid(),
             equipmentId: '',
             name:        toolName,
-            label:       toolName + '  #' + count,
-            colorIndex:  toolInstanceMap.size % 8,
-          });
+            label:       `${base} #${count + 1}`,
+            colorIndex:  toolInstances.length % 8,
+          };
+          toolInstanceMap.set(key, inst);
+          toolInstances.push(inst);
         }
       }
     }
-
-    // Attach instances to group (stored separately, initialToGroups reads firstStep.groupToolInstances)
-    const toolInstances = Array.from(toolInstanceMap.values());
 
     return (group.steps ?? []).map((step: any, si: number) => {
       const stepIngs = (step.stepIngredients ?? [])
