@@ -7,24 +7,46 @@ import { createClient } from '@/lib/supabase/server';
 
 const SYSTEM_PROMPT = `You are a recipe parsing system for Soupdog, a structured food execution platform.
 
-Parse the provided recipe text into structured JSON. Be precise with quantities and units.
-All quantities should be in metric (grams, ml, celsius) where possible.
-Duration should always be in minutes.
-Temperature always in celsius.
+Soupdog treats recipes as process graphs where EACH STEP IS ONE ATOMIC ACTION.
+This is the most important rule: one action = one step.
 
-IMPORTANT RULES:
-- Include ALL ingredients, even implied ones like water, oil for the pan, salt for pasta water, etc.
-- If a step uses water, oil, butter or similar that wasn't listed but is clearly needed, add it to ingredients.
-- Extract tools/equipment used in each step (e.g. pot, pan, blender, knife, bowl, whisk).
-- Each step should reference the tools actually used in that step.
+BAD (too coarse):
+  instruction: "Bring a large pot of salted water to a boil"
+  (this is 3 actions: fill pot, add salt, boil)
 
-Respond with ONLY a valid JSON object, no markdown, no backticks, no explanation.
+GOOD (atomic):
+  step 1: instruction: "Fill pot with water", ingredient: water 1000ml, tool: large pot
+  step 2: instruction: "Add salt to water", ingredient: salt to taste, tool: large pot  
+  step 3: instruction: "Bring to a boil", tool: large pot, taskFamily: heat_wet, duration: 8
 
-The JSON structure:
+BAD (too coarse):
+  instruction: "Whisk eggs with cheese and black pepper"
+  (this is: add eggs to bowl, add cheese, add pepper, whisk)
+
+GOOD (atomic):
+  step 1: instruction: "Crack eggs into bowl", ingredient: eggs 4 piece, tool: mixing bowl
+  step 2: instruction: "Add Pecorino Romano to bowl", ingredient: Pecorino Romano 100g, tool: mixing bowl
+  step 3: instruction: "Add black pepper", ingredient: black pepper to taste, tool: mixing bowl
+  step 4: instruction: "Whisk until combined", tool: whisk, taskFamily: mix, duration: 2
+
+Each instruction should be SHORT and SPECIFIC:
+- Start with a verb: Add, Fill, Heat, Stir, Whisk, Drain, Rest, etc.
+- Reference the ingredient and/or tool: "Add garlic to pan", "Simmer for 10 minutes"
+- Never combine two actions in one instruction
+
+IMPORTANT:
+- Include ALL ingredients even implied ones (water, oil for pan, salt for pasta water)
+- Every step must have an instruction
+- Extract all tools used (pot, pan, knife, bowl, whisk, grater, colander, etc.)
+- duration 0 means duration unknown — estimate if obvious
+
+All quantities in metric. Duration in minutes. Temperature in celsius.
+Respond with ONLY valid JSON, no markdown, no backticks.
+
 {
   "title": "Recipe title",
   "description": "1-2 sentence description",
-  "cuisine": "e.g. Italian, Japanese, Indian, or null",
+  "cuisine": "Italian" or null,
   "difficulty": "easy" | "medium" | "hard",
   "servings": number,
   "totalTimeMinutes": number,
@@ -34,44 +56,39 @@ The JSON structure:
     {
       "name": "ingredient name",
       "quantityValue": number,
-      "quantityUnit": "g" | "ml" | "tsp" | "tbsp" | "cup" | "piece" | "clove" | "slice" | "pinch" | "bunch" | "to taste" | "as needed",
-      "prepNote": "chopped, diced, etc. or null",
+      "quantityUnit": "g" | "kg" | "ml" | "l" | "tsp" | "tbsp" | "cup" | "piece" | "clove" | "slice" | "pinch" | "bunch" | "to taste" | "as needed",
+      "prepNote": "chopped" or null,
       "optional": false
     }
   ],
-  "equipment": ["pot", "pan", "knife", "blender"],
+  "equipment": ["large pot", "frying pan", "mixing bowl", "whisk"],
   "groups": [
     {
-      "outputName": "e.g. Sauce, Dough, or empty string for single-group recipes",
+      "outputName": "Pasta" or "" for single-group recipes,
       "steps": [
         {
-          "instruction": "Clear step instruction",
-          "durationMinutes": number or 0 if not specified,
+          "instruction": "Short atomic action e.g. Add spaghetti to boiling water",
+          "durationMinutes": number,
           "temperatureCelsius": number or null,
           "taskFamily": "cut" | "move" | "heat_dry" | "heat_wet" | "heat_machine" | "mix" | "passive" | "prepare" | "finish",
-          "stepIngredients": ["ingredient name 1", "ingredient name 2"],
-          "stepTools": ["tool name 1", "tool name 2"]
+          "stepIngredients": ["ingredient name"],
+          "stepTools": ["tool name"]
         }
       ]
     }
   ]
 }
 
-Task family guide:
-- cut: chopping, slicing, dicing, peeling, mincing, grating
-- move: pouring, transferring, straining, draining, plating, adding to pan
-- heat_dry: roasting, searing, frying, grilling, toasting, baking, sautéing
-- heat_wet: boiling, simmering, steaming, poaching, blanching
+taskFamily guide:
+- cut: chop, slice, dice, peel, mince, grate, zest
+- move: add to, pour, transfer, drain, strain, plate, remove from heat
+- heat_dry: fry, sear, roast, grill, toast, bake, sauté
+- heat_wet: boil, simmer, steam, poach, blanch, reduce
 - heat_machine: oven, microwave, air fryer, sous vide
-- mix: stirring, whisking, folding, kneading, blending, mixing, tossing
-- passive: resting, marinating, fermenting, proofing, chilling, soaking
-- prepare: measuring, weighing, seasoning, washing, preheating, combining dry ingredients
-- finish: plating, garnishing, serving, dressing
-
-For stepIngredients, list ingredient names actively used in that step.
-For stepTools, list equipment names actively used in that step (e.g. "large pot", "frying pan", "whisk").
-Groups should reflect natural recipe sections (e.g. "Sauce", "Pasta", "Assembly").
-Single-section recipes should have one group with an empty outputName.`;
+- mix: stir, whisk, fold, knead, blend, toss, combine
+- passive: rest, marinate, chill, proof, soak, cool
+- prepare: preheat, measure, wash, season (before cooking)
+- finish: garnish, serve, dress, plate`;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -92,7 +109,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 4000,
+        max_tokens: 6000,
         system:     SYSTEM_PROMPT,
         messages: [{ role: 'user', content: `Parse this recipe:\n\n${text.trim()}` }],
       }),
