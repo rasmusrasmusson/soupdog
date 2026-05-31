@@ -144,7 +144,6 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       total_time_seconds:   totalTimeSeconds,
       active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
       passive_time_seconds: Math.max(0, totalTimeSeconds - (data.activeTimeMinutes ?? 0) * 60),
-      created_by:           user.id,
     })
     .select('id')
     .single();
