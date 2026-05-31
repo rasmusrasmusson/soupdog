@@ -231,6 +231,8 @@ export default function ImportRecipePage() {
     if (!text.trim()) return;
     await handleImportFile(new File([text], 'recipe.txt', { type: 'text/plain' }));
   };
+
+  const handleChatSend = async () => {
     if (!chatInput.trim() || chatLoading || !preview) return;
     const message = chatInput.trim();
     setChatInput('');
@@ -240,7 +242,7 @@ export default function ImportRecipePage() {
     setPending(null);
 
     try {
-  const handleChatSend = async () => {
+      const res = await fetch('/api/recipes/import/chat', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ recipe: preview, message, history: chatHistory }),
