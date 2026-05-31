@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle, ChevronRight, ArrowLeft, Send, RotateCcw } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 
 const MONO = 'var(--font-mono)';
@@ -42,12 +42,96 @@ interface PendingChange {
   summary: string;
 }
 
+const FAMILY_MAP = new Map<string, any>([
+  ['cut',          { id: '31132714-14a6-4f36-984a-308683d059bb', name: 'Brunoise',     family: 'cut',          task_type: 'human'   }],
+  ['finish',       { id: 'a9574682-9da1-4da8-a130-fe6ac78d7b06', name: 'Deglaze',     family: 'finish',       task_type: 'human'   }],
+  ['heat_dry',     { id: '4a6f0b2d-7679-4b03-8983-1ad41ccb5e2b', name: 'Bake',        family: 'heat_dry',     task_type: 'machine' }],
+  ['heat_machine', { id: '3c2ec27b-2c93-4363-a322-a5180c21af72', name: 'Combi steam', family: 'heat_machine', task_type: 'machine' }],
+  ['heat_wet',     { id: '2f600f22-57f9-4d86-abbd-f06146a50626', name: 'Blanch',      family: 'heat_wet',     task_type: 'human'   }],
+  ['mix',          { id: 'cdc58767-e42a-4206-9c27-2c82e3fdc395', name: 'Beat',        family: 'mix',          task_type: 'human'   }],
+  ['move',         { id: '45b0f2b6-7897-4b28-91a8-03f5a43dbc10', name: 'Add',         family: 'move',         task_type: 'human'   }],
+  ['passive',      { id: '193d41a3-521c-41c0-88f5-e44a48005d2e', name: 'Brine',       family: 'passive',      task_type: 'passive' }],
+  ['prepare',      { id: '24a9b746-e572-41e2-b601-cdfad7850c33', name: 'Measure',     family: 'prepare',      task_type: 'human'   }],
+]);
+
+function uid() { return Math.random().toString(36).slice(2, 9); }
+
+const SHORT_LABELS: Record<string, string> = {
+  'stock pot': 'Pot', 'large pot': 'Pot', 'saucepan': 'Pan', 'frying pan': 'Pan',
+  'saute pan': 'Pan', 'pan': 'Pan', 'pot': 'Pot', "chef's knife": 'Knife', 'knife': 'Knife',
+  'wok': 'Wok', 'blender': 'Blender', 'stand mixer': 'Mixer', 'food processor': 'Processor',
+  'oven': 'Oven', 'microwave': 'Microwave', 'mixing bowl': 'Bowl', 'bowl': 'Bowl',
+  'whisk': 'Whisk', 'spatula': 'Spatula', 'colander': 'Colander', 'grater': 'Grater',
+  'cheese grater': 'Grater', 'chopping board': 'Board', 'cutting board': 'Board',
+};
+
+function importToRecipePayload(imp: any): any {
+  const allIngredients = imp.ingredients ?? [];
+  const usedInSteps    = new Set<string>();
+  const assignedToStep = new Set<string>();
+
+  const steps = (imp.groups ?? []).flatMap((group: any) => {
+    const toolInstanceMap = new Map<string, any>();
+    const toolInstances: any[] = [];
+    for (const step of (group.steps ?? [])) {
+      for (const toolName of (step.stepTools ?? [])) {
+        const key = toolName.toLowerCase().trim();
+        if (!toolInstanceMap.has(key)) {
+          const base  = SHORT_LABELS[key] ?? toolName;
+          const count = toolInstances.filter(t => (SHORT_LABELS[t.name.toLowerCase()] ?? t.name) === base).length;
+          const inst  = { instanceId: uid(), equipmentId: '', name: toolName, label: `${base} #${count + 1}`, colorIndex: toolInstances.length % 8 };
+          toolInstanceMap.set(key, inst);
+          toolInstances.push(inst);
+        }
+      }
+    }
+    return (group.steps ?? []).map((step: any, si: number) => {
+      const stepIngs = (step.stepIngredients ?? [])
+        .filter((name: string) => { const k = name.toLowerCase().trim(); if (assignedToStep.has(k)) return false; assignedToStep.add(k); return true; })
+        .map((name: string) => {
+          usedInSteps.add(name.toLowerCase().trim());
+          const match = allIngredients.find((i: any) => i.name.toLowerCase().trim() === name.toLowerCase().trim());
+          return { id: uid(), ingredientId: '', name, quantityValue: match?.quantityValue ?? 0, quantityUnit: match?.quantityUnit ?? 'g', prepNote: match?.prepNote ?? '' };
+        });
+      const matchedTask = FAMILY_MAP.get(step.taskFamily ?? '');
+      const stepTools   = (step.stepTools ?? []).map((toolName: string) => {
+        const inst = toolInstanceMap.get(toolName.toLowerCase().trim());
+        return { id: uid(), instanceId: inst?.instanceId, equipmentId: '', name: toolName };
+      });
+      return {
+        id: uid(), instruction: step.instruction ?? '', durationMinutes: step.durationMinutes ?? 0,
+        temperatureCelsius: step.temperatureCelsius ?? 0,
+        taskFamily: matchedTask?.family ?? step.taskFamily ?? undefined,
+        taskId: matchedTask?.id ?? undefined, taskName: matchedTask?.name ?? undefined,
+        taskType: matchedTask?.task_type ?? undefined,
+        groupLabel: group.outputName || '__default__',
+        groupToolInstances: si === 0 ? toolInstances : undefined,
+        stepIngredients: stepIngs, stepTools,
+      };
+    });
+  });
+
+  const ingredients = allIngredients
+    .filter((ing: any) => !usedInSteps.has(ing.name.toLowerCase().trim()))
+    .map((ing: any) => ({ ingredientId: '', ingredientSlug: '', name: ing.name, quantityValue: ing.quantityValue ?? 0, quantityUnit: ing.quantityUnit ?? 'g', prepNote: ing.prepNote ?? '', optional: ing.optional ?? false }));
+
+  return {
+    canonicalId: '', versionId: '',
+    title: imp.title ?? '', description: imp.description ?? '', cuisine: imp.cuisine ?? '',
+    tags: Array.isArray(imp.tags) ? imp.tags.join(', ') : (imp.tags ?? ''),
+    servings: imp.servings ?? 4, difficulty: imp.difficulty ?? 'medium',
+    totalTimeMinutes: imp.totalTimeMinutes ?? 0, activeTimeMinutes: imp.activeTimeMinutes ?? 0,
+    ingredients, steps, equipmentIds: [], isPublished: false,
+  };
+}
+
 export default function ImportRecipePage() {
   const router = useRouter();
 
   const [text,       setText]       = useState('');
   const [uploadFile, setUploadFile] = useState<File|null>(null);
   const [dragOver,   setDragOver]   = useState(false);
+  const [saving,     setSaving]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status,  setStatus]  = useState<'idle'|'loading'|'done'|'error'>('idle');
   const [error,   setError]   = useState<string|null>(null);
@@ -67,9 +151,9 @@ export default function ImportRecipePage() {
   }, [chatHistory, chatLoading, pending]);
 
   const handleFileSelect = (file: File) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'text/plain'];
     if (!allowed.includes(file.type)) {
-      setError('Unsupported file type. Please use PDF, JPG, PNG, or WebP.');
+      setError('Unsupported file type. Please use PDF, JPG, PNG, WebP, or TXT.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -77,7 +161,9 @@ export default function ImportRecipePage() {
       return;
     }
     setUploadFile(file);
-    setText(''); // clear text if file selected
+    setText('');
+    // Auto-import immediately on file selection
+    handleImportFile(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -87,8 +173,7 @@ export default function ImportRecipePage() {
     if (file) handleFileSelect(file);
   };
 
-  const handleImport = async () => {
-    if (!text.trim() && !uploadFile) return;
+  const handleImportFile = async (file: File) => {
     setStatus('loading');
     setError(null);
     setPreview(null);
@@ -97,25 +182,19 @@ export default function ImportRecipePage() {
 
     try {
       let body: any;
-
-      if (uploadFile) {
-        // Convert file to base64
+      if (file.type === 'text/plain') {
+        const text = await file.text();
+        body = { text };
+      } else {
         const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onload  = () => resolve((reader.result as string).split(',')[1]);
           reader.onerror = reject;
-          reader.readAsDataURL(uploadFile);
+          reader.readAsDataURL(file);
         });
-        body = { file: base64, mediaType: uploadFile.type };
-      } else {
-        body = { text };
+        body = { file: base64, mediaType: file.type };
       }
-
-      const res  = await fetch('/api/recipes/import', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      });
+      const res  = await fetch('/api/recipes/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Import failed');
       setPreview(data.recipe);
@@ -126,9 +205,32 @@ export default function ImportRecipePage() {
     }
   };
 
+  const handleSave = async () => {
+    if (!preview) return;
+    setSaving(true);
+    try {
+      const payload = importToRecipePayload(preview);
+      const res = await fetch('/api/my/recipes', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Save failed');
+      router.push(`/recipes/${data.slug}`);
+    } catch (err: any) {
+      setError(err.message ?? 'Save failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const [streamingText, setStreamingText] = useState('');
 
-  const handleChatSend = async () => {
+  const handleImport = async () => {
+    if (!text.trim()) return;
+    await handleImportFile(new File([text], 'recipe.txt', { type: 'text/plain' }));
+  };
     if (!chatInput.trim() || chatLoading || !preview) return;
     const message = chatInput.trim();
     setChatInput('');
@@ -230,14 +332,16 @@ export default function ImportRecipePage() {
           <Link href="/my/recipes/new"
             style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}
             className="hover:text-[var(--accent)] transition-colors">
-            Use form editor →
+            Advanced editor →
           </Link>
         </span>
       </div>
 
+      <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 400, marginBottom: 6 }}>
+        Add recipe
+      </h1>
       <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
-        Paste a recipe from anywhere — a website, cookbook, or your own notes — and Soupdog will structure it for you.
-        You can adjust it before saving.
+        Upload a photo, screenshot, or PDF — or paste the recipe text below.
       </p>
 
       {status !== 'done' && (
@@ -257,7 +361,7 @@ export default function ImportRecipePage() {
                 transition: 'all 0.15s',
               }}>
               <input ref={fileInputRef} type="file"
-                accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                accept=".pdf,.txt,image/jpeg,image/png,image/webp,image/gif"
                 style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
               <div style={{ fontSize: 20, flexShrink: 0 }}>
@@ -279,7 +383,7 @@ export default function ImportRecipePage() {
                       Upload a photo, screenshot, or PDF
                     </div>
                     <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-                      Drag & drop or click · JPG, PNG, WebP, PDF · max 20MB
+                      Drag & drop or click · JPG, PNG, WebP, PDF, TXT · max 20MB
                     </div>
                   </div>
                 )}
@@ -582,19 +686,25 @@ export default function ImportRecipePage() {
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
             {chatHistory.filter(t => t.type === 'modification').length > 0
-              ? `${chatHistory.filter(t => t.type === 'modification').length} edit${chatHistory.filter(t => t.type === 'modification').length !== 1 ? 's' : ''} — open in editor to save`
-              : 'Review then open in editor to save'}
+              ? `${chatHistory.filter(t => t.type === 'modification').length} edit${chatHistory.filter(t => t.type === 'modification').length !== 1 ? 's' : ''} — save or open in advanced editor`
+              : 'Review your recipe then save, or open in advanced editor'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setStatus('idle'); setPreview(null); setChatHistory([]); setPending(null); }}
+            <button onClick={() => { setStatus('idle'); setPreview(null); setChatHistory([]); setPending(null); setUploadFile(null); }}
               style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
-              ← Try again
+              ← Start over
             </button>
             <button onClick={handleOpenInEditor}
+              style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
+                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--fg)' }}>
+              Advanced editor
+            </button>
+            <button onClick={handleSave} disabled={saving}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none',
-                background: 'var(--accent)', color: '#fff', fontFamily: MONO, fontSize: 11, cursor: 'pointer' }}>
-              Open in editor <ChevronRight size={12} />
+                background: 'var(--accent)', color: '#fff', fontFamily: MONO, fontSize: 11,
+                cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              {saving ? <><Loader2 size={12} className="animate-spin" /> Saving…</> : 'Save recipe'}
             </button>
           </div>
         </div>
@@ -603,7 +713,7 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Parsing recipe…') : 'Upload a file or paste a recipe and click Import'}
+            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…') : 'Upload a file or paste a recipe'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => router.back()}
@@ -617,7 +727,7 @@ export default function ImportRecipePage() {
                 cursor: status === 'loading' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 7,
                 opacity: status === 'loading' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
-              {status === 'loading' ? <><Loader2 size={12} className="animate-spin" /> {uploadFile ? 'Reading…' : 'Parsing…'}</> : 'Import'}
+              {status === 'loading' ? <><Loader2 size={12} className="animate-spin" /> {uploadFile ? 'Reading…' : 'Reading…'}</> : 'Add recipe'}
             </button>
           </div>
         </div>
