@@ -240,7 +240,7 @@ export default function ImportRecipePage() {
     setPending(null);
 
     try {
-      const res = await fetch('/api/recipes/import/chat', {
+  const handleChatSend = async () => {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ recipe: preview, message, history: chatHistory }),
