@@ -302,8 +302,6 @@ export default function MyRecipesPage() {
                               try {
                                 await fetch(`/api/my/recipes/${r.id}`, { method: 'DELETE' });
                                 setRecipes(prev => prev.filter(x => x.id !== r.id));
-                                const res = await fetch('/api/my/recipes');
-                                if (res.ok) setRecipes(await res.json());
                               } finally { setDeleting(null); }
                             }}
                               style={{ padding: '3px 6px', background: '#ef4444', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#fff' }}>
