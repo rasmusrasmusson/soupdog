@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
          Loader2, Bookmark, BookmarkX } from 'lucide-react';
@@ -64,20 +64,17 @@ function EmptyState({ icon, label, action }: {
 }
 
 export default function MyRecipesPage() {
-  const searchParams = useSearchParams();
-  const router       = useRouter();
-  const [savedTitle, setSavedTitle] = useState<string|null>(() => 
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('saved') : null
-  );
+  const router = useRouter();
+  const [banner, setBanner] = useState<{type: 'saved'|'published', title: string}|null>(null);
   const [tab, setTab] = useState<Tab>('created');
 
-  // Clear the ?saved= param from URL after a short delay so banner shows first
+  // Read and immediately clear sessionStorage banner — shows once, never again on return
   useEffect(() => {
-    if (savedTitle) {
-      const t = setTimeout(() => router.replace('/my/recipes'), 3000);
-      return () => clearTimeout(t);
-    }
-  }, [savedTitle]);
+    const saved     = sessionStorage.getItem('soupdog_saved');
+    const published = sessionStorage.getItem('soupdog_published');
+    if (saved)     { setBanner({ type: 'saved',     title: saved });     sessionStorage.removeItem('soupdog_saved'); }
+    if (published) { setBanner({ type: 'published', title: published }); sessionStorage.removeItem('soupdog_published'); }
+  }, []);
   const [recipes, setRecipes]   = useState<MyRecipe[]>([]);
   const [saved, setSaved]       = useState<SavedRecipe[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
@@ -98,9 +95,8 @@ export default function MyRecipesPage() {
     })();
   }, []);
 
-  // Load created recipes on mount and whenever tab switches to created
+  // Load created recipes once on mount
   useEffect(() => {
-    if (tab !== 'created') return;
     (async () => {
       setLoadingMine(true);
       try {
@@ -108,7 +104,7 @@ export default function MyRecipesPage() {
         if (res.ok) setRecipes(await res.json());
       } finally { setLoadingMine(false); }
     })();
-  }, [tab]);
+  }, []);
 
   const handleDelete = async (id: string) => {
     setDeleting(id);
@@ -163,15 +159,22 @@ export default function MyRecipesPage() {
     <div className="max-w-4xl mx-auto px-4 md:px-8 py-10">
 
       {/* Success banner after saving from import page */}
-      {savedTitle && (
+      {banner && (
         <div style={{
           background: 'var(--accent-subtle)', border: '1px solid var(--accent)',
           padding: '10px 16px', marginBottom: 20, display: 'flex',
           alignItems: 'center', justifyContent: 'space-between', gap: 12,
         }}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>
-            ✓ "{savedTitle}" saved as draft — publish it when ready.
+            {banner.type === 'saved'
+              ? `✓ "${banner.title}" saved as draft — publish it when ready.`
+              : `✓ "${banner.title}" is now published.`
+            }
           </span>
+          <button onClick={() => setBanner(null)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            ✕
+          </button>
         </div>
       )}
 

@@ -219,7 +219,8 @@ export default function ImportRecipePage() {
       if (!res.ok) throw new Error(data.error ?? 'Save failed');
       // Redirect to My Recipes with success — recipe view requires published state
       // TODO: once RLS allows author to view own drafts, redirect to /recipes/[data.slug]
-      router.push(`/my/recipes?saved=${encodeURIComponent(preview.title ?? 'Recipe')}`);
+      router.push('/my/recipes');
+      sessionStorage.setItem('soupdog_saved', preview.title ?? 'Recipe');
     } catch (err: any) {
       setError(err.message ?? 'Save failed');
     } finally {

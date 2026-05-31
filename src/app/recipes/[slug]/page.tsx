@@ -999,7 +999,10 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publish: true }),
       });
-      if (res.ok) setIsDraft(false);
+      if (res.ok) {
+        sessionStorage.setItem('soupdog_published', recipe?.title ?? 'Recipe');
+        window.location.href = '/my/recipes';
+      }
     } finally {
       setPublishing(false);
     }
