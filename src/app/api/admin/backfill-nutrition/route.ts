@@ -174,6 +174,33 @@ export async function GET(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
 
+  // Debug mode: GET ...?debug=1 returns diagnostics directly in the response
+  // (key fingerprint + what the service client actually sees) instead of
+  // running the backfill. Lets us diagnose without digging through logs.
+  if (req.nextUrl.searchParams.get('debug') === '1') {
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const db = serviceClient() as any;
+      const { data, error, count } = await db
+        .from('ingredients')
+        .select('id, name', { count: 'exact' })
+        .is('nutrition_per_100g', null)
+        .eq('is_product', false)
+        .limit(5);
+      return NextResponse.json({
+        debug: true,
+        keyPrefix: key.slice(0, 10),
+        keyLength: key.length,
+        selectError: error?.message ?? null,
+        nullCountVisible: count ?? 0,
+        sampleNames: (data ?? []).map((r: { name: string }) => r.name),
+      });
+    } catch (e) {
+      return NextResponse.json({ debug: true, keyPrefix: key.slice(0, 10), keyLength: key.length, threw: String(e) });
+    }
+  }
+
   const MAX_BATCHES = 20;
   let batches = 0;
   let totalFilled = 0;
