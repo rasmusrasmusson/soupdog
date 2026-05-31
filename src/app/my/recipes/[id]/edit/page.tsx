@@ -186,12 +186,29 @@ export default function EditRecipePage() {
     fetch(`/api/my/recipes/${id}`)
       .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
       .then(data => {
+        // Build importJson for the chat system
         const imp = editorToImportJson(data);
         imp._canonicalId = data.canonicalId; imp._versionId = data.versionId;
         imp._equipmentIds = data.equipmentIds ?? []; imp._isPublished = data.isPublished ?? false;
         setImportJson(imp);
-        // Convert through importToInitial so RecipeEditor gets the correct format
-        setEditorInitial(importToInitial(imp));
+        // Pass API data directly to RecipeEditor — it already has the right format
+        // stepIngredients are objects {id, ingredientId, name, quantityValue, quantityUnit, prepNote}
+        setEditorInitial({
+          canonicalId:       data.canonicalId,
+          versionId:         data.versionId,
+          title:             data.title ?? '',
+          description:       data.description ?? '',
+          cuisine:           data.cuisine ?? '',
+          tags:              data.tags ?? '',
+          servings:          data.servings ?? 4,
+          difficulty:        data.difficulty ?? 'medium',
+          totalTimeMinutes:  data.totalTimeMinutes ?? 0,
+          activeTimeMinutes: data.activeTimeMinutes ?? 0,
+          ingredients:       data.ingredients ?? [],
+          steps:             data.steps ?? [],
+          equipmentIds:      data.equipmentIds ?? [],
+          isPublished:       data.isPublished ?? false,
+        });
         setLoading(false);
       })
       .catch(() => { setError('Recipe not found or you do not have permission to edit it.'); setLoading(false); });
