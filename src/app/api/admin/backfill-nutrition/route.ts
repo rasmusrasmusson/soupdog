@@ -44,7 +44,7 @@ export async function POST() {
     .select('id, name')
     .is('nutrition_per_100g', null)
     .eq('is_product', false)
-    .limit(100); // Process 100 at a time
+    .limit(20); // Process 20 at a time to avoid timeouts
 
   if (!ingredients?.length) {
     return NextResponse.json({ message: 'No ingredients need backfilling', count: 0 });
@@ -52,6 +52,7 @@ export async function POST() {
 
   let updated = 0;
   let failed = 0;
+  const failedNames: string[] = [];
 
   for (const ing of ingredients) {
     const nutrition = await estimateNutrition(ing.name);
@@ -62,15 +63,17 @@ export async function POST() {
       updated++;
     } else {
       failed++;
+      failedNames.push(ing.name);
     }
-    // Small delay to avoid rate limits
-    await new Promise(r => setTimeout(r, 100));
+    // Increased delay to avoid rate limits
+    await new Promise(r => setTimeout(r, 500));
   }
 
   return NextResponse.json({
     message: `Backfill complete`,
     updated,
     failed,
+    failedNames: failedNames.slice(0, 10),
     remaining: ingredients.length === 100 ? 'more than 100 remaining — call again' : 'none',
   });
 }
