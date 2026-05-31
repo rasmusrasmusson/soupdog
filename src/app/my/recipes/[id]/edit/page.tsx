@@ -117,11 +117,12 @@ function importToInitial(imp: any): any {
     }
     return (group.steps ?? []).map((step: any, si: number) => {
       const stepIngs = (step.stepIngredients ?? [])
-        .filter((name: string) => { const k = name.toLowerCase().trim(); if (assignedToStep.has(k)) return false; assignedToStep.add(k); return true; })
+        .filter((name: string) => name?.toString().trim())
         .map((name: string) => {
-          usedInSteps.add(name.toLowerCase().trim());
-          const match = allIngredients.find((i: any) => i.name.toLowerCase().trim() === name.toLowerCase().trim());
-          return { id: uid(), ingredientId: '', name, quantityValue: match?.quantityValue ?? 0, quantityUnit: match?.quantityUnit ?? 'g', prepNote: match?.prepNote ?? '' };
+          const nameStr = name.toString().trim();
+          usedInSteps.add(nameStr.toLowerCase());
+          const match = allIngredients.find((i: any) => i.name.toLowerCase().trim() === nameStr.toLowerCase());
+          return { id: uid(), ingredientId: '', name: nameStr, quantityValue: match?.quantityValue ?? 0, quantityUnit: match?.quantityUnit ?? 'g', prepNote: match?.prepNote ?? '' };
         });
       const matchedTask = FAMILY_MAP.get(step.taskFamily ?? '');
       const stepTools = (step.stepTools ?? []).map((toolName: string) => {
