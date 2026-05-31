@@ -7,6 +7,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          UtensilsCrossed, Pipette, Flame, Droplets, Microwave,
          Soup, Hourglass, Scale, ChefHat, Leaf } from 'lucide-react';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
+import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
 // ── Types ─────────────────────────────────────────────────────
