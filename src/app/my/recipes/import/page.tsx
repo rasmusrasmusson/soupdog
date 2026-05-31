@@ -45,7 +45,10 @@ interface PendingChange {
 export default function ImportRecipePage() {
   const router = useRouter();
 
-  const [text,    setText]    = useState('');
+  const [text,       setText]       = useState('');
+  const [uploadFile, setUploadFile] = useState<File|null>(null);
+  const [dragOver,   setDragOver]   = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [status,  setStatus]  = useState<'idle'|'loading'|'done'|'error'>('idle');
   const [error,   setError]   = useState<string|null>(null);
   const [preview, setPreview] = useState<any>(null);
@@ -63,8 +66,29 @@ export default function ImportRecipePage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, chatLoading, pending]);
 
+  const handleFileSelect = (file: File) => {
+    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowed.includes(file.type)) {
+      setError('Unsupported file type. Please use PDF, JPG, PNG, or WebP.');
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      setError('File too large. Maximum 20MB.');
+      return;
+    }
+    setUploadFile(file);
+    setText(''); // clear text if file selected
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileSelect(file);
+  };
+
   const handleImport = async () => {
-    if (!text.trim()) return;
+    if (!text.trim() && !uploadFile) return;
     setStatus('loading');
     setError(null);
     setPreview(null);
@@ -72,10 +96,25 @@ export default function ImportRecipePage() {
     setPending(null);
 
     try {
+      let body: any;
+
+      if (uploadFile) {
+        // Convert file to base64
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(',')[1]);
+          reader.onerror = reject;
+          reader.readAsDataURL(uploadFile);
+        });
+        body = { file: base64, mediaType: uploadFile.type };
+      } else {
+        body = { text };
+      }
+
       const res  = await fetch('/api/recipes/import', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ text }),
+        body:    JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Import failed');
@@ -204,23 +243,88 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-              <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
-                Recipe text
+            {/* File upload zone */}
+            <div
+              onDrop={handleDrop}
+              onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                border: `1px dashed ${dragOver ? 'var(--accent)' : uploadFile ? 'var(--accent)' : 'var(--border)'}`,
+                background: dragOver ? 'var(--accent-subtle)' : uploadFile ? 'var(--accent-subtle)' : 'var(--surface)',
+                padding: '16px 20px', marginBottom: 12, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 12,
+                transition: 'all 0.15s',
+              }}>
+              <input ref={fileInputRef} type="file"
+                accept=".pdf,image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: 'none' }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
+              <div style={{ fontSize: 20, flexShrink: 0 }}>
+                {uploadFile ? '📄' : '⬆'}
               </div>
-              <button onClick={() => setText(EXAMPLE)}
-                style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                Load example
-              </button>
+              <div>
+                {uploadFile ? (
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)', fontWeight: 600 }}>
+                      {uploadFile.name}
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
+                      {(uploadFile.size / 1024).toFixed(0)} KB · click to change
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--fg)' }}>
+                      Upload a photo, screenshot, or PDF
+                    </div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
+                      Drag & drop or click · JPG, PNG, WebP, PDF · max 20MB
+                    </div>
+                  </div>
+                )}
+              </div>
+              {uploadFile && (
+                <button
+                  onClick={e => { e.stopPropagation(); setUploadFile(null); }}
+                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: MONO, fontSize: 10, color: 'var(--muted)', flexShrink: 0 }}>
+                  ✕ Remove
+                </button>
+              )}
             </div>
-            <textarea value={text} onChange={e => setText(e.target.value)}
-              placeholder="Paste recipe here — title, ingredients, method, serving size, timings…"
-              style={{ width: '100%', minHeight: 320, padding: '12px 14px', border: B,
-                background: 'var(--surface)', color: 'var(--fg)', fontFamily: MONO, fontSize: 12,
-                outline: 'none', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' }} />
-            <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 4 }}>
-              {text.length} / 20,000 characters
-            </div>
+
+            {/* Text divider */}
+            {!uploadFile && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>or paste text</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+            )}
+
+            {/* Text area — hidden when file selected */}
+            {!uploadFile && (
+              <>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
+                    Recipe text
+                  </div>
+                  <button onClick={() => setText(EXAMPLE)}
+                    style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                    Load example
+                  </button>
+                </div>
+                <textarea value={text} onChange={e => setText(e.target.value)}
+                  placeholder="Paste recipe here — title, ingredients, method, serving size, timings…"
+                  style={{ width: '100%', minHeight: 280, padding: '12px 14px', border: B,
+                    background: 'var(--surface)', color: 'var(--fg)', fontFamily: MONO, fontSize: 12,
+                    outline: 'none', resize: 'vertical', lineHeight: 1.7, boxSizing: 'border-box' }} />
+                <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 4 }}>
+                  {text.length} / 20,000 characters
+                </div>
+              </>
+            )}
           </div>
 
           <div style={{ border: B, padding: '12px 16px', marginBottom: 20, background: 'var(--surface-hover)' }}>
@@ -499,7 +603,7 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {status === 'loading' ? 'Parsing recipe…' : 'Paste a recipe and click Import'}
+            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Parsing recipe…') : 'Upload a file or paste a recipe and click Import'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => router.back()}
@@ -507,13 +611,13 @@ export default function ImportRecipePage() {
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
               Cancel
             </button>
-            <button onClick={handleImport} disabled={status === 'loading' || !text.trim()}
+            <button onClick={handleImport} disabled={status === 'loading' || (!text.trim() && !uploadFile)}
               style={{ padding: '8px 20px', border: 'none', background: 'var(--accent)', color: '#fff',
                 fontFamily: MONO, fontSize: 11,
-                cursor: status === 'loading' || !text.trim() ? 'not-allowed' : 'pointer',
+                cursor: status === 'loading' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 7,
-                opacity: status === 'loading' || !text.trim() ? 0.6 : 1 }}>
-              {status === 'loading' ? <><Loader2 size={12} className="animate-spin" /> Parsing…</> : 'Import'}
+                opacity: status === 'loading' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
+              {status === 'loading' ? <><Loader2 size={12} className="animate-spin" /> {uploadFile ? 'Reading…' : 'Parsing…'}</> : 'Import'}
             </button>
           </div>
         </div>
