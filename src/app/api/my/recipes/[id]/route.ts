@@ -128,7 +128,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
   if (!canonical) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const totalTimeSeconds = calculateTotalSecondsForSave(data);
+  const totalTimeSeconds = calculateTotalSecondsForSave(data.steps ?? []);
 
   // Create new version
   const { data: version, error: verErr } = await db
