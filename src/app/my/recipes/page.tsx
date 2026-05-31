@@ -2,6 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
          Loader2, Bookmark, BookmarkX } from 'lucide-react';
@@ -63,7 +64,9 @@ function EmptyState({ icon, label, action }: {
 }
 
 export default function MyRecipesPage() {
-  const [tab, setTab]           = useState<Tab>('saved');
+  const searchParams = useSearchParams();
+  const savedTitle   = searchParams.get('saved');
+  const [tab, setTab]           = useState<Tab>('created');
   const [recipes, setRecipes]   = useState<MyRecipe[]>([]);
   const [saved, setSaved]       = useState<SavedRecipe[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
@@ -143,6 +146,19 @@ export default function MyRecipesPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-4 md:px-8 py-10">
+
+      {/* Success banner after saving from import page */}
+      {savedTitle && (
+        <div style={{
+          background: 'var(--accent-subtle)', border: '1px solid var(--accent)',
+          padding: '10px 16px', marginBottom: 20, display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between', gap: 12,
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>
+            ✓ "{savedTitle}" saved as draft — publish it when ready.
+          </span>
+        </div>
+      )}
 
       {/* Page header */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 24 }}>
