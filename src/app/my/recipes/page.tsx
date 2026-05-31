@@ -114,10 +114,16 @@ export default function MyRecipesPage() {
     if (confirmDelete !== id) { setConfirmDelete(id); return; }
     setConfirmDelete(null);
     setDeleting(id);
-    await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
-    const res = await fetch('/api/my/recipes');
-    if (res.ok) setRecipes(await res.json());
-    setDeleting(null);
+    try {
+      const delRes = await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
+      if (!delRes.ok) { console.error('Delete failed:', await delRes.text()); }
+      // Optimistically remove then re-fetch
+      setRecipes(prev => prev.filter(r => r.id !== id));
+      const res = await fetch('/api/my/recipes');
+      if (res.ok) setRecipes(await res.json());
+    } finally {
+      setDeleting(null);
+    }
   };
 
   const handleTogglePublish = async (id: string, current: boolean) => {
@@ -153,6 +159,8 @@ export default function MyRecipesPage() {
     <td style={{
       padding: '10px 14px',
       borderRight: last ? undefined : B,
+      width: last ? 120 : undefined,
+      minWidth: last ? 120 : undefined,
       ...(mono ? { ...MONO, color: 'var(--muted)' } : {}),
     }}>{children}</td>
   );

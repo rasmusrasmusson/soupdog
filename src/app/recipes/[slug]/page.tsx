@@ -895,7 +895,13 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           }
           if (user && data.author_id === user.id) {
             setIsAuthor(true);
-            setCanonicalId(data.id);
+            // Look up the canonical ID via slug for publish/unpublish
+            const { data: can } = await supabase
+              .from('recipe_canonicals')
+              .select('id')
+              .eq('slug', data.slug)
+              .single();
+            setCanonicalId(can?.id ?? data.id);
           }
           const rv = data.recipe_versions;
           const hasNewData = rv && (
@@ -988,7 +994,11 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
     if (!canonicalId) return;
     setPublishing(true);
     try {
-      const res = await fetch(`/api/my/recipes/${canonicalId}/publish`, { method: 'PATCH' });
+      const res = await fetch(`/api/my/recipes/${canonicalId}/publish`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publish: true }),
+      });
       if (res.ok) setIsDraft(false);
     } finally {
       setPublishing(false);
