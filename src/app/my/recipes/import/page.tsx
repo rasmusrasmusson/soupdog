@@ -4,6 +4,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
+import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
 import Link from 'next/link';
 
 const MONO = 'var(--font-mono)';
@@ -594,7 +595,7 @@ export default function ImportRecipePage() {
                             {step.durationMinutes > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>⏱ {step.durationMinutes} min</span>}
                             {step.taskFamily && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{step.taskFamily}</span>}
                             {(step.stepIngredients ?? []).length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>{step.stepIngredients.join(', ')}</span>}
-                            {(step.stepTools ?? []).length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', border: '1px solid var(--border)', padding: '1px 5px' }}>🔧 {step.stepTools.join(', ')}</span>}
+                            {(step.stepTools ?? []).length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', border: '1px solid var(--border)', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><SoupdogIcon name="tools" size={9} /> {step.stepTools.join(', ')}</span>}
                           </div>
                         </div>
                       </div>

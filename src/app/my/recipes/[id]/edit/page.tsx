@@ -346,18 +346,19 @@ export default function EditRecipePage() {
           <div style={{ width: 300, flexShrink: 0 }}>
             <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
-            {/* Header */}
             <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)' }}>
-                Adjust recipe
+                Edit recipe
               </span>
-              {chatHistory.length > 0 && (
-                <button onClick={() => { setChatHistory([]); setPending(null); }}
-                  title="Clear history"
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, fontFamily: MONO, fontSize: 9 }}>
-                  <RotateCcw size={10} /> Clear
-                </button>
-              )}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {chatHistory.length > 0 && (
+                  <button onClick={() => { setChatHistory([]); setPending(null); }}
+                    title="Clear history"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 4, fontFamily: MONO, fontSize: 9 }}>
+                    <RotateCcw size={10} /> Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Messages area */}

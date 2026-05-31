@@ -6,7 +6,7 @@ import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          X, GripVertical, Zap, Search, BookOpen, PenLine,
          UtensilsCrossed, Pipette, Flame, Droplets, Microwave,
          Soup, Hourglass, Scale, ChefHat, Leaf } from 'lucide-react';
-import type { RecipeFormData } from '@/lib/recipe-actions';
+import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -1459,7 +1459,7 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
               <button onClick={() => setOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
                 className="hover:bg-[var(--accent-subtle)] transition-colors">
-                <UtensilsCrossed size={9} style={{ color: "var(--muted)" }} />
+                <SoupdogIcon name="tools" size={9} style={{ color: 'var(--muted)' }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{displayName}</span>
                 {linkedInstance && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {linkedInstance.name}</span>}
               </button>
@@ -1725,7 +1725,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             </div>
           )}
           <button onClick={addTool} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
-            <UtensilsCrossed size={11} /> Add tool
+            <SoupdogIcon name="tools" size={11} /> Add tool
           </button>
         </div>
 
@@ -2546,7 +2546,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
       </section>
 
       <div className="h-16" />
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-[var(--border)] bg-[var(--surface)] px-4 md:px-8 py-3 flex items-center gap-4">
+      <div className="fixed bottom-0 left-0 z-50 border-t border-[var(--border)] bg-[var(--surface)] px-4 md:px-8 py-3 flex items-center gap-4" style={{ right: 300 }}>
         {error && <span className="text-[11px] font-mono text-red-600 flex-1 truncate">{error}</span>}
         {!error && <span className="text-[11px] text-[var(--muted)] font-mono flex-1">Saved as draft — publish from My Recipes</span>}
         <button onClick={handleSubmit} disabled={saving}
