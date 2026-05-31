@@ -895,7 +895,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           }
           if (user && data.author_id === user.id) {
             setIsAuthor(true);
-            setCanonicalId(data.recipe_version_id ?? data.id);
+            setCanonicalId(data.id);
           }
           const rv = data.recipe_versions;
           const hasNewData = rv && (

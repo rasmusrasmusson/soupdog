@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, ExternalLink, Pencil, Trash2, Eye, EyeOff,
          Loader2, Bookmark, BookmarkX } from 'lucide-react';
@@ -65,8 +65,16 @@ function EmptyState({ icon, label, action }: {
 
 export default function MyRecipesPage() {
   const searchParams = useSearchParams();
+  const router       = useRouter();
   const savedTitle   = searchParams.get('saved');
-  const [tab, setTab]           = useState<Tab>('created');
+  const [tab, setTab] = useState<Tab>('created');
+
+  // Clear the ?saved= param from URL after showing banner
+  useEffect(() => {
+    if (savedTitle) {
+      router.replace('/my/recipes');
+    }
+  }, []);
   const [recipes, setRecipes]   = useState<MyRecipe[]>([]);
   const [saved, setSaved]       = useState<SavedRecipe[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
@@ -86,9 +94,9 @@ export default function MyRecipesPage() {
     })();
   }, []);
 
-  // Load created recipes lazily when tab switches
+  // Load created recipes on mount and whenever tab switches to created
   useEffect(() => {
-    if (tab !== 'created' || recipes.length > 0) return;
+    if (tab !== 'created') return;
     (async () => {
       setLoadingMine(true);
       try {
@@ -96,7 +104,6 @@ export default function MyRecipesPage() {
         if (res.ok) setRecipes(await res.json());
       } finally { setLoadingMine(false); }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
   const handleDelete = async (id: string, title: string) => {
