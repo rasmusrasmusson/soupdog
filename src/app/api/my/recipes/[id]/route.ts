@@ -172,7 +172,39 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         stepTools:          step.stepTools ?? [],
         groupToolInstances: step.groupToolInstances,
       },
-    });
+    // Insert step + per-step version_ingredients
+    if (se || !insertedStep) continue;
+    const stepId = insertedStep.id;
+
+    const stepIngs = step.stepIngredients ?? [];
+    for (let j = 0; j < stepIngs.length; j++) {
+      const si = stepIngs[j];
+      const ingName = typeof si === 'string' ? si : si.name;
+      if (!ingName?.trim()) continue;
+
+      // Find or create ingredient
+      const { data: existing } = await db.from('ingredients').select('id')
+        .ilike('name', ingName.trim()).eq('is_product', false).limit(1).single();
+      let ingId = existing?.id;
+      if (!ingId) {
+        const slug = ingName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
+        const { data: newIng } = await db.from('ingredients').insert({ slug, name: ingName.trim(), category: 'other', is_product: false }).select('id').single();
+        ingId = newIng?.id;
+      }
+      if (!ingId) continue;
+
+      await db.from('version_ingredients').insert({
+        version_id:    version.id,
+        step_id:       stepId,
+        ingredient_id: ingId,
+        order_index:   j,
+        quantity_value: typeof si === 'string' ? 0 : (si.quantityValue ?? 0),
+        quantity_unit:  typeof si === 'string' ? 'g' : (si.quantityUnit ?? 'g'),
+        prep_note:      typeof si === 'string' ? null : (si.prepNote || null),
+        optional:       false,
+        food_state:     'fresh',
+      });
+    }
   }
 
   // Update canonical to point to new version + sync legacy

@@ -273,20 +273,48 @@ export default function BasicEditPage({ params }: { params: Promise<{ id: string
     if (!recipe) return;
     setSaving(true);
     try {
+      // Flatten groups into steps for the API
+      const flatSteps = (recipe.groups ?? []).flatMap((g: any) =>
+        (g.steps ?? []).map((s: any) => ({
+          instruction:        s.instruction ?? '',
+          durationMinutes:    s.durationMinutes ?? 0,
+          temperatureCelsius: s.temperatureCelsius ?? 0,
+          taskFamily:         s.taskFamily ?? null,
+          taskId:             s.taskId ?? null,
+          taskName:           s.taskName ?? null,
+          taskType:           s.taskType ?? 'human',
+          groupLabel:         g.outputName || '__default__',
+          stepIngredients:    (s.stepIngredients ?? []).map((i: any) =>
+            typeof i === 'string' ? { name: i, quantityValue: 0, quantityUnit: 'g', prepNote: '' }
+            : { name: i.name, quantityValue: i.quantityValue ?? 0, quantityUnit: i.quantityUnit ?? 'g', prepNote: i.prepNote ?? '' }
+          ),
+          stepTools: (s.stepTools ?? []).map((t: any) =>
+            typeof t === 'string' ? { name: t, instanceId: '', equipmentId: '' } : t
+          ),
+        }))
+      );
+
       const res = await fetch(`/api/my/recipes/${id}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          canonicalId: recipe._canonicalId, versionId: recipe._versionId,
-          title: recipe.title, description: recipe.description, cuisine: recipe.cuisine,
-          tags: Array.isArray(recipe.tags) ? recipe.tags.join(', ') : recipe.tags,
-          servings: recipe.servings, difficulty: recipe.difficulty,
-          totalTimeMinutes: recipe.totalTimeMinutes, activeTimeMinutes: recipe.activeTimeMinutes,
-          ingredients: recipe.ingredients ?? [],
-          steps: (recipe.groups ?? []).flatMap((g: any) => g.steps.map((s: any) => ({ ...s, groupLabel: g.outputName || '__default__' }))),
-          equipmentIds: recipe._equipmentIds ?? [], isPublished: recipe._isPublished ?? false,
+          canonicalId:       recipe._canonicalId,
+          versionId:         recipe._versionId,
+          title:             recipe.title,
+          description:       recipe.description,
+          cuisine:           recipe.cuisine,
+          tags:              Array.isArray(recipe.tags) ? recipe.tags.join(', ') : (recipe.tags ?? ''),
+          servings:          recipe.servings,
+          difficulty:        recipe.difficulty,
+          totalTimeMinutes:  recipe.totalTimeMinutes ?? 0,
+          activeTimeMinutes: recipe.activeTimeMinutes ?? 0,
+          steps:             flatSteps,
+          ingredients:       recipe.ingredients ?? [],
+          equipmentIds:      recipe._equipmentIds ?? [],
+          isPublished:       recipe._isPublished ?? false,
         }),
       });
-      if (!res.ok) throw new Error('Save failed');
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error ?? 'Save failed');
       sessionStorage.setItem('soupdog_saved', recipe.title ?? 'Recipe');
       router.push('/my/recipes');
     } catch (err: any) { setChatError(err.message ?? 'Save failed'); }
