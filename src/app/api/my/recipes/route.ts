@@ -5,6 +5,34 @@ import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
 
 // Find existing ingredient by name (case-insensitive) or create new one
+async function estimateNutrition(name: string): Promise<any | null> {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: `Estimate USDA nutrition per 100g for "${name}" (raw/uncooked unless it's a processed food). Respond with ONLY a JSON object, no markdown:\n{"calories":number,"protein":number,"fat":number,"saturated_fat":number,"carbohydrates":number,"sugar":number,"fiber":number,"sodium":number}`,
+        }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.content?.[0]?.text ?? '';
+    const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    return JSON.parse(clean);
+  } catch {
+    return null;
+  }
+}
+
 async function findOrCreateIngredient(db: any, name: string): Promise<string | null> {
   const trimmed = name.trim();
   if (!trimmed) return null;
@@ -17,11 +45,19 @@ async function findOrCreateIngredient(db: any, name: string): Promise<string | n
     .limit(1)
     .single();
   if (existing?.id) return existing.id;
-  // Create new
+  // Estimate nutrition for new ingredient
+  const nutrition = await estimateNutrition(trimmed);
+  // Create new with nutrition data
   const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
   const { data: newIng } = await db
     .from('ingredients')
-    .insert({ slug, name: trimmed, category: 'other', is_product: false })
+    .insert({
+      slug,
+      name: trimmed,
+      category: 'other',
+      is_product: false,
+      ...(nutrition ? { nutrition_per_100g: nutrition } : {}),
+    })
     .select('id')
     .single();
   return newIng?.id ?? null;

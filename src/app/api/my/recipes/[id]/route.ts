@@ -3,6 +3,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
+async function estimateNutrition(name: string): Promise<any | null> {
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY!,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: `Estimate USDA nutrition per 100g for "${name}" (raw/uncooked unless it's a processed food). Respond with ONLY a JSON object, no markdown:\n{"calories":number,"protein":number,"fat":number,"saturated_fat":number,"carbohydrates":number,"sugar":number,"fiber":number,"sodium":number}`,
+        }],
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = data.content?.[0]?.text ?? '';
+    const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    return JSON.parse(clean);
+  } catch { return null; }
+}
+
 // GET /api/my/recipes/[id]
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -200,8 +226,12 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         .ilike('name', ingName.trim()).eq('is_product', false).limit(1).single();
       let ingId = existing?.id;
       if (!ingId) {
+        const nutrition = await estimateNutrition(ingName);
         const slug = ingName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
-        const { data: newIng } = await db.from('ingredients').insert({ slug, name: ingName.trim(), category: 'other', is_product: false }).select('id').single();
+        const { data: newIng } = await db.from('ingredients').insert({
+          slug, name: ingName.trim(), category: 'other', is_product: false,
+          ...(nutrition ? { nutrition_per_100g: nutrition } : {}),
+        }).select('id').single();
         ingId = newIng?.id;
       }
       if (!ingId) continue;
