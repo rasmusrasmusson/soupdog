@@ -159,8 +159,8 @@ export default function MyRecipesPage() {
     <td style={{
       padding: '10px 14px',
       borderRight: last ? undefined : B,
-      width: last ? 120 : undefined,
-      minWidth: last ? 120 : undefined,
+      width: last ? 150 : undefined,
+      minWidth: last ? 150 : undefined,
       ...(mono ? { ...MONO, color: 'var(--muted)' } : {}),
     }}>{children}</td>
   );
@@ -290,17 +290,37 @@ export default function MyRecipesPage() {
                             : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />
                           }
                         </button>
-                        <button onClick={() => handleDelete(r.id)}
-                          disabled={deleting === r.id} title="Delete"
-                          style={{ padding: 6, background: 'none', border: confirmDelete === r.id ? '1px solid #ef4444' : 'none', cursor: 'pointer', display: 'flex', color: confirmDelete === r.id ? '#ef4444' : 'var(--muted)' }}
-                          className="disabled:opacity-40 transition-colors">
-                          {deleting === r.id
-                            ? <Loader2 size={12} className="animate-spin" />
-                            : confirmDelete === r.id
-                            ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9 }}>confirm?</span>
-                            : <Trash2 size={12} strokeWidth={1.5} />
-                          }
-                        </button>
+                        {confirmDelete === r.id ? (
+                          <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                            <button onClick={() => setConfirmDelete(null)}
+                              style={{ padding: '3px 6px', background: 'none', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
+                              Cancel
+                            </button>
+                            <button onClick={async () => {
+                              setConfirmDelete(null);
+                              setDeleting(r.id);
+                              try {
+                                await fetch(`/api/my/recipes/${r.id}`, { method: 'DELETE' });
+                                setRecipes(prev => prev.filter(x => x.id !== r.id));
+                                const res = await fetch('/api/my/recipes');
+                                if (res.ok) setRecipes(await res.json());
+                              } finally { setDeleting(null); }
+                            }}
+                              style={{ padding: '3px 6px', background: '#ef4444', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#fff' }}>
+                              Delete
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDelete(r.id)}
+                            disabled={deleting === r.id} title="Delete"
+                            style={{ padding: 6, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+                            className="hover:text-red-500 disabled:opacity-40 transition-colors">
+                            {deleting === r.id
+                              ? <Loader2 size={12} className="animate-spin" />
+                              : <Trash2 size={12} strokeWidth={1.5} />
+                            }
+                          </button>
+                        )}
                       </div>
                     </TD>
                   </tr>
