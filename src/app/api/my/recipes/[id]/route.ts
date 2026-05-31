@@ -130,11 +130,21 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
   const totalTimeSeconds = calculateTotalSecondsForSave(data.steps ?? []);
 
+  // Get next version number — find max existing version and increment
+  const { data: existingVersions } = await db
+    .from('recipe_versions')
+    .select('version_number')
+    .eq('canonical_id', id)
+    .order('version_number', { ascending: false })
+    .limit(1);
+  const nextVersion = ((existingVersions?.[0]?.version_number) ?? 0) + 1;
+
   // Create new version
   const { data: version, error: verErr } = await db
     .from('recipe_versions')
     .insert({
       canonical_id:         id,
+      version_number:       nextVersion,
       title:                data.title?.trim(),
       description:          data.description?.trim() || null,
       cuisine:              data.cuisine?.trim() || null,
