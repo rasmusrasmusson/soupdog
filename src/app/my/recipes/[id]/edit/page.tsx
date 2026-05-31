@@ -46,6 +46,7 @@ function editorToImportJson(data: any): any {
     });
   }
 
+  // Build ingredients from all step ingredients (with quantities)
   const allIngNames = new Set<string>();
   const ingredients: any[] = [];
   for (const step of (data.steps ?? [])) {
@@ -53,14 +54,26 @@ function editorToImportJson(data: any): any {
       const key = ing.name?.toLowerCase().trim();
       if (!key || allIngNames.has(key)) continue;
       allIngNames.add(key);
-      ingredients.push({ name: ing.name, quantityValue: ing.quantityValue ?? 0, quantityUnit: ing.quantityUnit ?? 'g', prepNote: ing.prepNote || null, optional: ing.optional ?? false });
+      ingredients.push({
+        name: ing.name,
+        quantityValue: ing.quantityValue ?? 0,
+        quantityUnit: ing.quantityUnit ?? 'g',
+        prepNote: ing.prepNote || null,
+        optional: ing.optional ?? false,
+      });
     }
   }
   for (const ing of (data.ingredients ?? [])) {
     const key = ing.name?.toLowerCase().trim();
     if (!key || allIngNames.has(key)) continue;
     allIngNames.add(key);
-    ingredients.push({ name: ing.name, quantityValue: ing.quantityValue ?? 0, quantityUnit: ing.quantityUnit ?? 'g', prepNote: ing.prepNote || null, optional: ing.optional ?? false });
+    ingredients.push({
+      name: ing.name,
+      quantityValue: ing.quantityValue ?? 0,
+      quantityUnit: ing.quantityUnit ?? 'g',
+      prepNote: ing.prepNote || null,
+      optional: ing.optional ?? false,
+    });
   }
 
   return {
@@ -306,8 +319,8 @@ export default function EditRecipePage() {
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-          {/* Left — Recipe editor (takes remaining width, padded so content doesn't go under sidebar) */}
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 300 }}>
+          {/* Left — Recipe editor */}
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 'calc(100% - 300px)' }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
           </div>
 
