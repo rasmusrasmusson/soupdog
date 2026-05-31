@@ -265,7 +265,14 @@ export default function BasicEditPage({ params }: { params: Promise<{ id: string
   useEffect(() => {
     fetch(`/api/my/recipes/${id}`)
       .then(r => { if (!r.ok) throw new Error('Not found'); return r.json(); })
-      .then(data => { setRecipe(editorToImportJson(data)); setLoading(false); })
+      .then(data => {
+        try {
+          setRecipe(editorToImportJson(data));
+        } catch (e) {
+          setError('Could not load recipe data.');
+        }
+        setLoading(false);
+      })
       .catch(() => { setError('Recipe not found.'); setLoading(false); });
   }, [id]);
 
