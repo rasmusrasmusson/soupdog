@@ -11,12 +11,20 @@ export const maxDuration = 300;
 const UNESTIMABLE = { estimated: false } as const;
 
 // Service-role client: server-only, bypasses RLS.
+// We set BOTH the apikey and Authorization headers explicitly to the secret
+// key. RLS bypass is decided by the Authorization header, and in some setups
+// the default header isn't applied as expected — forcing it here guarantees
+// the request runs as the service_role (BYPASSRLS) role.
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — cannot write past RLS');
+  // Log a non-secret fingerprint so we can confirm the right key is loaded
+  // without exposing it: prefix + length.
+  console.log('[backfill] service key prefix:', key.slice(0, 10), 'len:', key.length);
   return createSupabaseClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${key}`, apikey: key } },
   });
 }
 
@@ -58,12 +66,14 @@ async function runBatch(): Promise<{ filled: number; marked: number; processed: 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = serviceClient() as any;
 
-  const { data: ingredients } = await db
+  const { data: ingredients, error: selErr } = await db
     .from('ingredients')
     .select('id, name')
     .is('nutrition_per_100g', null)
     .eq('is_product', false)
     .limit(30);
+
+  console.log('[backfill] null-ingredient SELECT — count:', ingredients?.length ?? 0, 'error:', selErr?.message ?? 'none');
 
   if (!ingredients?.length) {
     return { filled: 0, marked: 0, processed: 0, remaining: 0 };
