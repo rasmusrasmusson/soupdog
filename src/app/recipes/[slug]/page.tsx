@@ -833,12 +833,15 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
   React.useEffect(() => {
     async function load() {
       setLoading(true); setError(null);
+
+      // Get current user once — used in both query attempts
+      const { createClient: createClientForUser } = await import('@/lib/supabase/client');
+      const supabaseForUser = createClientForUser() as any;
+      const { data: { user } } = await supabaseForUser.auth.getUser();
+
       try {
         const { createClient } = await import('@/lib/supabase/client');
         const supabase = createClient() as any;
-
-        // Get current user to check authorship
-        const { data: { user } } = await supabase.auth.getUser();
 
         const { data, error: dbError } = await supabase
           .from('recipes')
