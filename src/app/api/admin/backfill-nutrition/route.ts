@@ -1,11 +1,39 @@
 // src/app/api/admin/backfill-nutrition/route.ts
-// One-time backfill — call this once to add nutrition to all ingredients missing it
-// Protected: only callable by authenticated users
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-async function estimateNutrition(name: string): Promise<any | null> {
+export async function POST() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const db = supabase as any;
+
+  // Get ingredients missing nutrition — skip obvious non-foods and duplicates
+  const { data: ingredients } = await db
+    .from('ingredients')
+    .select('id, name')
+    .is('nutrition_per_100g', null)
+    .eq('is_product', false)
+    .limit(30);
+
+  if (!ingredients?.length) {
+    return NextResponse.json({ message: 'All done — no ingredients need backfilling', count: 0 });
+  }
+
+  // Deduplicate by name (case-insensitive)
+  const seen = new Set<string>();
+  const unique = ingredients.filter((ing: any) => {
+    const key = ing.name.toLowerCase().trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Single batched API call for all ingredients at once
+  const nameList = unique.map((ing: any, i: number) => `${i + 1}. ${ing.name}`).join('\n');
+
+  let nutritionMap: Record<string, any> = {};
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -16,64 +44,55 @@ async function estimateNutrition(name: string): Promise<any | null> {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 300,
+        max_tokens: 4000,
         messages: [{
           role: 'user',
-          content: `Estimate USDA nutrition per 100g for "${name}" (raw/uncooked unless it's a processed food). Respond with ONLY a JSON object, no markdown:\n{"calories":number,"protein":number,"fat":number,"saturated_fat":number,"carbohydrates":number,"sugar":number,"fiber":number,"sodium":number}`,
+          content: `Estimate USDA nutrition per 100g for each ingredient below. For non-food items like "pasta water" use null. Respond ONLY with a JSON object mapping each number to nutrition data or null:\n\n${nameList}\n\nFormat: {"1":{"calories":n,"protein":n,"fat":n,"saturated_fat":n,"carbohydrates":n,"sugar":n,"fiber":n,"sodium":n},"2":null,...}`,
         }],
       }),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const text = data.content?.[0]?.text ?? '';
-    const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-    return JSON.parse(clean);
-  } catch { return null; }
-}
 
-export async function POST() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const db = supabase as any;
-
-  // Get all ingredients with no nutrition data
-  const { data: ingredients } = await db
-    .from('ingredients')
-    .select('id, name')
-    .is('nutrition_per_100g', null)
-    .eq('is_product', false)
-    .limit(20); // Process 20 at a time to avoid timeouts
-
-  if (!ingredients?.length) {
-    return NextResponse.json({ message: 'No ingredients need backfilling', count: 0 });
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.content?.[0]?.text ?? '';
+      const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      nutritionMap = JSON.parse(clean);
+    }
+  } catch (e) {
+    return NextResponse.json({ error: 'API call failed', detail: String(e) }, { status: 500 });
   }
 
+  // Update each ingredient with its nutrition data
   let updated = 0;
-  let failed = 0;
-  const failedNames: string[] = [];
+  let skipped = 0;
 
-  for (const ing of ingredients) {
-    const nutrition = await estimateNutrition(ing.name);
-    if (nutrition) {
+  for (let i = 0; i < unique.length; i++) {
+    const ing = unique[i];
+    const nutrition = nutritionMap[String(i + 1)];
+
+    if (nutrition && nutrition.calories) {
+      // Update all rows with this name (handles duplicates)
       await db.from('ingredients')
         .update({ nutrition_per_100g: nutrition })
-        .eq('id', ing.id);
+        .ilike('name', ing.name.trim())
+        .eq('is_product', false);
       updated++;
     } else {
-      failed++;
-      failedNames.push(ing.name);
+      skipped++;
     }
-    // Increased delay to avoid rate limits
-    await new Promise(r => setTimeout(r, 500));
   }
 
+  // Check how many still remain
+  const { count } = await db
+    .from('ingredients')
+    .select('*', { count: 'exact', head: true })
+    .is('nutrition_per_100g', null)
+    .eq('is_product', false);
+
   return NextResponse.json({
-    message: `Backfill complete`,
+    message: 'Backfill batch complete',
     updated,
-    failed,
-    failedNames: failedNames.slice(0, 10),
-    remaining: ingredients.length === 100 ? 'more than 100 remaining — call again' : 'none',
+    skipped,
+    remaining: count ?? 0,
   });
 }
