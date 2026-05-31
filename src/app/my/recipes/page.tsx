@@ -247,11 +247,17 @@ export default function MyRecipesPage() {
                     </TD>
                     <TD last>
                       <div style={{ display: 'flex', gap: 2 }}>
-                        {r.isPublished && (
+                        {r.isPublished ? (
                           <Link href={`/recipes/${r.slug}`} title="View live"
                             style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
                             className="hover:text-[var(--accent)] transition-colors">
                             <ExternalLink size={12} strokeWidth={1.5} />
+                          </Link>
+                        ) : (
+                          <Link href={`/recipes/${r.slug}`} title="Preview draft"
+                            style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
+                            className="hover:text-[var(--accent)] transition-colors">
+                            <Eye size={12} strokeWidth={1.5} />
                           </Link>
                         )}
                         <Link href={`/my/recipes/${r.id}/edit`} title="Edit"
@@ -265,7 +271,7 @@ export default function MyRecipesPage() {
                           className="hover:text-[var(--accent)] disabled:opacity-40 transition-colors">
                           {toggling === r.id
                             ? <Loader2 size={12} className="animate-spin" />
-                            : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />
+                            : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <ExternalLink size={12} strokeWidth={1.5} />
                           }
                         </button>
                         <button onClick={() => handleDelete(r.id, r.title)}
