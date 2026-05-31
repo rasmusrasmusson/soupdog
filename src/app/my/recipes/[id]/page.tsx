@@ -361,8 +361,11 @@ export default function BasicEditPage({ params }: { params: Promise<{ id: string
           } catch { /* skip */ }
         }
       }
-    } catch (err: any) { setChatError(err.message ?? 'Request failed'); setStreamingText(''); }
-    finally { setChatLoading(false); chatInputRef.current?.focus(); }
+    } catch (err: any) {
+      const msg = err.message ?? 'Request failed';
+      setChatError(msg.includes('JSON') ? 'The recipe is too large for a single update. Try breaking it into smaller changes.' : msg);
+      setStreamingText('');
+    } finally { setChatLoading(false); chatInputRef.current?.focus(); }
   };
 
   const handleChatKeyDown = (e: React.KeyboardEvent) => {

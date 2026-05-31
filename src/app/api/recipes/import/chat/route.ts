@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: useHaiku ? 2000 : 6000,
+        max_tokens: useHaiku ? 2000 : 8000,
         system:     SYSTEM_PROMPT,
         messages,
         stream:     true,

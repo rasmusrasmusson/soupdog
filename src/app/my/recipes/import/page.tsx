@@ -293,7 +293,8 @@ export default function ImportRecipePage() {
         }
       }
     } catch (err: any) {
-      setChatError(err.message ?? 'Request failed');
+      const msg = err.message ?? 'Request failed';
+      setChatError(msg.includes('JSON') ? 'The recipe is too large for a single update. Try breaking it into smaller changes.' : msg);
       setStreamingText('');
     } finally {
       setChatLoading(false);
