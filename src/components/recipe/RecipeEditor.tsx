@@ -1460,7 +1460,7 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
               <button onClick={() => setOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
                 className="hover:bg-[var(--accent-subtle)] transition-colors">
-                <SoupdogIcon name="tools" size={9} style={{ color: 'var(--muted)' }} />
+                <SoupdogIcon name="tools" size={11} style={{ color: 'var(--muted)' }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{displayName}</span>
                 {linkedInstance && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {linkedInstance.name}</span>}
               </button>
@@ -1646,23 +1646,40 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div>
           <FL>Ingredients</FL>
           {step.stepIngredients.length > 0 && (
-            <div className="mb-1 grid gap-1.5 font-mono text-[9px] uppercase tracking-wider text-[var(--muted)]"
-              style={{ gridTemplateColumns: '1fr 64px 64px 1fr auto' }}>
-              <span>Name</span><span className="text-right">Qty</span><span>Unit</span><span>Prep</span><span className="w-5" />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+              {step.stepIngredients.map((si, i) => (
+                si.name.trim() ? (
+                  // Named ingredient — show as pill
+                  <div key={si.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', minHeight: 28 }}>
+                      <SoupdogIcon name="ingredients" size={11} style={{ color: 'var(--muted)' }} />
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{si.name}</span>
+                      {si.quantityValue > 0 && (
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {si.quantityValue} {si.quantityUnit}</span>
+                      )}
+                    </span>
+                    <button onClick={() => removeIng(i)}
+                      style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px', minHeight: 28 }}
+                      className="hover:bg-red-50 transition-colors">
+                      <X size={9} style={{ color: 'var(--muted)' }} />
+                    </button>
+                  </div>
+                ) : (
+                  // Empty ingredient being added — show full form row
+                  <div key={si.id} style={{ width: '100%' }}>
+                    <StepIngRow row={si}
+                      ingredientTree={filteredIngTree}
+                      fromRecipe={fromRecipe}
+                      overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
+                      onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
+                  </div>
+                )
+              ))}
             </div>
           )}
-          {step.stepIngredients.map((si, i) => (
-            <StepIngRow key={si.id} row={si}
-              ingredientTree={filteredIngTree}
-              fromRecipe={fromRecipe}
-              overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
-              onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
-          ))}
-          {step.stepIngredients.length === 0 && (
-          <button onClick={addIng} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
+          <button onClick={addIng} className="mt-1 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
             <Leaf size={11} /> Add ingredient
           </button>
-          )}
         </div>
 
         {/* ── 2. STEP / TASK ──────────────────────────────── */}
