@@ -66,22 +66,26 @@ function EmptyState({ icon, label, action }: {
 export default function MyRecipesPage() {
   const searchParams = useSearchParams();
   const router       = useRouter();
-  const savedTitle   = searchParams.get('saved');
+  const [savedTitle, setSavedTitle] = useState<string|null>(() => 
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('saved') : null
+  );
   const [tab, setTab] = useState<Tab>('created');
 
-  // Clear the ?saved= param from URL after showing banner
+  // Clear the ?saved= param from URL after a short delay so banner shows first
   useEffect(() => {
     if (savedTitle) {
-      router.replace('/my/recipes');
+      const t = setTimeout(() => router.replace('/my/recipes'), 3000);
+      return () => clearTimeout(t);
     }
-  }, []);
+  }, [savedTitle]);
   const [recipes, setRecipes]   = useState<MyRecipe[]>([]);
   const [saved, setSaved]       = useState<SavedRecipe[]>([]);
   const [loadingMine, setLoadingMine] = useState(true);
   const [loadingSaved, setLoadingSaved] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [toggling, setToggling] = useState<string | null>(null);
-  const [unsaving, setUnsaving] = useState<string | null>(null);
+  const [deleting,       setDeleting]       = useState<string | null>(null);
+  const [confirmDelete,  setConfirmDelete]  = useState<string | null>(null);
+  const [toggling,       setToggling]       = useState<string | null>(null);
+  const [unsaving,       setUnsaving]       = useState<string | null>(null);
 
   // Load saved on mount (default tab) + on tab switch
   useEffect(() => {
@@ -106,11 +110,11 @@ export default function MyRecipesPage() {
     })();
   }, [tab]);
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+  const handleDelete = async (id: string) => {
+    if (confirmDelete !== id) { setConfirmDelete(id); return; }
+    setConfirmDelete(null);
     setDeleting(id);
     await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
-    // Re-fetch from server to ensure list is accurate
     const res = await fetch('/api/my/recipes');
     if (res.ok) setRecipes(await res.json());
     setDeleting(null);
@@ -278,12 +282,14 @@ export default function MyRecipesPage() {
                             : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />
                           }
                         </button>
-                        <button onClick={() => handleDelete(r.id, r.title)}
+                        <button onClick={() => handleDelete(r.id)}
                           disabled={deleting === r.id} title="Delete"
-                          style={{ padding: 6, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
-                          className="hover:text-red-500 disabled:opacity-40 transition-colors">
+                          style={{ padding: 6, background: 'none', border: confirmDelete === r.id ? '1px solid #ef4444' : 'none', cursor: 'pointer', display: 'flex', color: confirmDelete === r.id ? '#ef4444' : 'var(--muted)' }}
+                          className="disabled:opacity-40 transition-colors">
                           {deleting === r.id
                             ? <Loader2 size={12} className="animate-spin" />
+                            : confirmDelete === r.id
+                            ? <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9 }}>confirm?</span>
                             : <Trash2 size={12} strokeWidth={1.5} />
                           }
                         </button>
