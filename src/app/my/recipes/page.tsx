@@ -149,8 +149,8 @@ export default function MyRecipesPage() {
     <td style={{
       padding: '10px 14px',
       borderRight: last ? undefined : B,
-      width: last ? 150 : undefined,
-      minWidth: last ? 150 : undefined,
+      width: last ? 180 : undefined,
+      minWidth: last ? 180 : undefined,
       ...(mono ? { ...MONO, color: 'var(--muted)' } : {}),
     }}>{children}</td>
   );

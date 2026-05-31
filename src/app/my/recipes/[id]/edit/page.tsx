@@ -176,7 +176,8 @@ export default function EditRecipePage() {
         imp._canonicalId = data.canonicalId; imp._versionId = data.versionId;
         imp._equipmentIds = data.equipmentIds ?? []; imp._isPublished = data.isPublished ?? false;
         setImportJson(imp);
-        setEditorInitial(data);
+        // Convert through importToInitial so RecipeEditor gets the correct format
+        setEditorInitial(importToInitial(imp));
         setLoading(false);
       })
       .catch(() => { setError('Recipe not found or you do not have permission to edit it.'); setLoading(false); });
