@@ -197,7 +197,7 @@ export async function POST(req: NextRequest) {
           order_index:         i + 1,
           step_type:           step.stepType ?? 'human',
           instruction:         step.instruction?.trim() || '',
-          group_label:         step.groupLabel?.trim() || null,
+          group_label:         (step.groupLabel?.trim() === '__default__' ? null : step.groupLabel?.trim()) || null,
           duration_seconds:    step.durationMinutes ? step.durationMinutes * 60 : null,
           temperature_celsius: step.temperatureCelsius || null,
           appliance_settings:  applianceSettings,

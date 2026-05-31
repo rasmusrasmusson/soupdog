@@ -130,6 +130,7 @@ export default function ImportRecipePage() {
   const router = useRouter();
 
   const [text,       setText]       = useState('');
+  const [manualTitle, setManualTitle] = useState('');
   const [uploadFile, setUploadFile] = useState<File|null>(null);
   const [dragOver,   setDragOver]   = useState(false);
   const [saving,     setSaving]     = useState(false);
@@ -198,7 +199,7 @@ export default function ImportRecipePage() {
       const res  = await fetch('/api/recipes/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Import failed');
-      setPreview(data.recipe);
+      setPreview(manualTitle.trim() ? { ...data.recipe, title: manualTitle.trim() } : data.recipe);
       setStatus('done');
     } catch (err: any) {
       setError(err.message ?? 'Import failed');
@@ -353,6 +354,18 @@ export default function ImportRecipePage() {
 
       {status !== 'done' && (
         <>
+          {/* Optional recipe name */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 4 }}>
+              Recipe name <span style={{ opacity: 0.5 }}>(optional — we'll detect it from the content)</span>
+            </div>
+            <input
+              value={manualTitle}
+              onChange={e => setManualTitle(e.target.value)}
+              placeholder="e.g. Chicken Tikka Masala"
+              style={{ width: '100%', padding: '8px 12px', border: B, background: 'var(--surface)', color: 'var(--fg)', fontFamily: MONO, fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }}
+            />
+          </div>
           <div style={{ marginBottom: 16 }}>
             {/* File upload zone */}
             <div

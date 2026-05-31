@@ -27,9 +27,10 @@ function editorToImportJson(data: any): any {
   const groupMap = new Map<string, { outputName: string; steps: any[] }>();
   const groupOrder: string[] = [];
   for (const step of (data.steps ?? [])) {
-    const label = step.groupLabel ?? '__default__';
-    if (!groupMap.has(label)) { groupMap.set(label, { outputName: label === '__default__' ? '' : label, steps: [] }); groupOrder.push(label); }
-    groupMap.get(label)!.steps.push({
+    const label = step.groupLabel ?? '';
+    const cleanLabel = label === '__default__' ? '' : label;
+    if (!groupMap.has(cleanLabel)) { groupMap.set(cleanLabel, { outputName: cleanLabel, steps: [] }); groupOrder.push(cleanLabel); }
+    groupMap.get(cleanLabel)!.steps.push({
       instruction: step.instruction ?? '', durationMinutes: step.durationMinutes ?? 0,
       temperatureCelsius: step.temperatureCelsius ?? null, taskFamily: step.taskFamily ?? null,
       stepIngredients: (step.stepIngredients ?? []).filter((i: any) => i.name?.trim()).map((i: any) => ({ name: i.name, quantityValue: i.quantityValue ?? 0, quantityUnit: i.quantityUnit ?? '' })),
