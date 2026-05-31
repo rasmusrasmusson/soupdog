@@ -110,7 +110,9 @@ export default function MyRecipesPage() {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     setDeleting(id);
     await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
-    setRecipes(prev => prev.filter(r => r.id !== id));
+    // Re-fetch from server to ensure list is accurate
+    const res = await fetch('/api/my/recipes');
+    if (res.ok) setRecipes(await res.json());
     setDeleting(null);
   };
 
@@ -254,31 +256,26 @@ export default function MyRecipesPage() {
                     </TD>
                     <TD last>
                       <div style={{ display: 'flex', gap: 2 }}>
-                        {r.isPublished ? (
-                          <Link href={`/recipes/${r.slug}`} title="View live"
-                            style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
-                            className="hover:text-[var(--accent)] transition-colors">
-                            <ExternalLink size={12} strokeWidth={1.5} />
-                          </Link>
-                        ) : (
-                          <Link href={`/recipes/${r.slug}`} title="Preview draft"
-                            style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
-                            className="hover:text-[var(--accent)] transition-colors">
-                            <ExternalLink size={12} strokeWidth={1.5} />
-                          </Link>
-                        )}
+                        {/* View / Preview */}
+                        <Link href={`/recipes/${r.slug}`} title={r.isPublished ? 'View live' : 'Preview draft'}
+                          style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
+                          className="hover:text-[var(--accent)] transition-colors">
+                          <ExternalLink size={12} strokeWidth={1.5} />
+                        </Link>
+                        {/* Edit */}
                         <Link href={`/my/recipes/${r.id}/edit`} title="Edit"
                           style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
                           className="hover:text-[var(--accent)] transition-colors">
                           <Pencil size={12} strokeWidth={1.5} />
                         </Link>
+                        {/* Publish / Unpublish */}
                         <button onClick={() => handleTogglePublish(r.id, r.isPublished)}
                           disabled={toggling === r.id} title={r.isPublished ? 'Unpublish' : 'Publish'}
                           style={{ padding: 6, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
                           className="hover:text-[var(--accent)] disabled:opacity-40 transition-colors">
                           {toggling === r.id
                             ? <Loader2 size={12} className="animate-spin" />
-                            : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <ExternalLink size={12} strokeWidth={1.5} />
+                            : r.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />
                           }
                         </button>
                         <button onClick={() => handleDelete(r.id, r.title)}
