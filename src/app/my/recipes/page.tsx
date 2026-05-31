@@ -111,16 +111,10 @@ export default function MyRecipesPage() {
   }, [tab]);
 
   const handleDelete = async (id: string) => {
-    if (confirmDelete !== id) { setConfirmDelete(id); return; }
-    setConfirmDelete(null);
     setDeleting(id);
     try {
-      const delRes = await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
-      if (!delRes.ok) { console.error('Delete failed:', await delRes.text()); }
-      // Optimistically remove then re-fetch
+      await fetch(`/api/my/recipes/${id}`, { method: 'DELETE' });
       setRecipes(prev => prev.filter(r => r.id !== id));
-      const res = await fetch('/api/my/recipes');
-      if (res.ok) setRecipes(await res.json());
     } finally {
       setDeleting(null);
     }
@@ -296,14 +290,7 @@ export default function MyRecipesPage() {
                               style={{ padding: '3px 6px', background: 'none', border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>
                               Cancel
                             </button>
-                            <button onClick={async () => {
-                              setConfirmDelete(null);
-                              setDeleting(r.id);
-                              try {
-                                await fetch(`/api/my/recipes/${r.id}`, { method: 'DELETE' });
-                                setRecipes(prev => prev.filter(x => x.id !== r.id));
-                              } finally { setDeleting(null); }
-                            }}
+                            <button onClick={() => { setConfirmDelete(null); handleDelete(r.id); }}
                               style={{ padding: '3px 6px', background: '#ef4444', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: '#fff' }}>
                               Delete
                             </button>
