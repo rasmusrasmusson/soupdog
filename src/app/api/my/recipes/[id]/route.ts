@@ -155,7 +155,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   const allSteps = (data.steps ?? []);
   for (let i = 0; i < allSteps.length; i++) {
     const step = allSteps[i];
-    await db.from('version_steps').insert({
+    const { data: insertedStep, error: se } = await db.from('version_steps').insert({
       version_id:          version.id,
       order_index:         i,
       step_type:           step.taskType ?? 'human',
@@ -172,6 +172,10 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         stepTools:          step.stepTools ?? [],
         groupToolInstances: step.groupToolInstances,
       },
+    })
+    .select('id')
+    .single();
+
     // Insert step + per-step version_ingredients
     if (se || !insertedStep) continue;
     const stepId = insertedStep.id;
