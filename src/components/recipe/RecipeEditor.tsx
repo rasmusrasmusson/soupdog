@@ -1646,27 +1646,52 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
         <div>
           <FL>Ingredients</FL>
           {step.stepIngredients.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 6 }}>
               {step.stepIngredients.map((si, i) => (
                 si.name.trim() ? (
-                  // Named ingredient — show as pill
-                  <div key={si.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', minHeight: 28 }}>
-                      <SoupdogIcon name="ingredients" size={11} style={{ color: 'var(--muted)' }} />
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{si.name}</span>
-                      {si.quantityValue > 0 && (
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {si.quantityValue} {si.quantityUnit}</span>
-                      )}
-                    </span>
-                    <button onClick={() => removeIng(i)}
-                      style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px', minHeight: 28 }}
-                      className="hover:bg-red-50 transition-colors">
-                      <X size={9} style={{ color: 'var(--muted)' }} />
-                    </button>
+                  // Named ingredient — pill that expands on click to show qty/unit/prep
+                  <div key={si.id}>
+                    {(si as any)._expanded ? (
+                      // Expanded form row
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <div style={{ flex: 1 }}>
+                          <StepIngRow row={si}
+                            ingredientTree={filteredIngTree}
+                            fromRecipe={fromRecipe}
+                            overBudget={overBudgetKeys?.has(si.ingredientId || si.name.toLowerCase().trim())}
+                            onChange={v => updateIng(i, v)} onRemove={() => removeIng(i)} />
+                        </div>
+                        <button onClick={() => updateIng(i, { ...si, _expanded: false } as any)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', padding: '0 4px', flexShrink: 0 }}
+                          className="hover:text-[var(--accent)] transition-colors">
+                          ↑ done
+                        </button>
+                      </div>
+                    ) : (
+                      // Collapsed pill
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 0, border: '1px solid var(--border)', background: 'var(--surface-hover)' }}>
+                        <button onClick={() => updateIng(i, { ...si, _expanded: true } as any)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 28 }}
+                          className="hover:bg-[var(--accent-subtle)] transition-colors"
+                          title="Click to edit quantity">
+                          <SoupdogIcon name="ingredients" size={11} style={{ color: 'var(--muted)' }} />
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{si.name}</span>
+                          {si.quantityValue > 0 && (
+                            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {si.quantityValue} {si.quantityUnit}</span>
+                          )}
+                        </button>
+                        <button onClick={() => removeIng(i)}
+                          style={{ background: 'none', border: 'none', borderLeft: '1px solid var(--border)', cursor: 'pointer', padding: '3px 5px', minHeight: 28 }}
+                          className="hover:bg-red-50 transition-colors"
+                          title="Remove ingredient">
+                          <X size={9} style={{ color: 'var(--muted)' }} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
-                  // Empty ingredient being added — show full form row
-                  <div key={si.id} style={{ width: '100%' }}>
+                  // Empty ingredient being added — full form row
+                  <div key={si.id}>
                     <StepIngRow row={si}
                       ingredientTree={filteredIngTree}
                       fromRecipe={fromRecipe}

@@ -272,7 +272,7 @@ export default function MyRecipesPage() {
                           <ExternalLink size={12} strokeWidth={1.5} />
                         </Link>
                         {/* Edit */}
-                        <Link href={`/my/recipes/${r.id}/edit`} title="Edit"
+                        <Link href={`/my/recipes/${r.id}`} title="Edit"
                           style={{ padding: 6, color: 'var(--muted)', display: 'flex' }}
                           className="hover:text-[var(--accent)] transition-colors">
                           <Pencil size={12} strokeWidth={1.5} />
