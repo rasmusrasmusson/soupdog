@@ -99,19 +99,36 @@ function RecipeWYSIWYG({ recipe, onChange }: { recipe: any; onChange: (r: any) =
         )}
       </div>
 
-      {/* Meta grid */}
+      {/* Meta grid — editable */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', border: B, marginBottom: 24 }}>
-        {[
-          ['Servings', String(recipe.servings ?? 4)],
-          ['Total time', formatDuration(recipe.totalTimeMinutes ?? 0)],
-          ['Difficulty', recipe.difficulty ?? '—'],
-          ['Cuisine', recipe.cuisine ?? '—'],
-        ].map(([label, value], i) => (
-          <div key={label} style={{ borderRight: i < 3 ? B : undefined }}>
-            <div style={{ padding: '6px 12px 4px', background: 'var(--surface-hover)', borderBottom: B, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT }}>{label}</div>
-            <div style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--fg)' }}>{value}</div>
-          </div>
-        ))}
+        {/* Servings */}
+        <div style={{ borderRight: B }}>
+          <div style={{ padding: '6px 12px 4px', background: 'var(--surface-hover)', borderBottom: B, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT }}>Servings</div>
+          <input type="number" min={1} value={recipe.servings ?? 4} onChange={e => onChange({ ...recipe, servings: parseInt(e.target.value) || 1 })}
+            style={{ width: '100%', padding: '8px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--fg)', border: 'none', background: 'transparent', outline: 'none', boxSizing: 'border-box' as const }} />
+        </div>
+        {/* Total time — read only */}
+        <div style={{ borderRight: B }}>
+          <div style={{ padding: '6px 12px 4px', background: 'var(--surface-hover)', borderBottom: B, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT }}>Total time</div>
+          <div style={{ padding: '8px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--fg)' }}>{formatDuration(recipe.totalTimeMinutes ?? 0)}</div>
+        </div>
+        {/* Difficulty */}
+        <div style={{ borderRight: B }}>
+          <div style={{ padding: '6px 12px 4px', background: 'var(--surface-hover)', borderBottom: B, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT }}>Difficulty</div>
+          <select value={recipe.difficulty ?? 'medium'} onChange={e => onChange({ ...recipe, difficulty: e.target.value })}
+            style={{ width: '100%', padding: '8px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--fg)', border: 'none', background: 'transparent', outline: 'none', cursor: 'pointer' }}>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+          </select>
+        </div>
+        {/* Cuisine */}
+        <div>
+          <div style={{ padding: '6px 12px 4px', background: 'var(--surface-hover)', borderBottom: B, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT }}>Cuisine</div>
+          <input value={recipe.cuisine ?? ''} onChange={e => onChange({ ...recipe, cuisine: e.target.value })}
+            placeholder="e.g. Indian"
+            style={{ width: '100%', padding: '8px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--fg)', border: 'none', background: 'transparent', outline: 'none', boxSizing: 'border-box' as const }} />
+        </div>
       </div>
 
       {/* Ingredients table */}
@@ -340,9 +357,12 @@ export default function BasicEditPage({ params }: { params: Promise<{ id: string
           </Link>
           <span style={{ color: 'var(--border)' }}>/</span>
           <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--fg)' }}>{recipe?.title || 'Edit recipe'}</span>
+          <span style={{ fontFamily: MONO, fontSize: 9, padding: '2px 7px', background: recipe?._isPublished ? 'var(--accent-subtle)' : '#fef3c7', color: recipe?._isPublished ? 'var(--accent)' : '#92400e', border: `1px solid ${recipe?._isPublished ? 'var(--accent)' : '#f59e0b'}` }}>
+            {recipe?._isPublished ? 'Published' : 'Draft'} · editing
+          </span>
           <span style={{ marginLeft: 'auto' }}>
             <Link href={`/my/recipes/${id}/edit`}
-              style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}
+              style={{ fontFamily: MONO, fontSize: 10, color: MUT, textDecoration: 'none' }}
               className="hover:text-[var(--accent)] transition-colors">
               Advanced editor →
             </Link>
@@ -370,7 +390,7 @@ export default function BasicEditPage({ params }: { params: Promise<{ id: string
             {chatHistory.length === 0 && (
               <>
                 <div style={{ fontFamily: MONO, fontSize: 10, color: MUT, lineHeight: 1.7, padding: '8px 0 12px' }}>
-                  The recipe updates live as you make changes. Ask questions or give instructions.
+                  The recipe updates live as you make changes. You can edit the title, cuisine, difficulty and servings directly, or use chat to adjust anything.
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {['Make it vegetarian', 'Scale to 6 servings', 'Add timing to steps', 'Simplify for beginners', 'What can I substitute?'].map(s => (

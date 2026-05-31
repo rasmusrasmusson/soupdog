@@ -49,7 +49,7 @@ Recipe JSON structure:
 {
   "title": string,
   "description": string,
-  "cuisine": string | null,
+  "cuisine": string | null,  // single string only — if multiple cuisines, combine as "Indian, Pakistani"
   "difficulty": "easy" | "medium" | "hard",
   "servings": number,
   "totalTimeMinutes": number,
