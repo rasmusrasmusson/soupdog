@@ -1,5 +1,5 @@
 // src/app/api/my/recipes/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
@@ -33,7 +33,34 @@ async function estimateNutrition(name: string): Promise<any | null> {
   }
 }
 
-async function findOrCreateIngredient(db: any, name: string): Promise<string | null> {
+// Estimate nutrition for a batch of ingredients and persist it, in the background.
+// Runs AFTER the response is sent (via next/server `after`), so it never adds
+// latency to recipe saves. Failures are swallowed; the admin backfill endpoint
+// (/api/admin/backfill-nutrition) is the safety net for any ingredient left with
+// null nutrition_per_100g.
+async function backfillNutrition(db: any, items: { id: string; name: string }[]) {
+  for (const { id, name } of items) {
+    try {
+      const nutrition = await estimateNutrition(name);
+      if (nutrition) {
+        await db.from('ingredients').update({ nutrition_per_100g: nutrition }).eq('id', id);
+      }
+    } catch {
+      // ignore — backfill endpoint will catch it later
+    }
+  }
+}
+
+// Find existing ingredient by name (case-insensitive) or create a new one.
+// NOTE: new ingredients are created WITHOUT nutrition (nutrition_per_100g stays
+// null) so the save returns fast. When a row is newly created, it is pushed into
+// `createdOut` so the caller can estimate nutrition in the background after the
+// response is sent.
+async function findOrCreateIngredient(
+  db: any,
+  name: string,
+  createdOut: { id: string; name: string }[],
+): Promise<string | null> {
   const trimmed = name.trim();
   if (!trimmed) return null;
   // Check if already exists
@@ -45,9 +72,7 @@ async function findOrCreateIngredient(db: any, name: string): Promise<string | n
     .limit(1)
     .single();
   if (existing?.id) return existing.id;
-  // Estimate nutrition for new ingredient
-  const nutrition = await estimateNutrition(trimmed);
-  // Create new with nutrition data
+  // Create new WITHOUT nutrition — estimation happens in the background.
   const slug = trimmed.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
   const { data: newIng } = await db
     .from('ingredients')
@@ -56,11 +81,14 @@ async function findOrCreateIngredient(db: any, name: string): Promise<string | n
       name: trimmed,
       category: 'other',
       is_product: false,
-      ...(nutrition ? { nutrition_per_100g: nutrition } : {}),
     })
     .select('id')
     .single();
-  return newIng?.id ?? null;
+  if (newIng?.id) {
+    createdOut.push({ id: newIng.id, name: trimmed });
+    return newIng.id;
+  }
+  return null;
 }
 
 function slugify(text: string) {
@@ -155,6 +183,8 @@ export async function POST(req: NextRequest) {
 
     // ── Insert steps (with appliance_settings) + per-step ingredients ──
     const stepIngredientIds = new Set<string>();
+    // Ingredients created during this save, for background nutrition estimation.
+    const createdIngredients: { id: string; name: string }[] = [];
     let ingOrderIndex = 0;  // global counter — unique across all steps
 
     for (let i = 0; i < (data.steps ?? []).length; i++) {
@@ -215,7 +245,7 @@ export async function POST(req: NextRequest) {
 
         let ingredientId = si.ingredientId;
         if (!ingredientId && si.name?.trim()) {
-          ingredientId = await findOrCreateIngredient(db, si.name);
+          ingredientId = await findOrCreateIngredient(db, si.name, createdIngredients);
         }
         if (!ingredientId) continue;
 
@@ -240,7 +270,7 @@ export async function POST(req: NextRequest) {
 
       let ingredientId = ing.ingredientId;
       if (!ingredientId && ing.name?.trim()) {
-        ingredientId = await findOrCreateIngredient(db, ing.name);
+        ingredientId = await findOrCreateIngredient(db, ing.name, createdIngredients);
       }
       if (!ingredientId || stepIngredientIds.has(ingredientId)) continue;
 
@@ -283,6 +313,11 @@ export async function POST(req: NextRequest) {
       version:              1,
       recipe_version_id:    version.id,
     });
+
+    // Estimate nutrition in the background — does NOT block the save response.
+    if (createdIngredients.length > 0) {
+      after(() => backfillNutrition(db, createdIngredients));
+    }
 
     return NextResponse.json({ id: canonical.id, slug }, { status: 201 });
   } catch (err: any) {

@@ -1,5 +1,5 @@
 // src/app/api/my/recipes/[id]/route.ts
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
 
@@ -27,6 +27,22 @@ async function estimateNutrition(name: string): Promise<any | null> {
     const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(clean);
   } catch { return null; }
+}
+
+// Estimate nutrition for newly-created ingredients in the background, after the
+// response is sent. Never blocks the save. The admin backfill endpoint is the
+// safety net for anything left with null nutrition_per_100g.
+async function backfillNutrition(db: any, items: { id: string; name: string }[]) {
+  for (const { id, name } of items) {
+    try {
+      const nutrition = await estimateNutrition(name);
+      if (nutrition) {
+        await db.from('ingredients').update({ nutrition_per_100g: nutrition }).eq('id', id);
+      }
+    } catch {
+      // ignore — backfill endpoint will catch it later
+    }
+  }
 }
 
 // GET /api/my/recipes/[id]
@@ -188,6 +204,8 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
   // Insert steps
   const allSteps = (data.steps ?? []);
+  // Ingredients created during this save, for background nutrition estimation.
+  const createdIngredients: { id: string; name: string }[] = [];
   for (let i = 0; i < allSteps.length; i++) {
     const step = allSteps[i];
     const { data: insertedStep, error: se } = await db.from('version_steps').insert({
@@ -226,13 +244,13 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
         .ilike('name', ingName.trim()).eq('is_product', false).limit(1).single();
       let ingId = existing?.id;
       if (!ingId) {
-        const nutrition = await estimateNutrition(ingName);
+        // Create WITHOUT nutrition — estimation happens in the background.
         const slug = ingName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-' + Date.now().toString(36).slice(-4);
         const { data: newIng } = await db.from('ingredients').insert({
           slug, name: ingName.trim(), category: 'other', is_product: false,
-          ...(nutrition ? { nutrition_per_100g: nutrition } : {}),
         }).select('id').single();
         ingId = newIng?.id;
+        if (ingId) createdIngredients.push({ id: ingId, name: ingName.trim() });
       }
       if (!ingId) continue;
 
@@ -262,6 +280,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
     total_time_seconds: totalTimeSeconds,
     recipe_version_id:  version.id,
   }).eq('slug', canonical.slug);
+
+  // Estimate nutrition in the background — does NOT block the save response.
+  if (createdIngredients.length > 0) {
+    after(() => backfillNutrition(db, createdIngredients));
+  }
 
   return NextResponse.json({ id, slug: canonical.slug });
 }
