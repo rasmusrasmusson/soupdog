@@ -42,22 +42,39 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
 
   const rv = Array.isArray(data.recipe_versions) ? data.recipe_versions[0] : data.recipe_versions;
 
+  const allVersionIngredients = rv?.version_ingredients ?? [];
+
   const steps = (rv?.version_steps ?? [])
     .sort((a: any, b: any) => a.order_index - b.order_index)
-    .map((s: any) => ({
-      id:                 s.id,
-      instruction:        s.instruction,
-      durationMinutes:    Math.round((s.duration_seconds ?? 0) / 60),
-      temperatureCelsius: s.temperature_celsius ?? 0,
-      taskFamily:         s.appliance_settings?.taskFamily ?? undefined,
-      taskId:             s.appliance_settings?.taskId ?? undefined,
-      taskName:           s.appliance_settings?.taskName ?? undefined,
-      taskType:           s.appliance_settings?.taskType ?? undefined,
-      groupLabel:         s.group_label ?? '__default__',
-      stepIngredients:    s.appliance_settings?.stepIngredients ?? [],
-      stepTools:          s.appliance_settings?.stepTools ?? [],
-      groupToolInstances: s.appliance_settings?.groupToolInstances ?? undefined,
-    }));
+    .map((s: any) => {
+      // Find ingredients linked to this step
+      const stepIngs = allVersionIngredients
+        .filter((vi: any) => vi.step_id === s.id)
+        .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+        .map((vi: any) => ({
+          id:            vi.id,
+          ingredientId:  vi.ingredients?.id ?? '',
+          name:          vi.ingredients?.name ?? '',
+          quantityValue: vi.quantity_value ?? 0,
+          quantityUnit:  vi.quantity_unit ?? 'g',
+          prepNote:      vi.prep_note ?? '',
+        }));
+
+      return {
+        id:                 s.id,
+        instruction:        s.instruction,
+        durationMinutes:    Math.round((s.duration_seconds ?? 0) / 60),
+        temperatureCelsius: s.temperature_celsius ?? 0,
+        taskFamily:         s.appliance_settings?.taskFamily ?? undefined,
+        taskId:             s.appliance_settings?.taskId ?? undefined,
+        taskName:           s.appliance_settings?.taskName ?? undefined,
+        taskType:           s.appliance_settings?.taskType ?? undefined,
+        groupLabel:         s.group_label ?? '__default__',
+        stepIngredients:    stepIngs,
+        stepTools:          s.appliance_settings?.stepTools ?? [],
+        groupToolInstances: s.appliance_settings?.groupToolInstances ?? undefined,
+      };
+    });
 
   const ingredients = (rv?.version_ingredients ?? [])
     .sort((a: any, b: any) => a.order_index - b.order_index)
