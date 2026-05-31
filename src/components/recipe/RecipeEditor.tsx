@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus, Trash2, ChevronUp, ChevronDown, Loader2, ChevronRight,
          X, GripVertical, Zap, Search, BookOpen, PenLine,
          UtensilsCrossed, Pipette, Flame, Droplets, Microwave,
-         Soup, Hourglass, Scale, ChefHat, Leaf, Wrench } from 'lucide-react';
+         Soup, Hourglass, Scale, ChefHat, Leaf } from 'lucide-react';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 import { APPLIANCES, type ApplianceDefinition, type CookingMode, type Control } from '@/lib/appliances';
 
@@ -1059,8 +1059,8 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
           <input
             ref={inputRef}
             value={query}
-            onChange={e => { setQuery(e.target.value); setShowDrop(true); }}
-            onFocus={() => setShowDrop(query.length >= 1)}
+            autoComplete="off"
+            onChange={e => { setQuery(e.target.value); setShowDrop(true); }}            onFocus={() => setShowDrop(query.length >= 1)}
             onBlur={() => {
               setTimeout(() => {
                 setShowDrop(false);
@@ -1069,7 +1069,7 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
             }}
             placeholder="Ingredient…"
             style={{
-              width: '100%', background: 'var(--surface)',
+              width: '100%', background: 'transparent',
               border: `1px solid ${overBudget ? 'rgb(220,38,38)' : 'var(--border)'}`,
               padding: '6px 28px 6px 10px', fontSize: 12,
               color: 'var(--fg)', outline: 'none',
@@ -1137,7 +1137,7 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
         }}
         className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
       <select value={row.quantityUnit} onChange={e => onChange({ ...row, quantityUnit: e.target.value })}
-        className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
+        className="bg-transparent border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
         {COMMON_UNITS.map(u => <option key={u}>{u}</option>)}
       </select>
       <input value={row.prepNote} onChange={e => onChange({ ...row, prepNote: e.target.value })} placeholder="Prep note…"
@@ -1459,7 +1459,7 @@ function StepToolRow({ tool, equipmentTree, groupInstances, onAddInstance, onCha
               <button onClick={() => setOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 6px', background: 'none', border: 'none', cursor: 'pointer', minHeight: 30 }}
                 className="hover:bg-[var(--accent-subtle)] transition-colors">
-                <Wrench size={9} style={{ color: 'var(--muted)' }} />
+                <UtensilsCrossed size={9} style={{ color: "var(--muted)" }} />
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600, color: 'var(--fg)' }}>{displayName}</span>
                 {linkedInstance && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>· {linkedInstance.name}</span>}
               </button>
@@ -1725,7 +1725,7 @@ function StepEditor({ step, index, ingredientTree, equipmentTree, fromRecipe, is
             </div>
           )}
           <button onClick={addTool} className="mt-2 flex items-center gap-2 px-3 py-1.5 text-[11px] font-mono text-[var(--muted)] border border-dashed border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)] hover:bg-[var(--accent-subtle)] transition-all">
-            <Wrench size={11} /> Add tool
+            <UtensilsCrossed size={11} /> Add tool
           </button>
         </div>
 
@@ -2529,7 +2529,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
               onChange={e => { const v = e.target.value; if (v === '' || /^\d*\.?\d*$/.test(v)) updateIng(i, { ...row, quantityValue: parseFloat(v) || 0 }); }}
               className="bg-transparent border border-[var(--border)] px-2 py-1.5 text-[12px] text-right text-[var(--fg)] outline-none focus:border-[var(--accent)] transition-colors" />
             <select value={row.quantityUnit} onChange={e => updateIng(i, { ...row, quantityUnit: e.target.value })}
-              className="bg-[var(--surface)] border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
+              className="bg-transparent border border-[var(--border)] px-1 py-1.5 text-[12px] text-[var(--fg)] outline-none focus:border-[var(--accent)] cursor-pointer">
               {COMMON_UNITS.map(u => <option key={u}>{u}</option>)}
             </select>
             <input value={row.prepNote} onChange={e => updateIng(i, { ...row, prepNote: e.target.value })}
