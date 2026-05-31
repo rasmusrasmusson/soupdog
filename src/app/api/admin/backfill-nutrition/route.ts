@@ -3,25 +3,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 
-// Allow long-running cron drains (Pro plan supports up to 300s).
 export const maxDuration = 300;
 
-// Service-role client: server-only, bypasses RLS. Used for the actual writes,
-// because the cron has no user session and RLS blocks anon-key UPDATEs on
-// the ingredients table. Never import this anywhere that runs in the browser.
+// Sentinel written when the model declines to estimate an item (genuine
+// non-foods like goraka/pasta water). It is truthy JSON, so the row drops out
+// of the `nutrition_per_100g IS NULL` queue and is never re-processed.
+const UNESTIMABLE = { estimated: false } as const;
+
+// Service-role client: server-only, bypasses RLS.
 function serviceClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — cannot write past RLS');
-  }
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — cannot write past RLS');
   return createSupabaseClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
 
-// ── Auth: allowed if EITHER the Vercel Cron secret is present
-//    (Authorization: Bearer <CRON_SECRET>) OR a logged-in user (console path).
 async function authorize(req: NextRequest): Promise<NextResponse | null> {
   const secret = process.env.CRON_SECRET;
   const authHeader = req.headers.get('authorization');
@@ -34,8 +32,6 @@ async function authorize(req: NextRequest): Promise<NextResponse | null> {
   return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
-// Coerce one parsed nutrition value into a clean object, or null if unusable.
-// Tolerant of string numbers and zero-calorie-but-other-macros cases.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeNutrition(raw: any): Record<string, number> | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -55,7 +51,10 @@ function normalizeNutrition(raw: any): Record<string, number> | null {
   return anyValue ? out : null;
 }
 
-async function runBatch(): Promise<{ updated: number; skipped: number; remaining: number }> {
+// Returns counts for this batch. `processed` = rows that left the NULL queue
+// this batch (filled OR marked unestimable). When processed === 0 the queue
+// genuinely isn't shrinking and the caller should stop.
+async function runBatch(): Promise<{ filled: number; marked: number; processed: number; remaining: number }> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = serviceClient() as any;
 
@@ -67,10 +66,9 @@ async function runBatch(): Promise<{ updated: number; skipped: number; remaining
     .limit(30);
 
   if (!ingredients?.length) {
-    return { updated: 0, skipped: 0, remaining: 0 };
+    return { filled: 0, marked: 0, processed: 0, remaining: 0 };
   }
 
-  // Deduplicate by name (case-insensitive)
   const seen = new Set<string>();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const unique = ingredients.filter((ing: any) => {
@@ -100,9 +98,7 @@ async function runBatch(): Promise<{ updated: number; skipped: number; remaining
     }),
   });
 
-  if (!res.ok) {
-    throw new Error(`Anthropic API returned ${res.status}`);
-  }
+  if (!res.ok) throw new Error(`Anthropic API returned ${res.status}`);
 
   const data = await res.json();
   const text = data.content?.[0]?.text ?? '';
@@ -117,35 +113,27 @@ async function runBatch(): Promise<{ updated: number; skipped: number; remaining
     throw new Error('Failed to parse nutrition JSON');
   }
 
-  let updated = 0;
-  let skipped = 0;
-  const skippedNames: string[] = [];
+  let filled = 0;
+  let marked = 0;
 
   for (let i = 0; i < unique.length; i++) {
     const ing = unique[i];
-    const raw = nutritionMap[String(i + 1)];
-    const nutrition = normalizeNutrition(raw);
+    const nutrition = normalizeNutrition(nutritionMap[String(i + 1)]);
 
     if (nutrition) {
-      // Update by primary key (id) via the service-role client — bypasses RLS.
       const { error } = await db.from('ingredients')
         .update({ nutrition_per_100g: nutrition })
         .eq('id', ing.id);
-      if (error) {
-        console.error('[backfill] update failed for', ing.name, error.message);
-        skipped++;
-        skippedNames.push(ing.name);
-      } else {
-        updated++;
-      }
+      if (error) console.error('[backfill] update failed for', ing.name, error.message);
+      else filled++;
     } else {
-      skipped++;
-      skippedNames.push(ing.name);
+      // Model declined — mark unestimable so it leaves the queue permanently.
+      const { error } = await db.from('ingredients')
+        .update({ nutrition_per_100g: UNESTIMABLE })
+        .eq('id', ing.id);
+      if (error) console.error('[backfill] mark failed for', ing.name, error.message);
+      else { marked++; console.warn('[backfill] marked unestimable:', ing.name); }
     }
-  }
-
-  if (skippedNames.length > 0) {
-    console.warn('[backfill] skipped (no usable nutrition or write error):', skippedNames);
   }
 
   const { count } = await db
@@ -154,17 +142,16 @@ async function runBatch(): Promise<{ updated: number; skipped: number; remaining
     .is('nutrition_per_100g', null)
     .eq('is_product', false);
 
-  return { updated, skipped, remaining: count ?? 0 };
+  return { filled, marked, processed: filled + marked, remaining: count ?? 0 };
 }
 
-// POST — single batch. Preserves the browser-console behaviour.
 export async function POST(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
 
   try {
     const result = await runBatch();
-    if (result.updated === 0 && result.skipped === 0 && result.remaining === 0) {
+    if (result.processed === 0 && result.remaining === 0) {
       return NextResponse.json({ message: 'All done — no ingredients need backfilling', count: 0 });
     }
     return NextResponse.json({ message: 'Backfill batch complete', ...result });
@@ -173,39 +160,39 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET — cron entry point. Drains the queue, with a stall guard and batch cap.
 export async function GET(req: NextRequest) {
   const denied = await authorize(req);
   if (denied) return denied;
 
   const MAX_BATCHES = 20;
   let batches = 0;
-  let totalUpdated = 0;
-  let totalSkipped = 0;
+  let totalFilled = 0;
+  let totalMarked = 0;
   let remaining = 0;
 
   try {
     while (batches < MAX_BATCHES) {
       const result = await runBatch();
       batches++;
-      totalUpdated += result.updated;
-      totalSkipped += result.skipped;
+      totalFilled += result.filled;
+      totalMarked += result.marked;
       remaining = result.remaining;
 
       if (remaining === 0) break;
-      // Stall guard: a batch that fills nothing means the rest are un-fillable
-      // (legit nulls like goraka) — stop rather than loop on them forever.
-      if (result.updated === 0) break;
+      // Stop only if the queue genuinely didn't shrink this batch (nothing was
+      // filled AND nothing was marked) — every row now either fills or gets a
+      // sentinel, so processed === 0 means no progress is possible.
+      if (result.processed === 0) break;
     }
 
     return NextResponse.json({
       message: 'Cron backfill complete',
-      batches, updated: totalUpdated, skipped: totalSkipped, remaining,
+      batches, filled: totalFilled, marked: totalMarked, remaining,
     });
   } catch (e) {
     return NextResponse.json({
       message: 'Cron backfill stopped early',
-      batches, updated: totalUpdated, skipped: totalSkipped, remaining,
+      batches, filled: totalFilled, marked: totalMarked, remaining,
       detail: String(e),
     }, { status: 200 });
   }
