@@ -107,62 +107,8 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
   );
 }
 
-// ── Tool label map — built once from all steps ────────────────
-// instanceId → display label (e.g. "Pot #1")
-// Only adds the #N suffix when multiple instances of the same base type exist.
-const SHORT_LABELS: Record<string, string> = {
-  'stock pot': 'Pot', 'large pot': 'Pot', 'saucepan': 'Pan',
-  'frying pan': 'Pan', 'saute pan': 'Pan', 'pan': 'Pan', 'pot': 'Pot',
-  "chef's knife": 'Knife', 'knife': 'Knife', 'wok': 'Wok',
-  'blender': 'Blender', 'stand mixer': 'Mixer', 'food processor': 'Processor',
-  'oven': 'Oven', 'microwave': 'Microwave',
-  'mixing bowl': 'Bowl', 'bowl': 'Bowl',
-  'whisk': 'Whisk', 'spatula': 'Spatula',
-  'colander': 'Colander', 'grater': 'Grater', 'cheese grater': 'Grater',
-  'chopping board': 'Board', 'cutting board': 'Board',
-};
-
-function buildToolLabelMap(steps: RecipeStep[]): Map<string, string> {
-  // First pass: collect unique instanceIds and their names, preserving order
-  const instanceOrder: { instanceId: string; name: string }[] = [];
-  const seen = new Set<string>();
-  for (const step of steps) {
-    const tools: any[] = (step.applianceSettings as any)?.stepTools ?? [];
-    for (const t of tools) {
-      const iid = t.instanceId ?? t.id ?? t.name;
-      if (!iid || seen.has(iid)) continue;
-      seen.add(iid);
-      instanceOrder.push({ instanceId: iid, name: t.name ?? '' });
-    }
-  }
-
-  // Second pass: group by base label, count per base
-  const baseCount = new Map<string, number>();
-  for (const { name } of instanceOrder) {
-    const base = SHORT_LABELS[name.toLowerCase().trim()] ?? name;
-    baseCount.set(base, (baseCount.get(base) ?? 0) + 1);
-  }
-
-  // Third pass: assign labels — only add #N if base appears more than once
-  const baseIndex = new Map<string, number>();
-  const labelMap = new Map<string, string>();
-  for (const { instanceId, name } of instanceOrder) {
-    const base = SHORT_LABELS[name.toLowerCase().trim()] ?? name;
-    const count = baseCount.get(base) ?? 1;
-    if (count > 1) {
-      const idx = (baseIndex.get(base) ?? 0) + 1;
-      baseIndex.set(base, idx);
-      labelMap.set(instanceId, `${base} #${idx}`);
-    } else {
-      // Single instance — use the raw name as-is (e.g. "chopping board")
-      labelMap.set(instanceId, name);
-    }
-  }
-  return labelMap;
-}
-
 // ── Tool/equipment cell ───────────────────────────────────────
-function ToolCell({ settings, toolLabelMap }: { settings: any; toolLabelMap?: Map<string, string> }) {
+function ToolCell({ settings }: { settings: any }) {
   if (!settings) return <span style={{ color: 'var(--muted)' }}>—</span>;
 
   if (settings.applianceId) {
@@ -190,23 +136,21 @@ function ToolCell({ settings, toolLabelMap }: { settings: any; toolLabelMap?: Ma
   }
 
   if (Array.isArray(settings.stepTools) && settings.stepTools.length > 0) {
+    const tool = settings.stepTools[0];
+    const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        {settings.stepTools.map((tool: any, i: number) => {
-          const iid = tool.instanceId ?? tool.id ?? tool.name;
-          const displayName = toolLabelMap?.get(iid) ?? tool.name ?? '—';
-          const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
-          return (
-            <div key={i}>
-              <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{displayName}</span>
-              {hasSettings && tool.applianceModeId && (
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-                  {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
-                </span>
-              )}
-            </div>
-          );
-        })}
+      <div>
+        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{tool.name}</span>
+        {hasSettings && tool.applianceModeId && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
+            {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
+          </span>
+        )}
+        {settings.stepTools.length > 1 && (
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
+            +{settings.stepTools.length - 1} more
+          </span>
+        )}
       </div>
     );
   }
@@ -526,7 +470,6 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     g.steps.push({ ...step, globalIndex: i });
   });
 
-  const toolLabelMap = buildToolLabelMap(recipe.steps);
   const timing = calculateRecipeTiming(recipe.steps);
   const displayTotalSeconds = recipe.totalTimeSeconds > 0
     ? recipe.totalTimeSeconds
@@ -704,7 +647,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             )}
                             {step.applianceSettings && (
                               <div className="mt-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-                                <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
+                                <ToolCell settings={step.applianceSettings} />
                               </div>
                             )}
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -764,7 +707,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                             <td style={{ ...td, borderRight: B, fontSize: 11 }}>
-                              <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
+                              <ToolCell settings={step.applianceSettings} />
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>
                               {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
@@ -785,7 +728,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                                 <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                                 {rowIdx === 0 && (
                                   <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}>
-                                    <ToolCell settings={step.applianceSettings} toolLabelMap={toolLabelMap} />
+                                    <ToolCell settings={step.applianceSettings} />
                                   </td>
                                 )}
                                 {rowIdx === 0 && (
@@ -882,6 +825,10 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
   const [recipe, setRecipe]   = useState<Recipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
+  const [isDraft,    setIsDraft]    = useState(false);
+  const [isAuthor,   setIsAuthor]   = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [canonicalId, setCanonicalId] = useState<string | null>(null);
 
   React.useEffect(() => {
     async function load() {
@@ -889,6 +836,9 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
       try {
         const { createClient } = await import('@/lib/supabase/client');
         const supabase = createClient() as any;
+
+        // Get current user to check authorship
+        const { data: { user } } = await supabase.auth.getUser();
 
         const { data, error: dbError } = await supabase
           .from('recipes')
@@ -928,10 +878,22 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
             )
           `)
           .eq('slug', slug)
-          .eq('is_published', true)
           .single();
 
         if (!dbError && data) {
+          // If draft, only show to author
+          if (!data.is_published) {
+            if (!user || data.author_id !== user.id) {
+              setError('Recipe not found.');
+              setLoading(false);
+              return;
+            }
+            setIsDraft(true);
+          }
+          if (user && data.author_id === user.id) {
+            setIsAuthor(true);
+            setCanonicalId(data.recipe_version_id ?? data.id);
+          }
           const rv = data.recipe_versions;
           const hasNewData = rv && (
             (rv.version_ingredients?.length > 0) ||
@@ -952,12 +914,24 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
 
         const { data: canonical, error: canonErr } = await supabase
           .from('recipe_canonicals')
-          .select('id, slug, created_at, updated_at, current_version_id')
+          .select('id, slug, created_at, updated_at, current_version_id, is_published, author_id')
           .eq('slug', slug)
-          .eq('is_published', true)
           .single();
 
         if (!canonErr && canonical?.current_version_id) {
+          // Draft check
+          if (!canonical.is_published) {
+            if (!user || canonical.author_id !== user.id) {
+              setError('Recipe not found.');
+              setLoading(false);
+              return;
+            }
+            setIsDraft(true);
+          }
+          if (user && canonical.author_id === user.id) {
+            setIsAuthor(true);
+            setCanonicalId(canonical.id);
+          }
           const { data: version, error: verErr } = await supabase
             .from('recipe_versions')
             .select(`
@@ -1007,6 +981,17 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
     load();
   }, [slug]);
 
+  const handlePublish = async () => {
+    if (!canonicalId) return;
+    setPublishing(true);
+    try {
+      const res = await fetch(`/api/my/recipes/${canonicalId}/publish`, { method: 'PATCH' });
+      if (res.ok) setIsDraft(false);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <span className="font-mono text-[11px] text-[var(--muted)] uppercase tracking-widest">Loading…</span>
@@ -1015,7 +1000,33 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
   if (error || !recipe) return (
     <div className="p-8 font-mono text-[12px] text-[var(--muted)]">{error ?? 'Recipe not found.'}</div>
   );
-  return <RecipeView recipe={recipe} />;
+  return (
+    <>
+      {isDraft && isAuthor && (
+        <div style={{
+          background: '#fef3c7', borderBottom: '1px solid #f59e0b',
+          padding: '10px 24px', display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 16,
+        }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#92400e' }}>
+            This recipe is saved as a draft — only you can see it.
+          </span>
+          <button
+            onClick={handlePublish}
+            disabled={publishing}
+            style={{
+              padding: '6px 16px', border: 'none', background: '#92400e',
+              color: '#fff', fontFamily: 'var(--font-mono)', fontSize: 11,
+              cursor: publishing ? 'not-allowed' : 'pointer',
+              opacity: publishing ? 0.7 : 1, flexShrink: 0,
+            }}>
+            {publishing ? 'Publishing…' : 'Publish recipe'}
+          </button>
+        </div>
+      )}
+      <RecipeView recipe={recipe} />
+    </>
+  );
 }
 
 // ── Helper components ─────────────────────────────────────────

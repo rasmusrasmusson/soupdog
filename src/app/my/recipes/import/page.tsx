@@ -477,18 +477,69 @@ export default function ImportRecipePage() {
             </div>
 
             <div style={{ border: B }}>
-              <div style={{ padding: '16px 20px', borderBottom: B }}>
-                <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 20, fontWeight: 400, margin: '0 0 8px' }}>
-                  {preview.title}
-                </h2>
-                {preview.description && (
-                  <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', margin: '0 0 10px', lineHeight: 1.6 }}>
-                    {preview.description}
-                  </p>
-                )}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                  {[['Serves', preview.servings], ['Total time', preview.totalTimeMinutes ? `${preview.totalTimeMinutes} min` : null],
-                    ['Difficulty', preview.difficulty], ['Cuisine', preview.cuisine]]
+              <div style={{ padding: '16px 20px', borderBottom: B, display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                {/* Title */}
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 4 }}>Title</div>
+                  <input
+                    value={preview.title ?? ''}
+                    onChange={e => setPreview((p: any) => ({ ...p, title: e.target.value }))}
+                    style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: 'var(--font-display)', fontSize: 18, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 4 }}>Description</div>
+                  <textarea
+                    value={preview.description ?? ''}
+                    onChange={e => setPreview((p: any) => ({ ...p, description: e.target.value }))}
+                    rows={2}
+                    style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                {/* Cuisine + Difficulty row */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 4 }}>Cuisine</div>
+                    <input
+                      value={preview.cuisine ?? ''}
+                      onChange={e => setPreview((p: any) => ({ ...p, cuisine: e.target.value }))}
+                      placeholder="e.g. Italian"
+                      style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none', boxSizing: 'border-box' as const }}
+                    />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 4 }}>
+                      Difficulty <span style={{ opacity: 0.5 }}>(suggested)</span>
+                    </div>
+                    <select
+                      value={preview.difficulty ?? 'medium'}
+                      onChange={e => setPreview((p: any) => ({ ...p, difficulty: e.target.value }))}
+                      style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none', boxSizing: 'border-box' as const }}>
+                      <option value="easy">Easy</option>
+                      <option value="medium">Medium</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 4 }}>Tags <span style={{ opacity: 0.5 }}>(comma-separated)</span></div>
+                  <input
+                    value={Array.isArray(preview.tags) ? preview.tags.join(', ') : (preview.tags ?? '')}
+                    onChange={e => setPreview((p: any) => ({ ...p, tags: e.target.value.split(',').map((t: string) => t.trim()).filter(Boolean) }))}
+                    placeholder="e.g. pasta, quick, weeknight"
+                    style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none', boxSizing: 'border-box' as const }}
+                  />
+                </div>
+
+                {/* Serves row */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, paddingTop: 4 }}>
+                  {[['Serves', preview.servings], ['Total time', preview.totalTimeMinutes ? `${preview.totalTimeMinutes} min` : null]]
                     .filter(([, v]) => v).map(([label, value]) => (
                     <div key={label as string} style={{ fontFamily: MONO, fontSize: 10 }}>
                       <span style={{ color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.12em', marginRight: 6 }}>{label}</span>
