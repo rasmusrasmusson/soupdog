@@ -2,8 +2,8 @@
 // src/app/my/recipes/[id]/page.tsx
 // Basic edit page — WYSIWYG recipe view + chat panel for editing
 
-import React, { useState, useRef, useEffect, use } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useRef, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
@@ -242,8 +242,9 @@ function RecipeWYSIWYG({ recipe, onChange }: { recipe: any; onChange: (r: any) =
 }
 
 // ── Main page ───────────────────────────────────────────────────────────────
-export default function BasicEditPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function BasicEditPage() {
+  const params = useParams();
+  const id = params?.id as string;
   const router  = useRouter();
 
   const [recipe,      setRecipe]      = useState<any>(null);
