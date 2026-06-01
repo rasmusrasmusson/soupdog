@@ -70,12 +70,24 @@ const ACTIVITY_OPTIONS = [
   { v: 'very_active', label: 'Very active' },
 ];
 const TASTE_AXES = [
-  { key: 'spice_tolerance', label: 'Spice', lo: 'Mild', hi: 'Fiery' },
-  { key: 'sweet_preference', label: 'Sweet', lo: 'Savoury', hi: 'Sweet' },
-  { key: 'sour_preference', label: 'Sour', lo: 'Low', hi: 'Love it' },
-  { key: 'umami_preference', label: 'Umami', lo: 'Low', hi: 'Love it' },
-  { key: 'bitter_tolerance', label: 'Bitter', lo: 'Avoid', hi: 'Enjoy' },
+  { key: 'spice_tolerance', label: 'Spice & heat' },
+  { key: 'sweet_preference', label: 'Sweetness' },
+  { key: 'sour_preference', label: 'Sourness & acidity' },
+  { key: 'bitter_tolerance', label: 'Bitterness' },
 ] as const;
+// 4-point labelled scale (even — forces a lean, no mushy middle).
+const AXIS_LEVELS = ['Avoid', 'A little', 'Enjoy', 'Love it'];
+
+// EU-14 major allergens (+ free-text "other" in the UI).
+const COMMON_ALLERGENS = [
+  'Gluten', 'Crustaceans', 'Eggs', 'Fish', 'Peanuts', 'Soybeans', 'Milk',
+  'Tree nuts', 'Celery', 'Mustard', 'Sesame', 'Sulphites', 'Lupin', 'Molluscs',
+];
+// Diet-relevant conditions for meal planning (+ free-text "other").
+const COMMON_CONDITIONS = [
+  'Type 1 diabetes', 'Type 2 diabetes', 'High blood pressure', 'High cholesterol',
+  'Chronic kidney disease', 'Coeliac disease', 'IBS', 'IBD', 'Acid reflux / GERD', 'Gout',
+];
 
 type Health = {
   height_cm: number | null; weight_kg: number | null;
@@ -192,6 +204,52 @@ function ChipInput({ values, onChange, placeholder }: { values: string[]; onChan
   );
 }
 
+// ── toggle-button group with a free-text "other" for the long tail ──
+function TogglePicker({ options, values, onChange, otherPlaceholder }: {
+  options: string[]; values: string[]; onChange: (v: string[]) => void; otherPlaceholder: string;
+}) {
+  const [draft, setDraft] = useState('');
+  const toggle = (o: string) => onChange(values.includes(o) ? values.filter((x) => x !== o) : [...values, o]);
+  const others = values.filter((v) => !options.includes(v));
+  const addOther = () => { const v = draft.trim(); if (v && !values.includes(v)) onChange([...values, v]); setDraft(''); };
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        {options.map((o) => {
+          const on = values.includes(o);
+          return (
+            <button key={o} onClick={() => toggle(o)} style={{ padding: '6px 11px', borderRadius: 7, fontSize: 13, cursor: 'pointer', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.surface, color: on ? '#fff' : C.fg }}>{o}</button>
+          );
+        })}
+      </div>
+      {others.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {others.map((o) => (
+            <span key={o} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 8px', fontSize: 13 }}>
+              {o}<button onClick={() => onChange(values.filter((x) => x !== o))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.muted, fontSize: 14, lineHeight: 1, padding: 0 }} aria-label={`Remove ${o}`}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addOther(); } }} onBlur={addOther} placeholder={otherPlaceholder} style={inputS} />
+    </div>
+  );
+}
+
+// ── 4-point labelled scale (even — forces a lean). value 1..4 or null ──
+function Scale4({ value, onChange }: { value: number | null; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {AXIS_LEVELS.map((label, i) => {
+        const lvl = i + 1; const on = value === lvl;
+        return (
+          <button key={lvl} onClick={() => onChange(lvl)} style={{ flex: 1, padding: '9px 4px', borderRadius: 7, fontSize: 12.5, cursor: 'pointer', border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accent : C.surface, color: on ? '#fff' : C.fg }}>{label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── day/month/year birthday picker ──
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 function BirthdayPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
@@ -249,7 +307,9 @@ export default function ProfilePage() {
   const providers = useIdentities();
 
   // modal state
-  const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking' | 'health' | 'taste_likes' | 'taste_axes'>(null);
+  const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking'
+    | 'h_sex' | 'h_body' | 'h_activity' | 'h_allergies' | 'h_conditions'
+    | 't_cuisines' | 't_ingredients' | 't_axes' | 'health_all' | 'taste_all'>(null);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
@@ -396,29 +456,29 @@ export default function ProfilePage() {
 
   const healthBody = (
     <div>
-      <SectionHeader title="Health profile" subtitle="Body, activity and medical considerations — used to tailor nutrition and recommendations." />
+      <SectionHeaderWithAll title="Health profile" subtitle="Body, activity and medical considerations — used to tailor nutrition and recommendations." onAll={() => { setDraft({ ...(health ?? {}) }); setModal('health_all'); }} />
       <Panel>
-        <Row label="Sex (for nutrition calculations)" value={sexLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
-        <Row label="Height" value={health?.height_cm ? `${health.height_cm} cm` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
-        <Row label="Weight" value={health?.weight_kg ? `${health.weight_kg} kg` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Sex (for nutrition calculations)" value={sexLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_sex'); }} />
+        <Row label="Height" value={health?.height_cm ? `${health.height_cm} cm` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_body'); }} />
+        <Row label="Weight" value={health?.weight_kg ? `${health.weight_kg} kg` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_body'); }} />
         <Row label="BMI" value={bmi != null ? String(bmi) : ''} />
-        <Row label="Activity level" value={actLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
-        <Row label="Allergies" value={health?.allergies?.length ? health.allergies.join(', ') : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
-        <Row label="Medical conditions" value={health?.medical_conditions?.length ? health.medical_conditions.join(', ') : ''} last onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Activity level" value={actLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_activity'); }} />
+        <Row label="Allergies" value={health?.allergies?.length ? health.allergies.join(', ') : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_allergies'); }} />
+        <Row label="Medical conditions" value={health?.medical_conditions?.length ? health.medical_conditions.join(', ') : ''} last onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('h_conditions'); }} />
       </Panel>
-      <p style={{ color: C.muted, fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>Sex is asked only because it changes energy and nutrient calculations — it isn’t shown publicly. Your allergies set here are the single source of truth and appear read-only elsewhere.</p>
+      <p style={{ color: C.muted, fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>Sex is asked only because it changes energy and nutrient calculations — it isn’t shown publicly. Conditions are used to tailor meal planning and aren’t medical advice. Your allergies set here are the single source of truth and appear read-only elsewhere.</p>
     </div>
   );
 
   const tasteBody = (
     <div>
-      <SectionHeader title="Taste profile" subtitle="What you love and what you avoid — the more you add, the better recommendations get." />
+      <SectionHeaderWithAll title="Taste profile" subtitle="What you love and what you avoid — the more you add, the better recommendations get." onAll={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_all'); }} />
       <Panel>
-        <Row label="Cuisines you love" value={taste?.liked_cuisines?.length ? taste.liked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
-        <Row label="Cuisines you dislike" value={taste?.disliked_cuisines?.length ? taste.disliked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
-        <Row label="Ingredients you love" value={taste?.liked_ingredients?.length ? taste.liked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
-        <Row label="Ingredients you dislike" value={taste?.disliked_ingredients?.length ? taste.disliked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
-        <Row label="Taste preferences" value={taste && taste.spice_tolerance != null ? TASTE_AXES.map((a) => `${a.label} ${(taste as any)[a.key] ?? '–'}`).join(' · ') : ''} last onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_axes'); }} />
+        <Row label="Cuisines you love" value={taste?.liked_cuisines?.length ? taste.liked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('t_cuisines'); }} />
+        <Row label="Cuisines you dislike" value={taste?.disliked_cuisines?.length ? taste.disliked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('t_cuisines'); }} />
+        <Row label="Foods you love" value={taste?.liked_ingredients?.length ? taste.liked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('t_ingredients'); }} />
+        <Row label="Foods you dislike" value={taste?.disliked_ingredients?.length ? taste.disliked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('t_ingredients'); }} />
+        <Row label="Taste preferences" value={taste && taste.spice_tolerance != null ? TASTE_AXES.map((a) => `${a.label.split(' ')[0]} ${AXIS_LEVELS[((taste as any)[a.key] ?? 1) - 1]}`).join(' · ') : ''} last onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('t_axes'); }} />
       </Panel>
       <div style={{ marginTop: 14 }}>
         <div style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.13em', color: C.muted, marginBottom: 8 }}>Hard exclusions (set elsewhere)</div>
@@ -530,73 +590,108 @@ export default function ProfilePage() {
           </div>
         </Modal>
       )}
-      {modal === 'health' && draft && (
-        <Modal title="Health profile" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth({
-          height_cm: draft.height_cm ?? null, weight_kg: draft.weight_kg ?? null,
-          sex_at_birth: draft.sex_at_birth ?? null, activity_level: draft.activity_level ?? null,
-          allergies: draft.allergies ?? [], medical_conditions: draft.medical_conditions ?? [],
-        })}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelS}>Sex (for nutrition calculations)</label>
-            <select style={inputS} value={draft.sex_at_birth ?? ''} onChange={(e) => setDraft({ ...draft, sex_at_birth: e.target.value || null })}>
-              <option value="">Not set</option>
-              {SEX_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
-            <div style={{ flex: 1 }}>
-              <label style={labelS}>Height (cm)</label>
-              <input type="number" inputMode="decimal" style={inputS} value={draft.height_cm ?? ''} onChange={(e) => setDraft({ ...draft, height_cm: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 178" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={labelS}>Weight (kg)</label>
-              <input type="number" inputMode="decimal" style={inputS} value={draft.weight_kg ?? ''} onChange={(e) => setDraft({ ...draft, weight_kg: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 74" />
-            </div>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelS}>Activity level</label>
-            <select style={inputS} value={draft.activity_level ?? ''} onChange={(e) => setDraft({ ...draft, activity_level: e.target.value || null })}>
-              <option value="">Not set</option>
-              {ACTIVITY_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
-            </select>
-          </div>
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelS}>Allergies</label>
-            <ChipInput values={draft.allergies ?? []} onChange={(v) => setDraft({ ...draft, allergies: v })} placeholder="Type an allergy, press Enter" />
-          </div>
-          <div>
-            <label style={labelS}>Medical conditions</label>
-            <ChipInput values={draft.medical_conditions ?? []} onChange={(v) => setDraft({ ...draft, medical_conditions: v })} placeholder="e.g. type 2 diabetes — Enter to add" />
+      {(modal === 'h_sex' || modal === 'health_all') && draft && (
+        <Modal title={modal === 'health_all' ? 'Health profile' : 'Sex'} onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth(healthFrom(draft))}>
+          {modal === 'health_all' && <SubLabel>Sex (for nutrition calculations)</SubLabel>}
+          {modal !== 'health_all' && <label style={labelS}>Sex (for nutrition calculations)</label>}
+          <select style={inputS} value={draft.sex_at_birth ?? ''} onChange={(e) => setDraft({ ...draft, sex_at_birth: e.target.value || null })}>
+            <option value="">Not set</option>
+            {SEX_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+          {modal === 'health_all' && <HealthAllRest draft={draft} setDraft={setDraft} />}
+        </Modal>
+      )}
+      {modal === 'h_body' && draft && (
+        <Modal title="Height & weight" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth(healthFrom(draft))}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ flex: 1 }}><label style={labelS}>Height (cm)</label><input type="number" inputMode="decimal" style={inputS} value={draft.height_cm ?? ''} onChange={(e) => setDraft({ ...draft, height_cm: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 178" /></div>
+            <div style={{ flex: 1 }}><label style={labelS}>Weight (kg)</label><input type="number" inputMode="decimal" style={inputS} value={draft.weight_kg ?? ''} onChange={(e) => setDraft({ ...draft, weight_kg: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 74" /></div>
           </div>
         </Modal>
       )}
-      {modal === 'taste_likes' && draft && (
-        <Modal title="Likes & dislikes" onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
+      {modal === 'h_activity' && draft && (
+        <Modal title="Activity level" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth(healthFrom(draft))}>
+          <label style={labelS}>Activity level</label>
+          <select style={inputS} value={draft.activity_level ?? ''} onChange={(e) => setDraft({ ...draft, activity_level: e.target.value || null })}>
+            <option value="">Not set</option>
+            {ACTIVITY_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+          </select>
+        </Modal>
+      )}
+      {modal === 'h_allergies' && draft && (
+        <Modal title="Allergies" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth(healthFrom(draft))}>
+          <label style={labelS}>Allergies</label>
+          <TogglePicker options={COMMON_ALLERGENS} values={draft.allergies ?? []} onChange={(v) => setDraft({ ...draft, allergies: v })} otherPlaceholder="Other allergy — Enter to add" />
+        </Modal>
+      )}
+      {modal === 'h_conditions' && draft && (
+        <Modal title="Medical conditions" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth(healthFrom(draft))}>
+          <label style={labelS}>Conditions relevant to meal planning</label>
+          <TogglePicker options={COMMON_CONDITIONS} values={draft.medical_conditions ?? []} onChange={(v) => setDraft({ ...draft, medical_conditions: v })} otherPlaceholder="Other condition — Enter to add" />
+          <p style={{ color: C.muted, fontSize: 12, marginTop: 10 }}>Used to tailor meal planning. This isn’t medical advice.</p>
+        </Modal>
+      )}
+
+      {(modal === 't_cuisines' || modal === 'taste_all') && draft && (
+        <Modal title={modal === 'taste_all' ? 'Taste profile' : 'Cuisines'} onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
           <div style={{ marginBottom: 16 }}><label style={labelS}>Cuisines you love</label><ChipInput values={draft.liked_cuisines ?? []} onChange={(v) => setDraft({ ...draft, liked_cuisines: v })} placeholder="e.g. Sri Lankan, Sichuan — Enter to add" /></div>
-          <div style={{ marginBottom: 16 }}><label style={labelS}>Cuisines you dislike</label><ChipInput values={draft.disliked_cuisines ?? []} onChange={(v) => setDraft({ ...draft, disliked_cuisines: v })} placeholder="Enter to add" /></div>
-          <div style={{ marginBottom: 16 }}><label style={labelS}>Ingredients you love</label><ChipInput values={draft.liked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, liked_ingredients: v })} placeholder="e.g. garlic, coriander — Enter to add" /></div>
-          <div><label style={labelS}>Ingredients you dislike</label><ChipInput values={draft.disliked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, disliked_ingredients: v })} placeholder="e.g. cilantro, olives — Enter to add" /></div>
+          <div style={{ marginBottom: modal === 'taste_all' ? 16 : 0 }}><label style={labelS}>Cuisines you dislike</label><ChipInput values={draft.disliked_cuisines ?? []} onChange={(v) => setDraft({ ...draft, disliked_cuisines: v })} placeholder="Enter to add" /></div>
+          {modal === 'taste_all' && <TasteAllRest draft={draft} setDraft={setDraft} />}
         </Modal>
       )}
-      {modal === 'taste_axes' && draft && (
+      {modal === 't_ingredients' && draft && (
+        <Modal title="Foods you love & dislike" onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
+          <div style={{ marginBottom: 16 }}><label style={labelS}>Foods you love</label><ChipInput values={draft.liked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, liked_ingredients: v })} placeholder="e.g. garlic, ramen, mango — Enter to add" /></div>
+          <div><label style={labelS}>Foods you dislike</label><ChipInput values={draft.disliked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, disliked_ingredients: v })} placeholder="e.g. cilantro, olives — Enter to add" /></div>
+        </Modal>
+      )}
+      {modal === 't_axes' && draft && (
         <Modal title="Taste preferences" onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
-          <p style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Slide each to taste. 0 = none, 5 = love it.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {TASTE_AXES.map((a) => (
-              <div key={a.key}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
-                  <span>{a.label}</span>
-                  <span style={{ color: C.muted, fontFamily: MONO, fontSize: 12 }}>{(draft as any)[a.key] ?? 0}</span>
-                </div>
-                <input type="range" min={0} max={5} step={1} value={(draft as any)[a.key] ?? 0}
-                  onChange={(e) => setDraft({ ...draft, [a.key]: Number(e.target.value) })}
-                  style={{ width: '100%', accentColor: C.accent }} />
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.muted }}><span>{a.lo}</span><span>{a.hi}</span></div>
-              </div>
-            ))}
-          </div>
+          <AxisFields draft={draft} setDraft={setDraft} />
         </Modal>
       )}
+    </div>
+  );
+}
+
+function SubLabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ ...labelS, marginTop: 4 }}>{children}</div>;
+}
+function HealthAllRest({ draft, setDraft }: { draft: any; setDraft: (d: any) => void }) {
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+        <div style={{ flex: 1 }}><label style={labelS}>Height (cm)</label><input type="number" inputMode="decimal" style={inputS} value={draft.height_cm ?? ''} onChange={(e) => setDraft({ ...draft, height_cm: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 178" /></div>
+        <div style={{ flex: 1 }}><label style={labelS}>Weight (kg)</label><input type="number" inputMode="decimal" style={inputS} value={draft.weight_kg ?? ''} onChange={(e) => setDraft({ ...draft, weight_kg: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 74" /></div>
+      </div>
+      <div style={{ marginTop: 16 }}><label style={labelS}>Activity level</label>
+        <select style={inputS} value={draft.activity_level ?? ''} onChange={(e) => setDraft({ ...draft, activity_level: e.target.value || null })}>
+          <option value="">Not set</option>{ACTIVITY_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+        </select>
+      </div>
+      <div style={{ marginTop: 16 }}><label style={labelS}>Allergies</label><TogglePicker options={COMMON_ALLERGENS} values={draft.allergies ?? []} onChange={(v) => setDraft({ ...draft, allergies: v })} otherPlaceholder="Other allergy — Enter to add" /></div>
+      <div style={{ marginTop: 16 }}><label style={labelS}>Medical conditions</label><TogglePicker options={COMMON_CONDITIONS} values={draft.medical_conditions ?? []} onChange={(v) => setDraft({ ...draft, medical_conditions: v })} otherPlaceholder="Other condition — Enter to add" /></div>
+    </>
+  );
+}
+function TasteAllRest({ draft, setDraft }: { draft: any; setDraft: (d: any) => void }) {
+  return (
+    <>
+      <div style={{ marginBottom: 16 }}><label style={labelS}>Foods you love</label><ChipInput values={draft.liked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, liked_ingredients: v })} placeholder="e.g. garlic, ramen, mango — Enter to add" /></div>
+      <div style={{ marginBottom: 16 }}><label style={labelS}>Foods you dislike</label><ChipInput values={draft.disliked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, disliked_ingredients: v })} placeholder="e.g. cilantro, olives — Enter to add" /></div>
+      <AxisFields draft={draft} setDraft={setDraft} />
+    </>
+  );
+}
+function AxisFields({ draft, setDraft }: { draft: any; setDraft: (d: any) => void }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {TASTE_AXES.map((a) => (
+        <div key={a.key}>
+          <div style={{ fontSize: 13, marginBottom: 6 }}>{a.label}</div>
+          <Scale4 value={draft[a.key] ?? null} onChange={(v) => setDraft({ ...draft, [a.key]: v })} />
+        </div>
+      ))}
     </div>
   );
 }
@@ -612,4 +707,24 @@ function SectionHeader({ title, subtitle }: { title: string; subtitle: string })
       <p style={{ color: C.muted, fontSize: 13, margin: 0, lineHeight: 1.5 }}>{subtitle}</p>
     </div>
   );
+}
+
+function SectionHeaderWithAll({ title, subtitle, onAll }: { title: string; subtitle: string; onAll: () => void }) {
+  return (
+    <div style={{ marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
+      <div>
+        <h2 style={{ fontFamily: SERIF, fontSize: 21, fontWeight: 400, margin: '0 0 4px' }}>{title}</h2>
+        <p style={{ color: C.muted, fontSize: 13, margin: 0, lineHeight: 1.5 }}>{subtitle}</p>
+      </div>
+      <button onClick={onAll} style={{ flex: '0 0 auto', background: 'none', border: `1px solid ${C.border}`, borderRadius: 7, padding: '6px 12px', fontSize: 13, color: C.fg, cursor: 'pointer', whiteSpace: 'nowrap' }}>Edit all</button>
+    </div>
+  );
+}
+
+function healthFrom(draft: any): Health {
+  return {
+    height_cm: draft.height_cm ?? null, weight_kg: draft.weight_kg ?? null,
+    sex_at_birth: draft.sex_at_birth ?? null, activity_level: draft.activity_level ?? null,
+    allergies: draft.allergies ?? [], medical_conditions: draft.medical_conditions ?? [],
+  };
 }
