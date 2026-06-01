@@ -22,7 +22,7 @@ export async function GET() {
 
   const { data: grants, error } = await db
     .from('person_access')
-    .select('person_id, role, access_level, scope, person:person_id(id, display_name, full_name, date_of_birth, country, is_managed)')
+    .select('person_id, role, access_level, scope, person:person_id(id, display_name, full_name, date_of_birth, country, is_managed, avatar_color)')
     .eq('account_id', user.id)
     .is('revoked_at', null);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -38,6 +38,7 @@ export async function GET() {
       full_name: per?.full_name ?? null,
       date_of_birth: per?.date_of_birth ?? null,
       country: per?.country ?? null,
+      avatar_color: per?.avatar_color ?? null,
       is_managed: per?.is_managed ?? false,
     };
   });
@@ -79,6 +80,7 @@ export async function POST(req: NextRequest) {
       display_name: displayName,
       full_name: (b.full_name ?? '').trim() || null,
       date_of_birth: b.date_of_birth || null,
+      avatar_color: b.avatar_color || null,
       is_managed: true,
       residency_region: 'global',
     })
@@ -142,6 +144,7 @@ export async function PUT(req: NextRequest) {
   if ('full_name' in b) patch.full_name = (b.full_name ?? '').trim() || null;
   if ('date_of_birth' in b) patch.date_of_birth = b.date_of_birth || null;
   if ('country' in b) patch.country = (b.country ?? '').trim() || null;
+  if ('avatar_color' in b) patch.avatar_color = b.avatar_color || null;
 
   const { error } = await db.from('person').update(patch).eq('id', personId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

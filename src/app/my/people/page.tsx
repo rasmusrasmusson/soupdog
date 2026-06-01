@@ -8,6 +8,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Avatar, AvatarColorPicker } from '@/components/people/Avatar';
 
 const C = {
   bg: '#f7f6f2', fg: '#1a1a1a', accent: '#2e4638', muted: '#6b6860',
@@ -20,7 +21,7 @@ const MONO = 'IBM Plex Mono, monospace';
 type Person = {
   person_id: string; role: string; access_level: string; is_self: boolean;
   display_name: string | null; full_name: string | null; date_of_birth: string | null;
-  country: string | null; is_managed: boolean;
+  country: string | null; is_managed: boolean; avatar_color?: string | null;
   allergies?: string[]; medical_conditions?: string[];
 };
 
@@ -45,24 +46,9 @@ function ageFromDOB(dob: string | null): number | null {
   if (m < 0 || (m === 0 && n.getDate() < b.getDate())) a--;
   return a;
 }
-// deterministic avatar color from id (placeholder until Build C avatar system)
-function colorFor(id: string): string {
-  const palette = ['#2e4638', '#5a6e52', '#7a5c3e', '#4a5a66', '#6b4a52', '#3e6660', '#7a6a3e'];
-  let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return palette[h % palette.length];
-}
-function initial(name: string | null): string { return (name ?? '?').trim().charAt(0).toUpperCase() || '?'; }
 
 const labelS = { display: 'block', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: C.muted, marginBottom: 8 } as const;
 const inputS = { width: '100%', padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 14, background: C.surface, color: C.fg, fontFamily: SANS } as const;
-
-function Avatar({ id, name, size = 40 }: { id: string; name: string | null; size?: number }) {
-  return (
-    <div style={{ width: size, height: size, borderRadius: size, background: colorFor(id), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, fontFamily: SERIF, flex: '0 0 auto' }}>
-      {initial(name)}
-    </div>
-  );
-}
 
 function BirthdayPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
   // Hold the three parts in local state so partial selections persist.
@@ -169,7 +155,7 @@ export default function PeoplePage() {
   const load = () => fetch('/api/my/people').then((r) => r.json()).then((d) => setPeople(d.people)).catch(() => setError('Failed to load people'));
   useEffect(() => { load(); }, []);
 
-  const openAdd = () => { setDraft({ display_name: '', full_name: '', date_of_birth: null, allergies: [], medical_conditions: [] }); setAdding(true); setConfirmDelete(false); };
+  const openAdd = () => { setDraft({ display_name: '', full_name: '', date_of_birth: null, avatar_color: null, allergies: [], medical_conditions: [] }); setAdding(true); setConfirmDelete(false); };
   const openEdit = (p: Person) => { setDraft({ ...p, allergies: p.allergies ?? [], medical_conditions: p.medical_conditions ?? [] }); setEditing(p); setConfirmDelete(false); };
   const close = () => { setAdding(false); setEditing(null); setDraft(null); setConfirmDelete(false); };
 
@@ -226,7 +212,7 @@ export default function PeoplePage() {
             const allergyCount = p.allergies?.length ?? 0;
             return (
               <div key={p.person_id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14 }}>
-                <Avatar id={p.person_id} name={p.display_name} />
+                <Avatar id={p.person_id} name={p.display_name} colorKey={p.avatar_color} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 16, fontFamily: SERIF }}>{p.display_name ?? 'Unnamed'} {bits.length > 0 && <span style={{ fontFamily: SANS, fontSize: 12.5, color: C.muted }}>· {bits.join(' · ')}</span>}</div>
                   <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2 }}>
@@ -264,6 +250,13 @@ export default function PeoplePage() {
               <div style={{ marginBottom: 16 }}><label style={labelS}>Name</label><input style={inputS} value={draft.display_name ?? ''} onChange={(e) => field('display_name', e.target.value)} placeholder="e.g. Astrid" /></div>
               <div style={{ marginBottom: 16 }}><label style={labelS}>Full name (optional)</label><input style={inputS} value={draft.full_name ?? ''} onChange={(e) => field('full_name', e.target.value)} placeholder="Full / legal name" /></div>
               <div style={{ marginBottom: 16 }}><label style={labelS}>Date of birth</label><BirthdayPicker value={draft.date_of_birth} onChange={(v) => field('date_of_birth', v)} /></div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={labelS}>Avatar colour</label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <Avatar id={editing?.person_id ?? 'new'} name={draft.display_name} colorKey={draft.avatar_color} size={44} />
+                  <AvatarColorPicker value={draft.avatar_color} onChange={(k) => field('avatar_color', k)} />
+                </div>
+              </div>
               <div style={{ marginBottom: 16 }}><label style={labelS}>Allergies</label><TogglePicker options={COMMON_ALLERGENS} values={draft.allergies ?? []} onChange={(v) => field('allergies', v)} otherPlaceholder="Other allergy — Enter to add" /></div>
               <div><label style={labelS}>Medical conditions</label><TogglePicker options={COMMON_CONDITIONS} values={draft.medical_conditions ?? []} onChange={(v) => field('medical_conditions', v)} otherPlaceholder="Other condition — Enter to add" /></div>
             </>
