@@ -46,11 +46,13 @@ export async function GET() {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   let dateOfBirth: string | null = null;
+  let fullName: string | null = null;
   const { id: pid } = await getSelfPersonId(db, user.id);
   if (pid) {
     const { data: person } = await db
-      .from('person').select('date_of_birth').eq('id', pid).maybeSingle();
+      .from('person').select('date_of_birth, full_name').eq('id', pid).maybeSingle();
     dateOfBirth = person?.date_of_birth ?? null;
+    fullName = person?.full_name ?? null;
   }
 
   return NextResponse.json({
@@ -66,6 +68,7 @@ export async function GET() {
         preferred_cuisines: [],
       }),
       date_of_birth: dateOfBirth,
+      full_name: fullName,
     },
     email: user.email ?? null,
     isNew: !data,
@@ -110,6 +113,7 @@ export async function PUT(req: NextRequest) {
       updated_at: new Date().toISOString(),
     };
     if ('date_of_birth' in body) personPatch.date_of_birth = body.date_of_birth || null;
+    if ('full_name' in body) personPatch.full_name = (body.full_name ?? '').trim() || null;
 
     const { error: personErr } = await db.from('person').update(personPatch).eq('id', pid);
     if (personErr) {

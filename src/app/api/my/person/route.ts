@@ -38,7 +38,7 @@ export async function GET() {
 
   const { data: person, error: perr } = await db
     .from('person')
-    .select('id, display_name, date_of_birth, residency_region, is_managed')
+    .select('id, display_name, full_name, date_of_birth, residency_region, is_managed')
     .eq('id', personId)
     .maybeSingle();
   if (perr) return NextResponse.json({ error: perr.message }, { status: 500 });
@@ -68,6 +68,7 @@ export async function PUT(req: NextRequest) {
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ('display_name' in body) patch.display_name = (body.display_name ?? '').trim() || null;
+  if ('full_name' in body) patch.full_name = (body.full_name ?? '').trim() || null;
   if ('date_of_birth' in body) patch.date_of_birth = body.date_of_birth || null; // 'YYYY-MM-DD'
 
   const { error } = await db.from('person').update(patch).eq('id', grant.person_id);
