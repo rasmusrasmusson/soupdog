@@ -24,6 +24,8 @@ git push
 
 Clash Verge must have TUN Mode ON. VPN required for Anthropic API and GitHub.
 
+**File delivery pattern:** Claude zips files, user downloads, extracts, and replaces manually in Explorer. Never use PowerShell `Set-Content` or `WriteAllLines` to edit TSX files — corrupts them.
+
 ---
 
 ## Platform Vision
@@ -36,94 +38,125 @@ Long-term goals: software-defined food preparation, appliance-specific execution
 
 ---
 
-## What's Working (as of 2026-05-30)
+## What's Working (as of 2026-05-31)
 
+### Public
 - Public recipe browsing at `/recipes`
-- Recipe pages at `/recipes/[slug]` — structured tables, ingredient pill toggles per step
-- Search at `/search` — full-text, type filters, barcode lookup, All filter default
+- Recipe pages at `/recipes/[slug]` — structured tables, ingredient pill toggles per step, nutrition section
+- Search at `/search` — full-text, type filters, barcode lookup
 - Authentication (email login via Supabase Auth)
-- My Recipes at `/my/recipes` — tabbed Saved/Created, draft/published, Import + New recipe buttons
-- Recipe creation at `/my/recipes/new` — full structured editor (Groups → Steps → Tasks → Tools → Ingredients)
-- Recipe edit at `/my/recipes/[id]/edit`
-- **AI Recipe Import at `/my/recipes/import`** — paste any recipe text → Claude parses into atomic steps with ingredients, tools, task families → preview → open in editor
-- Unified ingredient/product system — `ingredients` table with `is_product` flag, `/ingredients/[slug]`
-- Barcode lookup via Open Food Facts at `/my/ingredients/new`
-- Grocery taxonomy seeded (~80 nodes, `g-` prefixed slugs)
-- Task library seeded (~40 global tasks across 8 families)
-- Custom icons throughout (SoupdogIcon component)
-- Units: g, kg, ml, l, tsp, tbsp, cup, oz, lb, clove, slice, piece, pinch, **bunch, to taste, as needed**
+
+### My Recipes (`/my/recipes`)
+- Single "Add recipe" button → goes to import page
+- Created/Saved tabs, draft/published status, publish toggle
+- Delete with inline Cancel/Delete confirm buttons
+- Preview (ExternalLink icon) for both draft and published recipes
+- Success banners via sessionStorage (saved/published) — show once, clear on return
+
+### Add Recipe (`/my/recipes/import`) — Basic mode
+- Paste text OR upload JPG/PNG/WebP/PDF/TXT (up to 20MB)
+- Optional recipe name field at top
+- Auto-import on file drop (no extra click)
+- Claude (Sonnet) parses into atomic steps
+- Preview shows WYSIWYG recipe with editable title, description, cuisine, difficulty, tags
+- Chat panel (right side) — Haiku for questions, Sonnet for modifications, streaming responses
+- "Save recipe" → saves draft → redirects to My Recipes with banner
+- "Advanced editor →" link for admins
+
+### Basic Edit (`/my/recipes/[id]`) — WYSIWYG
+- Loads recipe in view-mode style (meta grid, ingredients table, steps table)
+- Editable: title (inline), cuisine, difficulty, servings directly in meta grid
+- Chat panel right sidebar — live updates recipe as AI makes changes
+- "Advanced editor →" link in breadcrumb
+- Save recipe button (fixed bottom bar, clears sidebar)
+- Edit badge: "Draft · editing" or "Published · editing"
+- Chat intro: explains fields are directly editable
+
+### Advanced Editor (`/my/recipes/[id]/edit`)
+- Full RecipeEditor form (~2600 lines)
+- Fixed right sidebar chat panel (300px)
+- Save bar stops at sidebar (right: 300px)
+- Ingredient pills with expand-to-edit for qty/unit/prep
+- Tool badges use SoupdogIcon "tools" (custom SVG, not Lucide)
+- Streaming responses, Haiku/Sonnet routing
+
+### Recipe View (`/recipes/[slug]`)
+- Authors can view own drafts (amber banner + "Publish recipe" button)
+- After publish → redirects to My Recipes with published banner
+- Nutrition section shows when ingredients have USDA data
 
 ---
 
-## AI Import System (built this session)
+## AI Chat System
 
-### Flow
-1. User goes to `/my/recipes/import`
-2. Pastes recipe text (any language, any format)
-3. Claude (claude-sonnet-4-6) parses into structured JSON with **atomic steps** (one action = one step)
-4. Preview page shows parsed recipe with ingredients, steps, task families, tools, timings
-5. "Open in editor" → pre-fills RecipeEditor with tasks pre-selected, tool instances built
-6. User reviews/adjusts → saves
+### Architecture
+- Route: `src/app/api/recipes/import/chat/route.ts`
+- **Haiku** for questions/answers (fast, cheap)
+- **Sonnet** for modifications (accurate)
+- Streaming SSE — text streams word-by-word, JSON hidden during modifications
+- `requiresConfirmation: true` for large changes → Apply/Cancel buttons
+- Scope: food, cooking, nutrition, appliances, Soupdog platform questions only
+- `max_tokens: 8000` for modifications
 
-### Key files
-| File | Purpose |
-|---|---|
-| `src/app/my/recipes/import/page.tsx` | Import UI — paste, preview, fixed bottom bar |
-| `src/app/api/recipes/import/route.ts` | Claude parsing API — atomic step prompt |
-| `src/app/my/recipes/new/page.tsx` | Receives import data from sessionStorage, converts to editor format |
+### Chat used on:
+- `/my/recipes/import` — import preview chat
+- `/my/recipes/[id]` — basic edit chat
+- `/my/recipes/[id]/edit` — advanced editor chat
 
-### Import prompt principles
-- One atomic action = one step ("Fill pot with water", not "Bring salted water to boil")
-- `stepTools` required on almost every step — consistent names across steps (same physical tool = same string)
-- Implied ingredients included (water, oil, salt for pasta water)
-- Task family assigned to every step
-- Groups reflect recipe sections (Pasta, Sauce, Assembly, etc.)
+---
 
-### familyMap (hardcoded task IDs for pre-selection)
+## Nutrition System
+
+### Auto-estimation
+When a new ingredient is created (POST or PUT recipe save), Claude Haiku estimates USDA nutrition per 100g and saves to `ingredients.nutrition_per_100g`.
+
+Function `estimateNutrition(name)` exists in both:
+- `src/app/api/my/recipes/route.ts`
+- `src/app/api/my/recipes/[id]/route.ts`
+
+### Backfill endpoint
+`POST /api/admin/backfill-nutrition` — processes 30 ingredients per call, single batched Haiku request. Call from browser console while logged in:
+```javascript
+fetch('/api/admin/backfill-nutrition', { method: 'POST' }).then(r => r.json()).then(console.log)
 ```
-cut:          31132714-14a6-4f36-984a-308683d059bb  (Brunoise)
-finish:       a9574682-9da1-4da8-a130-fe6ac78d7b06  (Deglaze)
-heat_dry:     4a6f0b2d-7679-4b03-8983-1ad41ccb5e2b  (Bake)
-heat_machine: 3c2ec27b-2c93-4363-a322-a5180c21af72  (Combi steam)
-heat_wet:     2f600f22-57f9-4d86-abbd-f06146a50626  (Blanch)
-mix:          cdc58767-e42a-4206-9c27-2c82e3fdc395  (Beat)
-move:         45b0f2b6-7897-4b28-91a8-03f5a43dbc10  (Add)
-passive:      193d41a3-521c-41c0-88f5-e44a48005d2e  (Brine)
-prepare:      24a9b746-e572-41e2-b601-cdfad7850c33  (Measure)
-```
+Call repeatedly until `remaining: 0`.
+
+### Known nutrition gaps
+- `pasta water` — marked `is_product = true` to exclude from nutrition checks
+- Taxonomy category nodes ("Dairy", "Grains & Pasta" etc.) — marked `is_product = true`
+- Nutrition only shows in view page when `confidence !== 'insufficient'` and `calories > 0`
 
 ---
 
 ## Schema (v3/v4/v5 — current)
 
-Migrations applied:
-- `supabase/migration_v3_foundation.sql` — knowledge graph foundation
-- `supabase/migration_v4_consolidate_products.sql` — products merged into ingredients
-- `supabase/migration_v5_drop_cooking_profiles.sql` — dropped product_cooking_profiles
-
 ### Key tables
 | Table | Purpose |
 |---|---|
 | `recipe_canonicals` | Stable identity. Slug, author, published state. |
-| `recipe_versions` | Immutable versioned content. |
-| `version_steps` | Steps with task_id FK, appliance_settings JSONB. |
-| `version_ingredients` | Per-version ingredients with step_id FK. |
-| `execution_variants` | Parameterised variants: servings, appliance, food state. |
+| `recipe_versions` | Versioned content. `version_number` must increment (unique constraint on canonical_id + version_number, default 1). |
+| `version_steps` | Steps with task_id FK, `appliance_settings` JSONB (stores taskId, taskName, taskFamily, stepTools, groupToolInstances). |
+| `version_ingredients` | Per-version ingredients with `step_id` FK. Step ingredients linked here, NOT in appliance_settings. |
 | `tasks` | Atomic task library. family, task_type, suggested_tool_slugs. |
-| `entity_relations` | Weighted knowledge graph edges. |
-| `ingredients` | Unified ingredient + product table. `is_product` flag, barcode, brand. |
+| `ingredients` | Unified ingredient + product table. `is_product` flag, `nutrition_per_100g` JSONB, barcode, brand. |
 | `equipment` | Equipment taxonomy. |
 
-### Views
-| View | Purpose |
-|---|---|
-| `search_index` | Full-text search. Re-grant after recreation. |
-| `coverage_matrix` | Product × appliance content KPI. |
+### Important: step ingredients storage
+Step ingredients are stored in `version_ingredients` with a `step_id` FK — **NOT** in `appliance_settings`. The GET `/api/my/recipes/[id]` builds `stepIngredients` by joining `version_ingredients` filtered by `step_id`.
 
-**After any view recreation:**
-```sql
-grant select on search_index to anon, authenticated;
-grant select on coverage_matrix to anon, authenticated;
+### Group labels
+`__default__` is an internal sentinel — always strip before saving to DB:
+```typescript
+group_label: (step.groupLabel?.trim() === '__default__' ? null : step.groupLabel?.trim()) || null
+```
+
+### version_number
+Must be provided on insert — get next number first:
+```typescript
+const { data: existing } = await db.from('recipe_versions')
+  .select('version_number').eq('canonical_id', id)
+  .order('version_number', { ascending: false }).limit(1);
+const nextVersion = ((existing?.[0]?.version_number) ?? 0) + 1;
 ```
 
 ---
@@ -132,22 +165,44 @@ grant select on coverage_matrix to anon, authenticated;
 
 | Route | Method | Purpose |
 |---|---|---|
-| `/api/my/recipes` | GET/POST | List + create recipes |
+| `/api/my/recipes` | GET/POST | List (from recipe_canonicals) + create recipes |
 | `/api/my/recipes/[id]` | GET/PUT/DELETE | Load/update/delete recipe |
-| `/api/my/recipes/[id]/publish` | PATCH | Toggle published |
-| `/api/my/ingredients` | GET/POST | List + create ingredients/products |
-| `/api/my/products/[id]` | GET/PUT/DELETE | Manage product |
-| `/api/products/lookup` | GET | OFF barcode/name lookup |
-| `/api/ingredients/search` | GET | Search ingredients |
-| `/api/ingredients/[slug]` | GET | Ingredient detail + linkedRecipes |
-| `/api/recipes/import` | POST | Claude recipe parsing |
+| `/api/my/recipes/[id]/publish` | PATCH | Toggle published — updates both recipe_canonicals AND recipes by slug |
+| `/api/recipes/import` | POST | Claude parsing — accepts `{text}` OR `{file, mediaType}` |
+| `/api/recipes/import/chat` | POST | Streaming SSE chat — Haiku/Sonnet routing |
+| `/api/admin/backfill-nutrition` | POST | Backfill nutrition for ingredients missing data |
+| `/api/ingredients/search` | GET | Ingredient autocomplete |
+| `/api/recipes/[id]/nutrition` | GET | Nutrition estimate |
 | `/api/tasks` | GET/POST | Task library |
 | `/api/ingredients/tree` | GET | Ingredient taxonomy tree |
 | `/api/equipment/tree` | GET | Equipment taxonomy tree |
-| `/api/recipes/[id]/nutrition` | GET | Nutrition estimate |
 
-**Anthropic model:** `claude-sonnet-4-6`  
-**API key:** Set in Vercel env as `ANTHROPIC_API_KEY`
+**Anthropic models:**
+- Questions/answers: `claude-haiku-4-5-20251001`
+- Modifications/parsing: `claude-sonnet-4-6`
+- **API key:** Set in Vercel env as `ANTHROPIC_API_KEY`
+
+---
+
+## Delete Flow (important)
+
+Delete must remove from `recipes` table FIRST (FK constraint), then `recipe_canonicals`:
+```typescript
+await db.from('recipes').delete().eq('slug', canonical.slug);
+await db.from('recipe_canonicals').delete().eq('id', id).eq('author_id', user.id);
+```
+
+The GET `/api/my/recipes` queries `recipe_canonicals` and returns canonical IDs as `r.id`. These are the correct IDs to use for delete and publish.
+
+---
+
+## Publish Flow
+
+The publish API (`/api/my/recipes/[id]/publish`) updates both tables:
+1. `recipe_canonicals` by canonical id
+2. `recipes` by slug (legacy mirror)
+
+After publishing from recipe view page → sets `sessionStorage.setItem('soupdog_published', title)` → redirects to `/my/recipes` → banner shows once and clears.
 
 ---
 
@@ -155,38 +210,35 @@ grant select on coverage_matrix to anon, authenticated;
 
 1. **Stale Supabase types** — `src/lib/supabase/types.ts` is pre-v3. All new queries use `(supabase as any)`. Fix: `npx supabase gen types typescript --project-id npvajzgciuykugqxedmm > src/lib/supabase/types.ts` (run locally with VPN).
 
-2. **Debug line in import preview** — `src/app/my/recipes/import/page.tsx` has a "Debug step 1 tools:" line that must be removed before going public.
+2. **Google OAuth in test mode** — Needs publishing in Google Cloud Console for production.
 
-3. **Tool labeling in editor on import** — Imported tools show as freetext ("large pot") not labeled instances ("Pot #1") on initial load. Auto-labels when user clicks the tool. Low priority since most users won't use form editor.
+3. **Legacy mirror dependency** — Public recipe pages query `recipes` table first, then fall back to `recipe_canonicals`. New recipes auto-mirror to both.
 
-4. **Google OAuth in test mode** — Needs publishing in Google Cloud Console for production.
+4. **Async nutrition on save** — Currently `estimateNutrition()` is awaited during recipe save, adding ~1s latency per new ingredient. Should be made async (fire and forget) to keep saves fast.
 
-5. **Legacy mirror dependency** — Public recipe pages query `recipes` table. New recipes auto-mirror. Older seed recipes may need manual SQL.
+5. **RLS on recipes table** — Draft recipes not visible to authors via public query due to RLS. Currently handled by querying without `is_published` filter and checking `author_id` in code, but RLS may still block in some cases.
 
 ---
 
 ## Next Priority Features
 
-### Immediate
-- **Remove debug line** from `src/app/my/recipes/import/page.tsx` (search for "Debug step 1 tools")
-- **Regenerate Supabase types** (run locally with VPN)
+### Priority 1 — Usage tracking (Option D)
+Log AI calls per user to Supabase `ai_usage_log` table: user_id, timestamp, model, input_tokens, output_tokens, feature. Foundation for membership tiers.
 
-### Priority 1 — AI chat in recipe view/edit
-Conversational recipe editor. User describes changes in natural language, Claude updates the structured recipe JSON and re-renders. This is the primary editing interface vision.
+### Priority 2 — DOCX + Excel upload (Batch 2)
+Support Word documents and Excel files on import page. Excel needs `xlsx` npm package for conversion to CSV/text before passing to Claude.
 
-- View page: floating chat input → Claude reads current recipe JSON + user message → returns updated JSON → re-renders
-- Edit page: same chat panel alongside the form editor
-- Form editor becomes "Advanced mode" toggle — may be restricted to certain users to ensure quality
-- Full conversation history in state for multi-turn context
+### Priority 3 — Edit flow routing
+Currently pencil icon on My Recipes → basic edit (`/my/recipes/[id]`). Advanced editor at `/my/recipes/[id]/edit`. This routing is correct. The `new` page (`/my/recipes/new`) is the legacy form-only editor, still accessible via "Advanced editor →" link.
 
-### Priority 2 — Entity relations seeding
-Seed `entity_relations` with ingredient substitutions, flavour affinities, equipment equivalences. AI-assisted seeding with confidence 0.4, human review queue.
+### Priority 4 — Public ingredient browse
+`/ingredients` taxonomy tree navigation. Nodes seeded (g- prefix), just needs UI.
 
-### Priority 3 — Public ingredient browse
-`/ingredients` taxonomy tree navigation. Nodes seeded, just needs UI.
+### Priority 5 — Servings scaling
+Servings stepper → creates `execution_variant` with AI-scaled quantities (non-linear: spices at ~0.7x etc).
 
-### Priority 4 — Variant authoring
-Axis-driven variant creation. Servings stepper → proper variant selector.
+### Priority 6 — Entity relations seeding
+Seed `entity_relations` with ingredient substitutions, flavour affinities, equipment equivalences.
 
 ---
 
@@ -203,10 +255,11 @@ Axis-driven variant creation. Servings stepper → proper variant selector.
 
 CSS vars: `--bg`, `--fg`, `--accent`, `--muted`, `--border`, `--surface`, `--surface-hover`, `--accent-subtle`
 
-Fixed bottom bar pattern (used on edit, new, import pages):
+Fixed bottom bar pattern:
 ```tsx
-<div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
+<div style={{ position: 'fixed', bottom: 0, left: 0, right: 300, borderTop: B, background: 'var(--surface)', padding: '10px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 50 }}>
 ```
+Note: `right: 300` accounts for fixed chat sidebar on edit pages.
 
 ---
 
@@ -214,20 +267,18 @@ Fixed bottom bar pattern (used on edit, new, import pages):
 
 | File | Purpose |
 |---|---|
-| `src/app/recipes/[slug]/page.tsx` | Recipe view page |
-| `src/app/my/recipes/page.tsx` | My Recipes — Import + New recipe buttons |
-| `src/app/my/recipes/new/page.tsx` | New recipe + import receiver with familyMap |
-| `src/app/my/recipes/import/page.tsx` | AI import page — paste, preview, fixed bar |
-| `src/app/my/recipes/[id]/edit/page.tsx` | Recipe edit page |
-| `src/app/api/recipes/import/route.ts` | Claude atomic-step parsing prompt |
-| `src/app/api/my/recipes/route.ts` | POST with findOrCreateIngredient |
-| `src/components/recipe/RecipeEditor.tsx` | Shared editor (~2500 lines) |
-| `src/components/icons/SoupdogIcon.tsx` | Custom SVG icons |
-| `src/components/layout/Sidebar.tsx` | Nav with custom icons |
+| `src/app/recipes/[slug]/page.tsx` | Recipe view page — draft preview for authors, publish button |
+| `src/app/my/recipes/page.tsx` | My Recipes — single Add recipe button, delete/publish/preview actions |
+| `src/app/my/recipes/import/page.tsx` | Add Recipe (basic) — upload/paste, AI parse, WYSIWYG preview, chat |
+| `src/app/my/recipes/[id]/page.tsx` | Basic edit — WYSIWYG view + chat panel, editable meta fields |
+| `src/app/my/recipes/[id]/edit/page.tsx` | Advanced editor — full RecipeEditor + right sidebar chat |
+| `src/app/my/recipes/new/page.tsx` | Legacy form editor (still works, linked as "Advanced editor") |
+| `src/app/api/recipes/import/route.ts` | Claude atomic-step parsing — accepts text or base64 file |
+| `src/app/api/recipes/import/chat/route.ts` | Streaming SSE chat — Haiku/Sonnet, scope-limited to food/Soupdog |
+| `src/app/api/my/recipes/route.ts` | GET list + POST create — includes estimateNutrition, findOrCreateIngredient |
+| `src/app/api/my/recipes/[id]/route.ts` | GET/PUT/DELETE — step ingredients from version_ingredients, version_number increment |
+| `src/app/api/my/recipes/[id]/publish/route.ts` | PATCH publish — updates canonicals + recipes by slug |
+| `src/app/api/admin/backfill-nutrition/route.ts` | One-time backfill — batched Haiku nutrition estimation |
+| `src/components/recipe/RecipeEditor.tsx` | Shared editor (~2600 lines) — ingredient pills, SoupdogIcon for tools |
+| `src/components/icons/SoupdogIcon.tsx` | Custom SVG icons — use `name="tools"` for tool icons everywhere |
 | `src/lib/supabase/types.ts` | **STALE** — needs regeneration |
-| `supabase/migration_v3_foundation.sql` | Knowledge graph schema |
-| `supabase/migration_v4_consolidate_products.sql` | Products → ingredients merge |
-| `supabase/seed_grocery_taxonomy_v2.sql` | ~80 grocery taxonomy nodes (g- prefix) |
-| `supabase/seed_tasks.sql` | ~40 global tasks |
-
-<!-- build: 2026-05-30 19:03 -->
