@@ -92,13 +92,25 @@ export default function RecipeMapPage() {
   }
   const contentBottom = cursor;
   const dishY = Math.round(top + (contentBottom - top) / 2 - 28);
-  const height = Math.max(contentBottom, dishY + 56) + 90;
+  const height = Math.max(contentBottom, dishY + 56) + 40;
 
   return (
     <div style={{ background: C.bg, minHeight: '100vh', padding: 32, fontFamily: 'IBM Plex Sans, system-ui, sans-serif', color: C.fg }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <h1 style={{ fontFamily: 'IBM Plex Serif, serif', fontSize: 26, color: C.accent, fontWeight: 600, marginBottom: 4 }}>{data.recipe.title}</h1>
         <p style={{ color: C.muted, fontSize: 14, marginTop: 0 }}>Content map · {data.recipe.servings} servings · colour = evidence grade</p>
+
+        <div style={{ display: 'flex', gap: 20, alignItems: 'center', marginTop: 8, marginBottom: 4, fontSize: 12, color: C.muted, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 13, height: 13, borderRadius: 3, background: C.goodFill, border: `1px solid ${C.good}`, display: 'inline-block' }} /> E1+ grounded
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 13, height: 13, borderRadius: 3, background: C.inferredFill, border: `1px solid ${C.inferred}`, display: 'inline-block' }} /> E0 inferred — gap
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 13, height: 13, borderRadius: 3, background: C.compFill, border: `1px solid ${C.comp}`, display: 'inline-block' }} /> component
+          </span>
+        </div>
 
         <svg width="100%" viewBox={`0 0 ${W} ${height}`} role="img" style={{ marginTop: 16 }}>
           <defs>
@@ -150,15 +162,6 @@ export default function RecipeMapPage() {
             <text x={colDish + dishW / 2} y={dishY + 43} fontSize="12" fill={C.muted} textAnchor="middle">final</text>
           </g>
 
-          {/* legend */}
-          <g transform={`translate(${colIng}, ${height - 60})`}>
-            <rect x={0} y={0} width={14} height={14} rx={3} fill={C.goodFill} stroke={C.good} strokeWidth={0.5} />
-            <text x={20} y={11} fontSize="12" fill={C.muted}>E1+ grounded</text>
-            <rect x={130} y={0} width={14} height={14} rx={3} fill={C.inferredFill} stroke={C.inferred} strokeWidth={0.5} />
-            <text x={150} y={11} fontSize="12" fill={C.muted}>E0 inferred — gap</text>
-            <rect x={300} y={0} width={14} height={14} rx={3} fill={C.compFill} stroke={C.comp} strokeWidth={0.5} />
-            <text x={320} y={11} fontSize="12" fill={C.muted}>component</text>
-          </g>
         </svg>
       </div>
     </div>
