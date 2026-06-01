@@ -32,7 +32,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
           id, order_index, step_type, group_label, instruction
         ),
         version_ingredients (
-          id, order_index, quantity_value, quantity_unit, step_id,
+          id, order_index, quantity_value, quantity_unit, step_id, ingredient_id,
           ingredients!ingredient_id (
             id, name, category, nutrition_per_100g
           )
@@ -48,7 +48,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
   const rv = Array.isArray(data.recipe_versions) ? data.recipe_versions[0] : data.recipe_versions;
   const vIngs = rv?.version_ingredients ?? [];
 
-  const ingredientIds = vIngs.map((vi: any) => vi.ingredients?.id).filter(Boolean);
+  const ingredientIds = vIngs.map((vi: any) => vi.ingredient_id).filter(Boolean);
   const rolesByIng: Record<string, { slug: string; grade: string }[]> = {};
   if (ingredientIds.length) {
     const { data: roleRows } = await db
@@ -66,8 +66,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
   const ingredients = vIngs
     .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
     .map((vi: any) => {
-      const ing = vi.ingredients;
-      const roles = rolesByIng[ing?.id] ?? [];
+      // nested relation may be an object OR a 1-element array (Supabase quirk)
+      const ing = Array.isArray(vi.ingredients) ? vi.ingredients[0] : vi.ingredients;
+      const roles = rolesByIng[vi.ingredient_id] ?? [];
       const roleGrade = roles.map((x) => x.grade).sort().reverse()[0] ?? null;
       const grade = roleGrade ?? (ing?.nutrition_per_100g ? 'e1_literature' : 'e0_inferred');
       return {
