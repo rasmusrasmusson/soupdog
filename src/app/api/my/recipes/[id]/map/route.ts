@@ -56,7 +56,10 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       .select('ingredient_id, evidence_grade, culinary_roles ( slug )')
       .in('ingredient_id', ingredientIds);
     for (const r of roleRows ?? []) {
-      (rolesByIng[r.ingredient_id] ??= []).push({ slug: r.culinary_roles?.slug, grade: r.evidence_grade });
+      // Supabase may return the embedded relation as an object OR a 1-element array.
+      const cr = Array.isArray(r.culinary_roles) ? r.culinary_roles[0] : r.culinary_roles;
+      const slug = cr?.slug;
+      if (slug) (rolesByIng[r.ingredient_id] ??= []).push({ slug, grade: r.evidence_grade });
     }
   }
 
