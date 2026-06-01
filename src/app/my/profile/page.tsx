@@ -15,6 +15,7 @@ type Profile = {
   allergies: string[];
   dietary_restrictions: string[];
   preferred_cuisines: string[];
+  date_of_birth: string | null;   // 'YYYY-MM-DD', stored on person (design 3.1)
 };
 
 const C = {
@@ -33,6 +34,15 @@ const SKILL_OPTIONS = [
   { v: 'medium', label: 'Comfortable' },
   { v: 'hard', label: 'Confident' },
   { v: 'expert', label: 'Expert' },
+];
+
+// Supported locales — design 3.1: language must be a dropdown, not free text.
+const LANGUAGE_OPTIONS = [
+  { v: 'en', label: 'English' },
+  { v: 'sv', label: 'Svenska' },
+  { v: 'zh', label: '中文' },
+  { v: 'ar', label: 'العربية' },
+  { v: 'fr', label: 'Français' },
 ];
 
 // Editable chip/tag input for array fields
@@ -135,9 +145,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        <div style={{ marginBottom: 22 }}>
-          <label style={labelStyle}>Language</label>
-          <input style={{ ...inputStyle, maxWidth: 220 }} value={p.language ?? ''} onChange={(e) => field('language', e.target.value)} placeholder="en" />
+        <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 22 }}>
+          <div>
+            <label style={labelStyle}>Language</label>
+            <select style={{ ...inputStyle, maxWidth: 220 }} value={p.language ?? 'en'} onChange={(e) => field('language', e.target.value)}>
+              {LANGUAGE_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Date of birth</label>
+            <input type="date" style={{ ...inputStyle, maxWidth: 220 }} value={p.date_of_birth ?? ''} onChange={(e) => field('date_of_birth', e.target.value)} />
+          </div>
         </div>
 
         <ChipInput label="Allergies" values={p.allergies ?? []} onChange={(v) => field('allergies', v)} placeholder="Type an allergy, press Enter" />

@@ -48,6 +48,15 @@ export default function SignupPage() {
     });
   };
 
+  const signUpWithApple = async () => {
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: 'apple',
+      options: { redirectTo: `${location.origin}/auth/callback` },
+    });
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
       <div className="w-full max-w-sm">
@@ -81,6 +90,10 @@ export default function SignupPage() {
             <button onClick={signUpWithMicrosoft}
               className="w-full flex items-center gap-3 border border-[var(--border)] px-4 py-2.5 text-[12px] font-mono text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
               <MicrosoftIcon /> Continue with Microsoft
+            </button>
+            <button onClick={signUpWithApple}
+              className="w-full flex items-center gap-3 border border-[var(--border)] px-4 py-2.5 text-[12px] font-mono text-[var(--fg)] hover:bg-[var(--surface-hover)] transition-colors">
+              <AppleIcon /> Continue with Apple
             </button>
 
             <div className="flex items-center gap-3 py-1">
@@ -160,6 +173,14 @@ function MicrosoftIcon() {
       <path fill="#00A4EF" d="M13 1h10v10H13z"/>
       <path fill="#7FBA00" d="M1 13h10v10H1z"/>
       <path fill="#FFB900" d="M13 13h10v10H13z"/>
+    </svg>
+  );
+}
+
+function AppleIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M16.36 12.78c-.02-2.06 1.68-3.05 1.76-3.1-0.96-1.4-2.45-1.6-2.98-1.62-1.27-.13-2.48.75-3.12.75-.64 0-1.64-.73-2.7-.71-1.39.02-2.67.81-3.38 2.05-1.44 2.5-.37 6.2 1.04 8.23.69.99 1.51 2.1 2.59 2.06 1.04-.04 1.43-.67 2.69-.67 1.25 0 1.61.67 2.71.65 1.12-.02 1.83-1.01 2.51-2.01.79-1.15 1.12-2.27 1.13-2.33-.03-.01-2.17-.83-2.19-3.3zM14.3 6.6c.57-.69.95-1.65.85-2.6-.82.03-1.81.55-2.4 1.23-.53.61-.99 1.58-.87 2.51.91.07 1.85-.46 2.42-1.14z"/>
     </svg>
   );
 }
