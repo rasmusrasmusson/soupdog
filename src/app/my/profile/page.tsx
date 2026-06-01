@@ -57,6 +57,39 @@ const COMPETENCY_AREAS: { key: string; label: string }[] = [
 ];
 const LEVELS = ['—', 'Follows a recipe', 'Confident', 'Can improvise'];
 
+const SEX_OPTIONS = [
+  { v: 'female', label: 'Female' },
+  { v: 'male', label: 'Male' },
+  { v: 'unspecified', label: 'Prefer not to say' },
+];
+const ACTIVITY_OPTIONS = [
+  { v: 'sedentary', label: 'Sedentary (little exercise)' },
+  { v: 'light', label: 'Lightly active' },
+  { v: 'moderate', label: 'Moderately active' },
+  { v: 'active', label: 'Active' },
+  { v: 'very_active', label: 'Very active' },
+];
+const TASTE_AXES = [
+  { key: 'spice_tolerance', label: 'Spice', lo: 'Mild', hi: 'Fiery' },
+  { key: 'sweet_preference', label: 'Sweet', lo: 'Savoury', hi: 'Sweet' },
+  { key: 'sour_preference', label: 'Sour', lo: 'Low', hi: 'Love it' },
+  { key: 'umami_preference', label: 'Umami', lo: 'Low', hi: 'Love it' },
+  { key: 'bitter_tolerance', label: 'Bitter', lo: 'Avoid', hi: 'Enjoy' },
+] as const;
+
+type Health = {
+  height_cm: number | null; weight_kg: number | null;
+  sex_at_birth: string | null; activity_level: string | null;
+  allergies: string[]; medical_conditions: string[];
+};
+type Taste = {
+  liked_cuisines: string[]; disliked_cuisines: string[];
+  liked_ingredients: string[]; disliked_ingredients: string[];
+  liked_textures: string[]; disliked_textures: string[];
+  spice_tolerance: number | null; sweet_preference: number | null;
+  sour_preference: number | null; umami_preference: number | null; bitter_tolerance: number | null;
+};
+
 const SECTIONS = [
   { key: 'overview', label: 'Overview' },
   { key: 'personal', label: 'Personal info' },
@@ -117,12 +150,21 @@ function Modal({ title, onClose, onSave, saving, children }: {
   );
 }
 
+// ── one white panel wrapping a section's rows (#2 pattern) ──
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '4px 16px', overflow: 'hidden' }}>
+      {children}
+    </div>
+  );
+}
+
 // ── summary row ──
-function Row({ label, value, onEdit }: { label: string; value: React.ReactNode; onEdit?: () => void }) {
+function Row({ label, value, onEdit, last }: { label: string; value: React.ReactNode; onEdit?: () => void; last?: boolean }) {
   const empty = value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
   return (
     <button onClick={onEdit} disabled={!onEdit}
-      style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 16, alignItems: 'center', justifyContent: 'space-between', padding: '14px 4px', borderBottom: `1px solid ${C.border}`, background: 'none', border: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: onEdit ? 'pointer' : 'default' }}>
+      style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 16, alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: last ? 'none' : `1px solid ${C.border}`, background: 'none', borderTop: 'none', borderLeft: 'none', borderRight: 'none', cursor: onEdit ? 'pointer' : 'default' }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.13em', color: C.muted, marginBottom: 4 }}>{label}</div>
         <div style={{ fontSize: 14.5, color: empty ? C.muted : C.fg, fontStyle: empty ? 'italic' : 'normal' }}>{empty ? 'Not set' : value}</div>
@@ -202,16 +244,20 @@ export default function ProfilePage() {
 
   // cooking
   const [cooking, setCooking] = useState<{ overall: string; areas: Record<string, number> } | null>(null);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [taste, setTaste] = useState<Taste | null>(null);
   const providers = useIdentities();
 
   // modal state
-  const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking'>(null);
+  const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking' | 'health' | 'taste_likes' | 'taste_axes'>(null);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
     fetch('/api/my/cooking').then((r) => r.json()).then(setCooking).catch(() => {});
+    fetch('/api/my/health').then((r) => r.json()).then((d) => setHealth(d.health)).catch(() => {});
+    fetch('/api/my/taste').then((r) => r.json()).then((d) => setTaste(d.taste)).catch(() => {});
   }, []);
 
   const saveProfile = async (patch: Partial<Profile>) => {
@@ -237,6 +283,26 @@ export default function ProfilePage() {
     finally { setSaving(false); }
   };
 
+  const saveHealth = async (next: Health) => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/my/health', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      setHealth(next); setModal(null); setError(null);
+    } catch (e: any) { setError(e.message || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
+  const saveTaste = async (next: Taste) => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/my/taste', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
+      setTaste(next); setModal(null); setError(null);
+    } catch (e: any) { setError(e.message || 'Save failed'); }
+    finally { setSaving(false); }
+  };
+
   if (error && !p) return <div style={{ padding: 32, fontFamily: SANS, color: C.fg }}>Could not load profile: {error}</div>;
   if (!p) return <div style={{ padding: 32, color: C.muted, fontFamily: SANS }}>Loading profile…</div>;
 
@@ -245,12 +311,19 @@ export default function ProfilePage() {
   const unitLabel = UNIT_OPTIONS.find((o) => o.v === p.unit_system)?.label ?? p.unit_system;
   const filledAreas = cooking ? Object.values(cooking.areas).filter((v) => v > 0).length : 0;
 
+  const bmi = (health?.height_cm && health?.weight_kg)
+    ? +(health.weight_kg / Math.pow(health.height_cm / 100, 2)).toFixed(1) : null;
+  const healthDone = !!(health && (health.height_cm || health.weight_kg || health.sex_at_birth || health.activity_level || health.allergies.length || health.medical_conditions.length));
+  const tasteDone = !!(taste && (taste.liked_cuisines.length || taste.liked_ingredients.length || taste.spice_tolerance != null));
+  const sexLabel = SEX_OPTIONS.find((o) => o.v === health?.sex_at_birth)?.label ?? null;
+  const actLabel = ACTIVITY_OPTIONS.find((o) => o.v === health?.activity_level)?.label ?? null;
+
   // section completeness for Overview cards
   const cards: { key: SectionKey; title: string; summary: string; done: boolean }[] = [
     { key: 'personal', title: 'Personal info', summary: p.display_name ? `${p.display_name}${age != null ? ` · ${age}` : ''}` : 'Add your name & details', done: !!p.display_name },
     { key: 'cooking', title: 'Cooking skills', summary: filledAreas ? `${filledAreas} areas rated` : 'Rate your kitchen skills', done: filledAreas > 0 },
-    { key: 'health', title: 'Health profile', summary: 'Body, activity, allergies', done: false },
-    { key: 'taste', title: 'Taste profile', summary: 'What you love & avoid', done: (p.preferred_cuisines?.length ?? 0) > 0 },
+    { key: 'health', title: 'Health profile', summary: bmi ? `BMI ${bmi}${actLabel ? ` · ${actLabel.split(' ')[0]}` : ''}` : 'Body, activity, allergies', done: healthDone },
+    { key: 'taste', title: 'Taste profile', summary: tasteDone ? `${(taste?.liked_cuisines.length ?? 0) + (taste?.liked_ingredients.length ?? 0)} likes` : 'What you love & avoid', done: tasteDone },
     { key: 'eating', title: 'Eating habits', summary: 'Set up with your meal plan', done: false },
     { key: 'account', title: 'Account', summary: email ?? '', done: true },
   ];
@@ -277,23 +350,27 @@ export default function ProfilePage() {
   const personalBody = (
     <div>
       <SectionHeader title="Personal info" subtitle="Who you are and how Soupdog talks to you." />
-      <Row label="Display name" value={p.display_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
-      <Row label="Full name" value={p.full_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
-      <Row label="Date of birth" value={p.date_of_birth ? `${p.date_of_birth}${age != null ? `  ·  ${age} yrs` : ''}` : ''} onEdit={() => { setDraft({ dob: p.date_of_birth }); setModal('dob'); }} />
-      <Row label="Country" value={p.country} onEdit={() => { setDraft({ country: p.country ?? '' }); setModal('country'); }} />
-      <Row label="Language" value={langLabel} onEdit={() => { setDraft({ language: p.language }); setModal('locale'); }} />
-      <Row label="Units" value={unitLabel} onEdit={() => { setDraft({ unit_system: p.unit_system }); setModal('units'); }} />
+      <Panel>
+        <Row label="Display name" value={p.display_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
+        <Row label="Full name" value={p.full_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
+        <Row label="Date of birth" value={p.date_of_birth ? `${p.date_of_birth}${age != null ? `  ·  ${age} yrs` : ''}` : ''} onEdit={() => { setDraft({ dob: p.date_of_birth }); setModal('dob'); }} />
+        <Row label="Country" value={p.country} onEdit={() => { setDraft({ country: p.country ?? '' }); setModal('country'); }} />
+        <Row label="Language" value={langLabel} onEdit={() => { setDraft({ language: p.language }); setModal('locale'); }} />
+        <Row label="Units" value={unitLabel} last onEdit={() => { setDraft({ unit_system: p.unit_system }); setModal('units'); }} />
+      </Panel>
     </div>
   );
 
   const cookingBody = (
     <div>
       <SectionHeader title="Cooking skills" subtitle="Rated by area, the way a kitchen would — tunes difficulty and guidance." />
-      <Row label="Overall" value={cooking ? (LEVELS_OVERALL[cooking.overall] ?? cooking.overall) : ''} onEdit={() => { setDraft({ ...(cooking ?? { overall: 'medium', areas: {} }) }); setModal('cooking'); }} />
-      {COMPETENCY_AREAS.map((a) => (
-        <Row key={a.key} label={a.label} value={cooking ? LEVELS[cooking.areas[a.key] ?? 0] : ''}
-          onEdit={() => { setDraft({ ...(cooking ?? { overall: 'medium', areas: {} }) }); setModal('cooking'); }} />
-      ))}
+      <Panel>
+        <Row label="Overall" value={cooking ? (LEVELS_OVERALL[cooking.overall] ?? cooking.overall) : ''} onEdit={() => { setDraft({ ...(cooking ?? { overall: 'medium', areas: {} }) }); setModal('cooking'); }} />
+        {COMPETENCY_AREAS.map((a, i) => (
+          <Row key={a.key} label={a.label} value={cooking ? LEVELS[cooking.areas[a.key] ?? 0] : ''} last={i === COMPETENCY_AREAS.length - 1}
+            onEdit={() => { setDraft({ ...(cooking ?? { overall: 'medium', areas: {} }) }); setModal('cooking'); }} />
+        ))}
+      </Panel>
     </div>
   );
 
@@ -309,16 +386,56 @@ export default function ProfilePage() {
   const accountBody = (
     <div>
       <SectionHeader title="Account" subtitle="Your login and how you sign in." />
-      <Row label="Email" value={email} />
-      <Row label="Sign-in methods" value={providers === null ? 'Loading…' : providers.map((pr) => PROVIDER_LABEL[pr] ?? pr).join(', ')} />
+      <Panel>
+        <Row label="Email" value={email} />
+        <Row label="Sign-in methods" value={providers === null ? 'Loading…' : providers.map((pr) => PROVIDER_LABEL[pr] ?? pr).join(', ')} last />
+      </Panel>
       <p style={{ color: C.muted, fontSize: 12, marginTop: 16, lineHeight: 1.5 }}>Adding sign-in methods and password changes will live here. For now, use “Forgot password” on the sign-in page.</p>
+    </div>
+  );
+
+  const healthBody = (
+    <div>
+      <SectionHeader title="Health profile" subtitle="Body, activity and medical considerations — used to tailor nutrition and recommendations." />
+      <Panel>
+        <Row label="Sex (for nutrition calculations)" value={sexLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Height" value={health?.height_cm ? `${health.height_cm} cm` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Weight" value={health?.weight_kg ? `${health.weight_kg} kg` : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="BMI" value={bmi != null ? String(bmi) : ''} />
+        <Row label="Activity level" value={actLabel} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Allergies" value={health?.allergies?.length ? health.allergies.join(', ') : ''} onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+        <Row label="Medical conditions" value={health?.medical_conditions?.length ? health.medical_conditions.join(', ') : ''} last onEdit={() => { setDraft({ ...(health ?? {}) }); setModal('health'); }} />
+      </Panel>
+      <p style={{ color: C.muted, fontSize: 12, marginTop: 14, lineHeight: 1.5 }}>Sex is asked only because it changes energy and nutrient calculations — it isn’t shown publicly. Your allergies set here are the single source of truth and appear read-only elsewhere.</p>
+    </div>
+  );
+
+  const tasteBody = (
+    <div>
+      <SectionHeader title="Taste profile" subtitle="What you love and what you avoid — the more you add, the better recommendations get." />
+      <Panel>
+        <Row label="Cuisines you love" value={taste?.liked_cuisines?.length ? taste.liked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
+        <Row label="Cuisines you dislike" value={taste?.disliked_cuisines?.length ? taste.disliked_cuisines.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
+        <Row label="Ingredients you love" value={taste?.liked_ingredients?.length ? taste.liked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
+        <Row label="Ingredients you dislike" value={taste?.disliked_ingredients?.length ? taste.disliked_ingredients.join(', ') : ''} onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_likes'); }} />
+        <Row label="Taste preferences" value={taste && taste.spice_tolerance != null ? TASTE_AXES.map((a) => `${a.label} ${(taste as any)[a.key] ?? '–'}`).join(' · ') : ''} last onEdit={() => { setDraft({ ...(taste ?? {}) }); setModal('taste_axes'); }} />
+      </Panel>
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.13em', color: C.muted, marginBottom: 8 }}>Hard exclusions (set elsewhere)</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {(health?.allergies ?? []).map((a) => <span key={`al-${a}`} style={{ background: '#f3e7e7', border: '1px solid #e3cfcf', borderRadius: 6, padding: '3px 8px', fontSize: 12.5 }}>⚠ {a}</span>)}
+          {(p.dietary_restrictions ?? []).map((d) => <span key={`dr-${d}`} style={{ background: C.surfaceHover, border: `1px solid ${C.border}`, borderRadius: 6, padding: '3px 8px', fontSize: 12.5 }}>{d}</span>)}
+          {!(health?.allergies?.length) && !(p.dietary_restrictions?.length) && <span style={{ color: C.muted, fontSize: 12.5, fontStyle: 'italic' }}>No allergies or dietary restrictions set</span>}
+        </div>
+        <p style={{ color: C.muted, fontSize: 12, marginTop: 8 }}>Allergies live in your Health profile; dietary restrictions in Personal info. Shown here read-only.</p>
+      </div>
     </div>
   );
 
   const bodies: Record<SectionKey, React.ReactNode> = {
     overview: overviewBody, personal: personalBody, cooking: cookingBody,
-    health: stub('Health profile', 'Body, activity, conditions and allergies.', 'Coming in the next update: height & weight (with BMI), activity level, medical considerations, and your allergies — kept here as the single source of truth.'),
-    taste: stub('Taste profile', 'What you love, what you avoid.', 'Coming next: foods you love, foods you won’t eat, ethical & religious choices, and a quick taste wizard (spice, sweetness, textures). Allergies will show here read-only from your Health profile.'),
+    health: healthBody,
+    taste: tasteBody,
     eating: stub('Eating habits', 'Which meals you eat, and where.', 'Set up alongside your meal plan — weekday vs weekend patterns and meal context are gathered when you activate planning, then shown here.'),
     account: accountBody,
   };
@@ -408,6 +525,73 @@ export default function ProfilePage() {
                 <select style={{ ...inputS, width: 170, flex: '0 0 auto' }} value={draft.areas[a.key] ?? 0} onChange={(e) => setDraft({ ...draft, areas: { ...draft.areas, [a.key]: Number(e.target.value) } })}>
                   {LEVELS.map((l, i) => <option key={i} value={i}>{l}</option>)}
                 </select>
+              </div>
+            ))}
+          </div>
+        </Modal>
+      )}
+      {modal === 'health' && draft && (
+        <Modal title="Health profile" onClose={() => setModal(null)} saving={saving} onSave={() => saveHealth({
+          height_cm: draft.height_cm ?? null, weight_kg: draft.weight_kg ?? null,
+          sex_at_birth: draft.sex_at_birth ?? null, activity_level: draft.activity_level ?? null,
+          allergies: draft.allergies ?? [], medical_conditions: draft.medical_conditions ?? [],
+        })}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelS}>Sex (for nutrition calculations)</label>
+            <select style={inputS} value={draft.sex_at_birth ?? ''} onChange={(e) => setDraft({ ...draft, sex_at_birth: e.target.value || null })}>
+              <option value="">Not set</option>
+              {SEX_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelS}>Height (cm)</label>
+              <input type="number" inputMode="decimal" style={inputS} value={draft.height_cm ?? ''} onChange={(e) => setDraft({ ...draft, height_cm: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 178" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={labelS}>Weight (kg)</label>
+              <input type="number" inputMode="decimal" style={inputS} value={draft.weight_kg ?? ''} onChange={(e) => setDraft({ ...draft, weight_kg: e.target.value === '' ? null : Number(e.target.value) })} placeholder="e.g. 74" />
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelS}>Activity level</label>
+            <select style={inputS} value={draft.activity_level ?? ''} onChange={(e) => setDraft({ ...draft, activity_level: e.target.value || null })}>
+              <option value="">Not set</option>
+              {ACTIVITY_OPTIONS.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+            </select>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelS}>Allergies</label>
+            <ChipInput values={draft.allergies ?? []} onChange={(v) => setDraft({ ...draft, allergies: v })} placeholder="Type an allergy, press Enter" />
+          </div>
+          <div>
+            <label style={labelS}>Medical conditions</label>
+            <ChipInput values={draft.medical_conditions ?? []} onChange={(v) => setDraft({ ...draft, medical_conditions: v })} placeholder="e.g. type 2 diabetes — Enter to add" />
+          </div>
+        </Modal>
+      )}
+      {modal === 'taste_likes' && draft && (
+        <Modal title="Likes & dislikes" onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
+          <div style={{ marginBottom: 16 }}><label style={labelS}>Cuisines you love</label><ChipInput values={draft.liked_cuisines ?? []} onChange={(v) => setDraft({ ...draft, liked_cuisines: v })} placeholder="e.g. Sri Lankan, Sichuan — Enter to add" /></div>
+          <div style={{ marginBottom: 16 }}><label style={labelS}>Cuisines you dislike</label><ChipInput values={draft.disliked_cuisines ?? []} onChange={(v) => setDraft({ ...draft, disliked_cuisines: v })} placeholder="Enter to add" /></div>
+          <div style={{ marginBottom: 16 }}><label style={labelS}>Ingredients you love</label><ChipInput values={draft.liked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, liked_ingredients: v })} placeholder="e.g. garlic, coriander — Enter to add" /></div>
+          <div><label style={labelS}>Ingredients you dislike</label><ChipInput values={draft.disliked_ingredients ?? []} onChange={(v) => setDraft({ ...draft, disliked_ingredients: v })} placeholder="e.g. cilantro, olives — Enter to add" /></div>
+        </Modal>
+      )}
+      {modal === 'taste_axes' && draft && (
+        <Modal title="Taste preferences" onClose={() => setModal(null)} saving={saving} onSave={() => saveTaste(draft)}>
+          <p style={{ color: C.muted, fontSize: 13, marginBottom: 16 }}>Slide each to taste. 0 = none, 5 = love it.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {TASTE_AXES.map((a) => (
+              <div key={a.key}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                  <span>{a.label}</span>
+                  <span style={{ color: C.muted, fontFamily: MONO, fontSize: 12 }}>{(draft as any)[a.key] ?? 0}</span>
+                </div>
+                <input type="range" min={0} max={5} step={1} value={(draft as any)[a.key] ?? 0}
+                  onChange={(e) => setDraft({ ...draft, [a.key]: Number(e.target.value) })}
+                  style={{ width: '100%', accentColor: C.accent }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.muted }}><span>{a.lo}</span><span>{a.hi}</span></div>
               </div>
             ))}
           </div>
