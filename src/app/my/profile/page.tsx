@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 // ── design tokens ──
 const C = {
@@ -253,26 +253,41 @@ function Scale4({ value, onChange }: { value: number | null; onChange: (v: numbe
 // ── day/month/year birthday picker ──
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 function BirthdayPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
-  const [y, m, d] = value ? value.split('-') : ['', '', ''];
-  const yy = y, mm = m ? String(Number(m)) : '', dd = d ? String(Number(d)) : '';
+  const parse = (v: string | null) => {
+    if (!v) return { d: '', m: '', y: '' };
+    const [yy, mm, dd] = v.split('-');
+    return { d: dd ? String(Number(dd)) : '', m: mm ? String(Number(mm)) : '', y: yy ?? '' };
+  };
+  const [parts, setParts] = useState(() => parse(value));
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value !== lastValue.current) { lastValue.current = value; setParts(parse(value)); }
+  }, [value]);
+
   const thisYear = new Date().getFullYear();
   const years = useMemo(() => Array.from({ length: 120 }, (_, i) => thisYear - i), [thisYear]);
   const dim = (a: number, b: number) => new Date(a, b, 0).getDate();
-  const maxDay = (mm && yy) ? dim(Number(yy), Number(mm)) : 31;
-  const emit = (ny: string, nm: string, nd: string) => {
-    if (ny && nm && nd) { const cap = Math.min(Number(nd), dim(Number(ny), Number(nm))); onChange(`${ny}-${String(Number(nm)).padStart(2,'0')}-${String(cap).padStart(2,'0')}`); }
-    else onChange(null);
+  const maxDay = (parts.m && parts.y) ? dim(Number(parts.y), Number(parts.m)) : 31;
+
+  const update = (next: { d: string; m: string; y: string }) => {
+    setParts(next);
+    if (next.d && next.m && next.y) {
+      const cap = Math.min(Number(next.d), dim(Number(next.y), Number(next.m)));
+      const iso = `${next.y}-${String(Number(next.m)).padStart(2,'0')}-${String(cap).padStart(2,'0')}`;
+      lastValue.current = iso; onChange(iso);
+    } else if (!next.d && !next.m && !next.y) { lastValue.current = null; onChange(null); }
   };
+
   const sel = { ...inputS, minWidth: 0 } as const;
   return (
     <div style={{ display: 'flex', gap: 8 }}>
-      <select aria-label="Day" value={dd} onChange={(e) => emit(yy, mm, e.target.value)} style={{ ...sel, flex: '0 0 72px' }}>
+      <select aria-label="Day" value={parts.d} onChange={(e) => update({ ...parts, d: e.target.value })} style={{ ...sel, flex: '0 0 72px' }}>
         <option value="">Day</option>{Array.from({ length: maxDay }, (_, i) => i + 1).map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
-      <select aria-label="Month" value={mm} onChange={(e) => emit(yy, e.target.value, dd)} style={{ ...sel, flex: 1 }}>
+      <select aria-label="Month" value={parts.m} onChange={(e) => update({ ...parts, m: e.target.value })} style={{ ...sel, flex: 1 }}>
         <option value="">Month</option>{MONTHS.map((x, i) => <option key={x} value={i + 1}>{x}</option>)}
       </select>
-      <select aria-label="Year" value={yy} onChange={(e) => emit(e.target.value, mm, dd)} style={{ ...sel, flex: '0 0 92px' }}>
+      <select aria-label="Year" value={parts.y} onChange={(e) => update({ ...parts, y: e.target.value })} style={{ ...sel, flex: '0 0 92px' }}>
         <option value="">Year</option>{years.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
     </div>

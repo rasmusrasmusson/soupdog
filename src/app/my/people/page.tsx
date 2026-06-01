@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 const C = {
   bg: '#f7f6f2', fg: '#1a1a1a', accent: '#2e4638', muted: '#6b6860',
@@ -25,6 +25,7 @@ type Person = {
 };
 
 const COMMON_ALLERGENS = ['Gluten', 'Crustaceans', 'Eggs', 'Fish', 'Peanuts', 'Soybeans', 'Milk', 'Tree nuts', 'Celery', 'Mustard', 'Sesame', 'Sulphites', 'Lupin', 'Molluscs'];
+const COMMON_CONDITIONS = ['Type 1 diabetes', 'Type 2 diabetes', 'High blood pressure', 'High cholesterol', 'Chronic kidney disease', 'Coeliac disease', 'IBS', 'IBD', 'Acid reflux / GERD', 'Gout'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function useIsDesktop() {
@@ -64,26 +65,47 @@ function Avatar({ id, name, size = 40 }: { id: string; name: string | null; size
 }
 
 function BirthdayPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
-  const [y, m, d] = value ? value.split('-') : ['', '', ''];
-  const yy = y, mm = m ? String(Number(m)) : '', dd = d ? String(Number(d)) : '';
+  // Hold the three parts in local state so partial selections persist.
+  // Seed from `value` once on mount (and when it changes externally).
+  const parse = (v: string | null) => {
+    if (!v) return { d: '', m: '', y: '' };
+    const [yy, mm, dd] = v.split('-');
+    return { d: dd ? String(Number(dd)) : '', m: mm ? String(Number(mm)) : '', y: yy ?? '' };
+  };
+  const [parts, setParts] = useState(() => parse(value));
+  const lastValue = useRef(value);
+  useEffect(() => {
+    if (value !== lastValue.current) { lastValue.current = value; setParts(parse(value)); }
+  }, [value]);
+
   const thisYear = new Date().getFullYear();
   const years = useMemo(() => Array.from({ length: 120 }, (_, i) => thisYear - i), [thisYear]);
   const dim = (a: number, b: number) => new Date(a, b, 0).getDate();
-  const maxDay = (mm && yy) ? dim(Number(yy), Number(mm)) : 31;
-  const emit = (ny: string, nm: string, nd: string) => {
-    if (ny && nm && nd) { const cap = Math.min(Number(nd), dim(Number(ny), Number(nm))); onChange(`${ny}-${String(Number(nm)).padStart(2, '0')}-${String(cap).padStart(2, '0')}`); }
-    else onChange(null);
+  const maxDay = (parts.m && parts.y) ? dim(Number(parts.y), Number(parts.m)) : 31;
+
+  const update = (next: { d: string; m: string; y: string }) => {
+    setParts(next);
+    if (next.d && next.m && next.y) {
+      const cap = Math.min(Number(next.d), dim(Number(next.y), Number(next.m)));
+      const iso = `${next.y}-${String(Number(next.m)).padStart(2, '0')}-${String(cap).padStart(2, '0')}`;
+      lastValue.current = iso;
+      onChange(iso);
+    } else {
+      // partial — keep local state, don't wipe; only clear parent if fully empty
+      if (!next.d && !next.m && !next.y) { lastValue.current = null; onChange(null); }
+    }
   };
+
   const sel = { ...inputS, minWidth: 0 } as const;
   return (
     <div style={{ display: 'flex', gap: 8 }}>
-      <select aria-label="Day" value={dd} onChange={(e) => emit(yy, mm, e.target.value)} style={{ ...sel, flex: '0 0 72px' }}>
+      <select aria-label="Day" value={parts.d} onChange={(e) => update({ ...parts, d: e.target.value })} style={{ ...sel, flex: '0 0 72px' }}>
         <option value="">Day</option>{Array.from({ length: maxDay }, (_, i) => i + 1).map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
-      <select aria-label="Month" value={mm} onChange={(e) => emit(yy, e.target.value, dd)} style={{ ...sel, flex: 1 }}>
+      <select aria-label="Month" value={parts.m} onChange={(e) => update({ ...parts, m: e.target.value })} style={{ ...sel, flex: 1 }}>
         <option value="">Month</option>{MONTHS.map((x, i) => <option key={x} value={i + 1}>{x}</option>)}
       </select>
-      <select aria-label="Year" value={yy} onChange={(e) => emit(e.target.value, mm, dd)} style={{ ...sel, flex: '0 0 92px' }}>
+      <select aria-label="Year" value={parts.y} onChange={(e) => update({ ...parts, y: e.target.value })} style={{ ...sel, flex: '0 0 92px' }}>
         <option value="">Year</option>{years.map((x) => <option key={x} value={x}>{x}</option>)}
       </select>
     </div>
@@ -243,7 +265,7 @@ export default function PeoplePage() {
               <div style={{ marginBottom: 16 }}><label style={labelS}>Full name (optional)</label><input style={inputS} value={draft.full_name ?? ''} onChange={(e) => field('full_name', e.target.value)} placeholder="Full / legal name" /></div>
               <div style={{ marginBottom: 16 }}><label style={labelS}>Date of birth</label><BirthdayPicker value={draft.date_of_birth} onChange={(v) => field('date_of_birth', v)} /></div>
               <div style={{ marginBottom: 16 }}><label style={labelS}>Allergies</label><TogglePicker options={COMMON_ALLERGENS} values={draft.allergies ?? []} onChange={(v) => field('allergies', v)} otherPlaceholder="Other allergy — Enter to add" /></div>
-              <div><label style={labelS}>Medical conditions</label><TogglePicker options={[]} values={draft.medical_conditions ?? []} onChange={(v) => field('medical_conditions', v)} otherPlaceholder="Condition — Enter to add" /></div>
+              <div><label style={labelS}>Medical conditions</label><TogglePicker options={COMMON_CONDITIONS} values={draft.medical_conditions ?? []} onChange={(v) => field('medical_conditions', v)} otherPlaceholder="Other condition — Enter to add" /></div>
             </>
           )}
         </Modal>
