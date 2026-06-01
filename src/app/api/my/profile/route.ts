@@ -1,27 +1,35 @@
 // src/app/api/my/profile/route.ts
 // GET (load) + PUT (save) the logged-in user's profile.
 // Phase 0: user_profiles remains the working store for Basic fields.
-// We additionally sync display_name (and now date_of_birth) onto the
-// account's self-person so the identity spine stays in step. DOB lives on
-// `person` (design 3.1: store birthday, not age).
+// We additionally sync display_name + date_of_birth onto the account's
+// self-person. DOB lives on `person` (design 3.1: store birthday, not age).
+//
+// Hardened: looks up the existing self-person directly (no RPC dependency),
+// and surfaces a sync failure instead of silently swallowing it.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 const SELECT = 'id, display_name, unit_system, language, skill_level, allergies, dietary_restrictions, preferred_cuisines';
 
-async function selfPersonId(db: any, accountId: string): Promise<string | null> {
-  const { data } = await db
+// Returns { id, error }. Tries an existing self grant first; only falls back
+// to the provisioning RPC if none exists (covers brand-new pre-trigger accounts).
+async function getSelfPersonId(db: any, accountId: string): Promise<{ id: string | null; error: string | null }> {
+  const { data, error } = await db
     .from('person_access')
     .select('person_id')
     .eq('account_id', accountId)
     .eq('role', 'self')
     .is('revoked_at', null)
     .maybeSingle();
-  if (data?.person_id) return data.person_id;
-  // provision if missing (pre-trigger accounts)
-  const { data: pid } = await db.rpc('provision_self_person', { acc: accountId });
-  return (pid as string) ?? null;
+
+  if (error) return { id: null, error: `person_access lookup: ${error.message}` };
+  if (data?.person_id) return { id: data.person_id, error: null };
+
+  // No self-person yet → provision one.
+  const { data: pid, error: rpcErr } = await db.rpc('provision_self_person', { acc: accountId });
+  if (rpcErr) return { id: null, error: `provision_self_person: ${rpcErr.message}` };
+  return { id: (pid as string) ?? null, error: null };
 }
 
 export async function GET() {
@@ -37,9 +45,8 @@ export async function GET() {
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Pull date_of_birth from the self-person (new home for DOB).
   let dateOfBirth: string | null = null;
-  const pid = await selfPersonId(db, user.id);
+  const { id: pid } = await getSelfPersonId(db, user.id);
   if (pid) {
     const { data: person } = await db
       .from('person').select('date_of_birth').eq('id', pid).maybeSingle();
@@ -89,15 +96,28 @@ export async function PUT(req: NextRequest) {
   const { error } = await db.from('user_profiles').upsert(row, { onConflict: 'id' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Sync identity fields onto the self-person.
-  const pid = await selfPersonId(db, user.id);
+  // Sync identity fields onto the self-person. Surface failures, don't swallow.
+  const { id: pid, error: pidErr } = await getSelfPersonId(db, user.id);
+  if (pidErr) {
+    return NextResponse.json(
+      { ok: true, warning: `Profile saved, but person sync failed: ${pidErr}` },
+      { status: 200 },
+    );
+  }
   if (pid) {
     const personPatch: Record<string, unknown> = {
       display_name: displayName,
       updated_at: new Date().toISOString(),
     };
     if ('date_of_birth' in body) personPatch.date_of_birth = body.date_of_birth || null;
-    await db.from('person').update(personPatch).eq('id', pid);
+
+    const { error: personErr } = await db.from('person').update(personPatch).eq('id', pid);
+    if (personErr) {
+      return NextResponse.json(
+        { ok: true, warning: `Profile saved, but person update failed: ${personErr.message}` },
+        { status: 200 },
+      );
+    }
   }
 
   return NextResponse.json({ ok: true });

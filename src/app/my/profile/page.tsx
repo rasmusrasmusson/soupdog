@@ -100,9 +100,10 @@ export default function ProfilePage() {
       const res = await fetch('/api/my/profile', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p),
       });
-      if (!res.ok) throw new Error((await res.json()).error || 'Save failed');
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Save failed');
+      if (data.warning) { setError(data.warning); }
+      else { setSaved(true); setTimeout(() => setSaved(false), 2500); }
     } catch (e: any) {
       setError(e.message || 'Save failed');
     } finally {
