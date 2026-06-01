@@ -103,7 +103,7 @@ export default function RecipeMapPage() {
         <svg width="100%" viewBox={`0 0 ${W} ${height}`} role="img" style={{ marginTop: 16 }}>
           <defs>
             <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-              <path d="M2 1L8 5L2 9" fill="none" stroke={C.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 1L8 5L2 9" fill="none" stroke="#888780" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </marker>
           </defs>
 
@@ -115,7 +115,7 @@ export default function RecipeMapPage() {
           {placedIngs.map((p, i) => {
             const comp = (p.ing.stepId && stepById[p.ing.stepId]) ? stepById[p.ing.stepId].label : FALLBACK;
             const cy = (compY[comp] ?? dishY) + 22;
-            return <line key={`e${i}`} x1={colIng + ingW} y1={p.y + 22} x2={colComp - 8} y2={cy} stroke={C.border} strokeWidth={0.5} markerEnd="url(#arr)" />;
+            return <line key={`e${i}`} x1={colIng + ingW} y1={p.y + 22} x2={colComp - 8} y2={cy} stroke="#b4b2a9" strokeWidth={1} markerEnd="url(#arr)" />;
           })}
 
           {/* ingredient nodes */}
@@ -138,7 +138,7 @@ export default function RecipeMapPage() {
               <g key={`c${comp}`}>
                 <rect x={colComp} y={y} width={compW} height={44} rx={8} fill={C.compFill} stroke={C.comp} strokeWidth={0.5} />
                 <text x={colComp + 12} y={y + 26} fontSize="14" fontWeight={500} fill={C.comp}>{comp}</text>
-                <line x1={colComp + compW} y1={y + 22} x2={colDish - 8} y2={dishY + 28} stroke={C.border} strokeWidth={0.5} markerEnd="url(#arr)" />
+                <line x1={colComp + compW} y1={y + 22} x2={colDish - 8} y2={dishY + 28} stroke="#888780" strokeWidth={1.25} markerEnd="url(#arr)" />
               </g>
             );
           })}
