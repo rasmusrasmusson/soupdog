@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { logAiUsage } from '@/lib/ai/anthropic';
 
 export const maxDuration = 300;
 
@@ -108,9 +109,14 @@ async function runBatch(): Promise<{ filled: number; marked: number; processed: 
     }),
   });
 
-  if (!res.ok) throw new Error(`Anthropic API returned ${res.status}`);
+  if (!res.ok) {
+    void logAiUsage({ accountId: null, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_backfill', inputTokens: 0, outputTokens: 0, success: false, error: `status ${res.status}` });
+    throw new Error(`Anthropic API returned ${res.status}`);
+  }
 
   const data = await res.json();
+  const u = data.usage ?? {};
+  void logAiUsage({ accountId: null, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_backfill', inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0, success: true });
   const text = data.content?.[0]?.text ?? '';
   const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 

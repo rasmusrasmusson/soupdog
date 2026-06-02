@@ -2,10 +2,13 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
+import { logAiUsage } from '@/lib/ai/anthropic';
 
 
-// Find existing ingredient by name (case-insensitive) or create new one
-async function estimateNutrition(name: string): Promise<any | null> {
+// Estimate USDA nutrition per 100g for an ingredient name. Logs token usage to
+// ai_usage_log via the provided db client (this runs in a background after()
+// context, so we pass the client we already hold rather than make a new one).
+async function estimateNutrition(name: string, accountId: string | null, db: any): Promise<any | null> {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -23,8 +26,13 @@ async function estimateNutrition(name: string): Promise<any | null> {
         }],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      void logAiUsage({ accountId, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_estimate', inputTokens: 0, outputTokens: 0, success: false, error: `status ${res.status}` });
+      return null;
+    }
     const data = await res.json();
+    const u = data.usage ?? {};
+    void logAiUsage({ accountId, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_estimate', inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0, success: true });
     const text = data.content?.[0]?.text ?? '';
     const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(clean);
@@ -38,10 +46,10 @@ async function estimateNutrition(name: string): Promise<any | null> {
 // latency to recipe saves. Failures are swallowed; the admin backfill endpoint
 // (/api/admin/backfill-nutrition) is the safety net for any ingredient left with
 // null nutrition_per_100g.
-async function backfillNutrition(db: any, items: { id: string; name: string }[]) {
+async function backfillNutrition(db: any, accountId: string | null, items: { id: string; name: string }[]) {
   for (const { id, name } of items) {
     try {
-      const nutrition = await estimateNutrition(name);
+      const nutrition = await estimateNutrition(name, accountId, db);
       if (nutrition) {
         await db.from('ingredients').update({ nutrition_per_100g: nutrition }).eq('id', id);
       }
@@ -316,7 +324,7 @@ export async function POST(req: NextRequest) {
 
     // Estimate nutrition in the background — does NOT block the save response.
     if (createdIngredients.length > 0) {
-      after(() => backfillNutrition(db, createdIngredients));
+      after(() => backfillNutrition(db, user.id, createdIngredients));
     }
 
     return NextResponse.json({ id: canonical.id, slug }, { status: 201 });

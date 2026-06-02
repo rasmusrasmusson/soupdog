@@ -24,14 +24,16 @@ type LogArgs = {
   outputTokens: number;
   success: boolean;
   error?: string | null;
+  db?: any; // optional pre-existing client (background/service contexts where a
+            // fresh server client wouldn't carry the session). If omitted, a
+            // server client is created.
 };
 
 // Fire-and-forget insert into ai_usage_log. Swallows its own errors so a
 // logging failure can never break the user-facing AI response.
 export async function logAiUsage(a: LogArgs): Promise<void> {
   try {
-    const supabase = await createClient();
-    const db = supabase as any;
+    const db = a.db ?? ((await createClient()) as any);
     await db.from('ai_usage_log').insert({
       account_id: a.accountId,
       person_id: a.personId ?? null,

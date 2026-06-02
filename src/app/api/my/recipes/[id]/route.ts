@@ -2,8 +2,9 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { calculateTotalSecondsForSave } from '@/lib/recipe-timing';
+import { logAiUsage } from '@/lib/ai/anthropic';
 
-async function estimateNutrition(name: string): Promise<any | null> {
+async function estimateNutrition(name: string, accountId: string | null, db: any): Promise<any | null> {
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -21,8 +22,13 @@ async function estimateNutrition(name: string): Promise<any | null> {
         }],
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      void logAiUsage({ accountId, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_estimate', inputTokens: 0, outputTokens: 0, success: false, error: `status ${res.status}` });
+      return null;
+    }
     const data = await res.json();
+    const u = data.usage ?? {};
+    void logAiUsage({ accountId, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_estimate', inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0, success: true });
     const text = data.content?.[0]?.text ?? '';
     const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
     return JSON.parse(clean);
@@ -32,10 +38,10 @@ async function estimateNutrition(name: string): Promise<any | null> {
 // Estimate nutrition for newly-created ingredients in the background, after the
 // response is sent. Never blocks the save. The admin backfill endpoint is the
 // safety net for anything left with null nutrition_per_100g.
-async function backfillNutrition(db: any, items: { id: string; name: string }[]) {
+async function backfillNutrition(db: any, accountId: string | null, items: { id: string; name: string }[]) {
   for (const { id, name } of items) {
     try {
-      const nutrition = await estimateNutrition(name);
+      const nutrition = await estimateNutrition(name, accountId, db);
       if (nutrition) {
         await db.from('ingredients').update({ nutrition_per_100g: nutrition }).eq('id', id);
       }
@@ -283,7 +289,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 
   // Estimate nutrition in the background — does NOT block the save response.
   if (createdIngredients.length > 0) {
-    after(() => backfillNutrition(db, createdIngredients));
+    after(() => backfillNutrition(db, user.id, createdIngredients));
   }
 
   return NextResponse.json({ id, slug: canonical.slug });
