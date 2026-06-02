@@ -22,8 +22,8 @@ const SERIF = "var(--font-serif, Georgia, serif)";
 const MONO = "var(--font-mono, monospace)";
 const B = '1px solid var(--border)';
 
-const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'];
-const SLOT_LABEL: Record<string, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' };
+const SLOT_ORDER = ['breakfast', 'lunch', 'dinner', 'snack', 'meal'];
+const SLOT_LABEL: Record<string, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack', meal: 'Meal' };
 
 const PALETTE: Record<string, string> = {
   olive: '#5a6b52', sage: '#7d8c6a', clay: '#a8634a', slate: '#5c6b72',
