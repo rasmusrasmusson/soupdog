@@ -192,7 +192,10 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
   const [addMenu, setAddMenu] = useState(false);
   const bySlot: Record<string, Meal | undefined> = {};
   for (const m of meals) bySlot[m.slot] = m;
-  const orderedSlots = SLOT_ORDER.filter(s => activeSlots.includes(s));
+  // Show a row for every active slot AND every slot that actually has a meal
+  // today (so a meal added to a non-active slot still appears).
+  const slotsWithMeals = meals.map(m => m.slot);
+  const orderedSlots = SLOT_ORDER.filter(s => activeSlots.includes(s) || slotsWithMeals.includes(s));
 
   return (
     <>
