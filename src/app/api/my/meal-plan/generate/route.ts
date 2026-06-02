@@ -172,7 +172,7 @@ export async function POST(req: NextRequest) {
     cuisine: r.cuisine,
     tags: r.tags,
     difficulty: r.difficulty,
-    ingredients: r.ingredientNames.slice(0, 12),
+    ingredients: r.ingredientNames.slice(0, 6),
   }));
 
   const system = `You are the meal planner for Soupdog. You SELECT and ARRANGE meals from an existing recipe catalogue — you NEVER invent dishes or use any recipe id not in the catalogue.
@@ -199,7 +199,7 @@ Respond with ONLY valid JSON, no markdown:
     feature: 'meal_plan',
     accountId: user.id,
     personId,
-    max_tokens: 2000,
+    max_tokens: 4000,
     system,
     messages: [{ role: 'user', content: userContent }],
   });
@@ -209,12 +209,29 @@ Respond with ONLY valid JSON, no markdown:
   }
 
   const raw = result.data.content?.[0]?.text ?? '';
-  const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-  let parsed: any;
-  try {
-    parsed = JSON.parse(clean);
-  } catch {
-    return NextResponse.json({ error: 'Could not parse planner response' }, { status: 500 });
+
+  // Robust parse: try the whole thing, then strip code fences, then extract the
+  // first {...} block. One formatting hiccup shouldn't sink the call.
+  function extractJson(text: string): any | null {
+    const candidates: string[] = [];
+    candidates.push(text.trim());
+    candidates.push(text.replace(/^```(?:json)?\n?/, '').replace(/\n?```\s*$/, '').trim());
+    const first = text.indexOf('{');
+    const last = text.lastIndexOf('}');
+    if (first !== -1 && last !== -1 && last > first) candidates.push(text.slice(first, last + 1));
+    for (const c of candidates) {
+      try { return JSON.parse(c); } catch { /* next */ }
+    }
+    return null;
+  }
+
+  const parsed = extractJson(raw);
+  if (!parsed) {
+    console.error('[meal-plan] unparseable planner response:', raw.slice(0, 400));
+    return NextResponse.json(
+      { error: 'Could not parse planner response', sample: raw.slice(0, 200) },
+      { status: 500 },
+    );
   }
 
   const assignments: any[] = Array.isArray(parsed.assignments) ? parsed.assignments : [];
