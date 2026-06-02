@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { timeForSlot } from '@/lib/meal-times';
 
 async function selfPersonId(db: any, accountId: string): Promise<string | null> {
   const { data } = await db
@@ -53,6 +54,13 @@ export async function POST(req: NextRequest) {
     .eq('id', recipeId).single();
   const ver = can && (Array.isArray(can.recipe_versions) ? can.recipe_versions[0] : can.recipe_versions);
 
+  // habitual time for this slot (null for snack/generic → sorts after last meal)
+  const { data: prefsRow } = await db
+    .from('person_meal_prefs')
+    .select('slot_times')
+    .eq('person_id', planPerson)
+    .maybeSingle();
+
   const { data: meal, error } = await db
     .from('meal')
     .insert({
@@ -63,6 +71,7 @@ export async function POST(req: NextRequest) {
       source: 'recipe',
       recipe_id: recipeId,
       dish_name: ver?.title ?? null,
+      scheduled_time: timeForSlot(slot, date, prefsRow?.slot_times),
     })
     .select('id').single();
   if (error || !meal) return NextResponse.json({ error: error?.message ?? 'Could not add meal' }, { status: 500 });

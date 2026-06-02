@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/auth-context';
 type Participant = { id: string; status: string; personId: string; name: string; avatarColor: string | null };
 type Meal = {
   id: string; date: string; slot: string; source: string;
+  scheduledTime: string | null;
   dishName: string; cuisine: string | null; totalTimeMinutes: number | null; servings: number | null;
   recipeId: string | null; recipeSlug: string | null; note: string | null; participants: Participant[];
 };
@@ -44,6 +45,15 @@ function prettyDate(iso: string): string {
   return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 function isToday(iso: string): boolean { return iso === ymd(new Date()); }
+// Sort meals by scheduled time (HH:MM lexical sort works), nulls (snack/generic)
+// last, slot order as final tiebreaker. This is the time model's ordering.
+function byTime(a: Meal, b: Meal): number {
+  const at = a.scheduledTime, bt = b.scheduledTime;
+  if (at && bt) { if (at !== bt) return at < bt ? -1 : 1; }
+  else if (at && !bt) return -1;
+  else if (!at && bt) return 1;
+  return SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot);
+}
 function metaLine(m: Meal): string {
   return [m.cuisine, m.totalTimeMinutes ? `${m.totalTimeMinutes} min` : null, m.servings ? `serves ${m.servings}` : null]
     .filter(Boolean).join(' · ');
@@ -144,7 +154,7 @@ export default function PlanPage() {
   const activeSlots = prefs.activeSlots ?? ['dinner'];
   const mealsByDate: Record<string, Meal[]> = {};
   for (const m of meals) (mealsByDate[m.date] ??= []).push(m);
-  const sortSlots = (a: Meal, b: Meal) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot);
+  const sortSlots = byTime;
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 32px 80px' }}>
@@ -199,13 +209,27 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
   onRemove: (mealId: string) => void;
 }) {
   const [addMenu, setAddMenu] = useState(false);
-  // Group meals by slot, keeping ALL meals in each slot (no collapsing) so the
-  // day view lists every meal and agrees with the week view.
+  // Group meals by slot, keeping ALL meals (no collapsing). Sort within a slot by
+  // time, and order the slot SECTIONS by their earliest scheduled time (so the
+  // day reads in time order — an 08:00 dinner precedes a 13:00 breakfast).
   const bySlot: Record<string, Meal[]> = {};
   for (const m of meals) (bySlot[m.slot] ??= []).push(m);
-  // Render a row-group for every active slot AND every slot that has a meal.
+  for (const s of Object.keys(bySlot)) bySlot[s].sort(byTime);
   const slotsWithMeals = Object.keys(bySlot);
-  const orderedSlots = SLOT_ORDER.filter(s => activeSlots.includes(s) || slotsWithMeals.includes(s));
+  // active slots with no meal still show (for the + Add affordance), placed by
+  // their default habitual time via a representative ordering key.
+  const allSlots = Array.from(new Set([...slotsWithMeals, ...activeSlots]));
+  function slotSortKey(slot: string): string {
+    const first = bySlot[slot]?.[0]?.scheduledTime;
+    if (first) return first;
+    // empty active slot: order by default slot time so it lands sensibly
+    return ({ breakfast: '07:30', lunch: '12:30', dinner: '19:00', snack: '23:58', meal: '23:59' } as Record<string, string>)[slot] ?? '23:59';
+  }
+  const orderedSlots = allSlots.sort((a, b) => {
+    const ka = slotSortKey(a), kb = slotSortKey(b);
+    if (ka !== kb) return ka < kb ? -1 : 1;
+    return SLOT_ORDER.indexOf(a) - SLOT_ORDER.indexOf(b);
+  });
 
   return (
     <>
@@ -278,7 +302,7 @@ function WeekView({ meals, onSwap, onRemove }: { meals: Meal[]; onSwap: (m: Meal
             {isToday(date) ? 'Today' : prettyDate(date)}
           </div>
           <div style={{ borderTop: B }}>
-            {byDate[date].sort((a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot)).map(m => (
+            {byDate[date].sort(byTime).map(m => (
               <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 2px', borderBottom: B }}>
                 <div>
                   <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#b3b0a8', marginRight: 10 }}>{SLOT_LABEL[m.slot]}</span>

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   const { data: meals, error } = await db
     .from('meal')
     .select(`
-      id, meal_date, slot, source, dish_name, note, recipe_id,
+      id, meal_date, slot, source, dish_name, note, recipe_id, scheduled_time,
       recipe_canonicals!recipe_id ( id, slug,
         recipe_versions!current_version_id ( title, cuisine, total_time_seconds, base_servings )
       ),
@@ -68,6 +68,7 @@ export async function GET(req: NextRequest) {
       id: m.id,
       date: m.meal_date,
       slot: m.slot,
+      scheduledTime: m.scheduled_time ?? null,
       source: m.source,
       dishName: ver?.title || m.dish_name || 'Meal',
       cuisine: ver?.cuisine ?? null,

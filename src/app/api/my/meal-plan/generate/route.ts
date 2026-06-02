@@ -15,6 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
+import { timeForSlot } from '@/lib/meal-times';
 
 type RecipeLite = {
   id: string;
@@ -70,7 +71,7 @@ export async function POST(req: NextRequest) {
   // ── Prefs (activation + slots + horizon) ──
   let { data: prefs } = await db
     .from('person_meal_prefs')
-    .select('plan_active, active_slots, horizon_days')
+    .select('plan_active, active_slots, horizon_days, slot_times')
     .eq('person_id', personId)
     .single();
 
@@ -257,6 +258,7 @@ Respond with ONLY valid JSON, no markdown:
         source: 'recipe',
         recipe_id: a.recipeId,
         dish_name: recipeTitleById.get(a.recipeId) ?? null,
+        scheduled_time: timeForSlot(a.slot, a.date, prefs.slot_times),
       })
       .select('id')
       .single();

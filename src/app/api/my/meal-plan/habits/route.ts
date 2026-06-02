@@ -41,11 +41,20 @@ export async function GET() {
     .eq('person_id', personId)
     .single();
 
-  // merge stored over defaults so the UI always has a value to show
-  const stored = (data?.slot_times ?? {}) as Record<string, string>;
-  const slotTimes = { ...DEFAULTS, ...stored };
+  const raw = (data?.slot_times ?? {}) as Record<string, any>;
+  // surface the everyday ("default") times, tolerating legacy flat shape
+  const hasNested = raw.default || raw.overrides || raw.rest_days;
+  const def = hasNested ? raw.default ?? {} : raw;
+  const slotTimes = { ...DEFAULTS, ...def };
+  const isDefault = Object.keys(def ?? {}).length === 0;
 
-  return NextResponse.json({ personId, slotTimes, isDefault: !data?.slot_times || Object.keys(stored).length === 0 });
+  return NextResponse.json({
+    personId,
+    slotTimes,                 // everyday times (for editing UI later)
+    restDays: raw.rest_days ?? [],
+    overrides: raw.overrides ?? {},
+    isDefault,
+  });
 }
 
 export async function PUT(req: NextRequest) {
@@ -58,22 +67,41 @@ export async function PUT(req: NextRequest) {
   if (!personId) return NextResponse.json({ error: 'No self person' }, { status: 400 });
 
   const body = await req.json().catch(() => ({}));
-  const incoming = (body.slotTimes ?? {}) as Record<string, unknown>;
 
-  // keep only valid named-slot times
-  const clean: Record<string, string> = {};
-  for (const slot of NAMED) {
-    if (validTime(incoming[slot])) clean[slot] = incoming[slot] as string;
+  // Accept either the nested override-capable shape:
+  //   { default:{...}, rest_days:[...], overrides:{...} }
+  // or the legacy flat shape { slotTimes: { breakfast, lunch, dinner } }.
+  const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  function cleanTimes(obj: unknown): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (obj && typeof obj === 'object') {
+      for (const slot of NAMED) {
+        const v = (obj as Record<string, unknown>)[slot];
+        if (validTime(v)) out[slot] = v as string;
+      }
+    }
+    return out;
   }
 
-  // ensure a prefs row exists; upsert slot_times (don't disturb other fields)
+  let stored: Record<string, unknown>;
+  if (body.default || body.overrides || body.rest_days) {
+    stored = {
+      default: cleanTimes(body.default),
+      rest_days: Array.isArray(body.rest_days) ? body.rest_days.filter((d: unknown) => typeof d === 'string' && DOW.includes(d)) : [],
+      overrides: cleanTimes(body.overrides),
+    };
+  } else {
+    // legacy flat: store as { default: {...} } going forward
+    stored = { default: cleanTimes(body.slotTimes) };
+  }
+
   const { error } = await db
     .from('person_meal_prefs')
     .upsert(
-      { person_id: personId, slot_times: clean, updated_at: new Date().toISOString() },
+      { person_id: personId, slot_times: stored, updated_at: new Date().toISOString() },
       { onConflict: 'person_id' },
     );
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ personId, slotTimes: { ...DEFAULTS, ...clean } });
+  return NextResponse.json({ personId, slotTimes: stored });
 }
