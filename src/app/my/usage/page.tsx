@@ -101,7 +101,9 @@ export default function UsagePage() {
           <div style={{ width: `${usage.percentUsed}%`, height: '100%', background: 'var(--accent)', borderRadius: 999, transition: 'width 0.4s ease' }} />
         </div>
         <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-          You&rsquo;ve used {level} of this month&rsquo;s allowance.
+          {level === 'none'
+            ? 'You haven\u2019t used any of this month\u2019s allowance yet.'
+            : `You\u2019ve used ${level} of this month\u2019s allowance.`}
         </p>
       </div>
 
