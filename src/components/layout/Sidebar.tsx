@@ -6,7 +6,8 @@ import { cn } from '@/lib/utils';
 import { useLocale } from '@/lib/locale-context';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
 import {
-  BookMarked, Info, HelpCircle, ChevronLeft, ChevronRight
+  BookMarked, Info, HelpCircle, ChevronLeft, ChevronRight,
+  CalendarDays, Users, Gauge, Tag
 } from 'lucide-react';
 
 const publicNav = [
@@ -15,6 +16,18 @@ const publicNav = [
   { key: 'techniques',  href: '/techniques',  icon: 'techniques'  as const },
   { key: 'tools',       href: '/equipment',   icon: 'tools'       as const },
 ];
+
+// Resolve a nav label: use the i18n string if present, otherwise fall back to a
+// hardcoded English label. (t() returns the key path itself when a key is
+// missing, so we detect that and use the fallback. Add the keys to
+// messages/{locale}.json later and these upgrade automatically.)
+function useLabel() {
+  const { t } = useLocale();
+  return (key: string, fallback: string) => {
+    const v = t(`nav.${key}`);
+    return v === `nav.${key}` ? fallback : v;
+  };
+}
 
 function NavItem({ navKey, href, icon, collapsed }: {
   navKey: string;
@@ -47,13 +60,13 @@ function NavItem({ navKey, href, icon, collapsed }: {
   );
 }
 
-function LucideNavItem({ navKey, href, icon: Icon, collapsed }: {
-  navKey: string; href: string; icon: React.ElementType; collapsed: boolean;
+// Like LucideNavItem but takes an explicit label (for items that may not have an
+// i18n key yet). Falls back gracefully.
+function LucideNavItem({ label, href, icon: Icon, collapsed }: {
+  label: string; href: string; icon: React.ElementType; collapsed: boolean;
 }) {
   const pathname = usePathname();
-  const { t } = useLocale();
   const active = pathname === href || pathname.startsWith(href + '/');
-  const label = t(`nav.${navKey}`);
 
   return (
     <Link href={href} title={collapsed ? label : undefined}
@@ -70,12 +83,14 @@ function LucideNavItem({ navKey, href, icon: Icon, collapsed }: {
   );
 }
 
-function SectionLabel({ navKey, collapsed }: { navKey: string; collapsed: boolean }) {
+function SectionLabel({ navKey, fallback, collapsed }: { navKey: string; fallback: string; collapsed: boolean }) {
   const { t } = useLocale();
   if (collapsed) return <div className="my-1.5 mx-2 border-t border-[var(--border)]" />;
+  const v = t(`nav.${navKey}`);
+  const label = v === `nav.${navKey}` ? fallback : v;
   return (
     <div className="px-3 pt-4 pb-1 text-[9px] font-mono uppercase tracking-[0.2em] text-[var(--muted)] select-none">
-      {t(`nav.${navKey}`)}
+      {label}
     </div>
   );
 }
@@ -83,6 +98,7 @@ function SectionLabel({ navKey, collapsed }: { navKey: string; collapsed: boolea
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const { t } = useLocale();
+  const label = useLabel();
 
   return (
     <aside className={cn(
@@ -114,12 +130,19 @@ export function Sidebar() {
         {publicNav.map(item => (
           <NavItem key={item.href} navKey={item.key} href={item.href} icon={item.icon} collapsed={collapsed} />
         ))}
-        <SectionLabel navKey="myKitchen" collapsed={collapsed} />
-        <LucideNavItem navKey="myRecipes" href="/my/recipes" icon={BookMarked} collapsed={collapsed} />
-        <LucideNavItem navKey="myIngredients" href="/my/ingredients" icon={BookMarked} collapsed={collapsed} />
-        <SectionLabel navKey="about" collapsed={collapsed} />
-        <LucideNavItem navKey="aboutSoupdog" href="/about" icon={Info} collapsed={collapsed} />
-        <LucideNavItem navKey="help" href="/help" icon={HelpCircle} collapsed={collapsed} />
+
+        <SectionLabel navKey="myKitchen" fallback="My Kitchen" collapsed={collapsed} />
+        {/* Plan — the personal-chef menu; most important logged-in destination */}
+        <LucideNavItem label={label('plan', 'Plan')} href="/plan" icon={CalendarDays} collapsed={collapsed} />
+        <LucideNavItem label={label('myRecipes', 'My Recipes')} href="/my/recipes" icon={BookMarked} collapsed={collapsed} />
+        <LucideNavItem label={label('myIngredients', 'Ingredients')} href="/my/ingredients" icon={BookMarked} collapsed={collapsed} />
+        <LucideNavItem label={label('people', 'People')} href="/my/people" icon={Users} collapsed={collapsed} />
+        <LucideNavItem label={label('usage', 'Usage')} href="/my/usage" icon={Gauge} collapsed={collapsed} />
+
+        <SectionLabel navKey="about" fallback="About" collapsed={collapsed} />
+        <LucideNavItem label={label('pricing', 'Pricing')} href="/pricing" icon={Tag} collapsed={collapsed} />
+        <LucideNavItem label={label('aboutSoupdog', 'About Soupdog')} href="/about" icon={Info} collapsed={collapsed} />
+        <LucideNavItem label={label('help', 'Help')} href="/help" icon={HelpCircle} collapsed={collapsed} />
       </nav>
 
       {!collapsed && (
