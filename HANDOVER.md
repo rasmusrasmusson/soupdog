@@ -451,3 +451,88 @@ Pricing page, contextual upgrade prompt (appears at the moment of value, e.g. ta
 - **Nav links the user must add manually** (stale Sidebar snapshots, not shipped): `/my/people`, `/my/usage`, and a "Pricing" link.
 - **Backlog carried over:** backfill route JSON-parse fragility (one bad/gibberish item sinks the whole batch — harden to parse per-item & skip failures); case-sensitive ingredient find-or-create dupe regeneration (now uses `ilike` in recipe routes — partially addressed); chef-vocabulary role review; "Ice cube" reclassify; red-meat food_family_members empty; muted self-avatar in header; add avatar+picker to /my/profile.
 - **Test cleanup:** if not already done, delete the 5 nonsense test ingredients (purple moon carrot, blarffle root, snorgle leaf, quibbling broth, zindle spice) + the "Xyzzy Test Stew" recipe, so they stop tripping the backfill batch. Delete version_ingredients refs first (FK), then ingredients.
+
+
+# SESSION UPDATE — 2026-06-02 (Meal Planning BUILT end-to-end; Time model; Home flipped to the plan; Plan Architecture design)
+
+## MEAL PLANNING — NOW BUILT, LIVE & ON THE HOME (was the #1 highest-leverage gap)
+The headline paid feature now exists, works end-to-end, and is the logged-in home page. Built on the person/person_access spine — meal planning is "the person model applied to food."
+
+### Core model decisions (LOCKED)
+- **Plan is PER-PERSON**, not per-household. Each person has their own plan (their intention of what to eat).
+- **A meal/event is a SHARED object** referenced by many plans. **Participation is a per-person link with `status`** (accepted/proposed/invited/declined) + who-placed-it/when.
+- **Access drives participation status** via the existing `person_access` spine: owner/delegated → meal `accepted`; suggest → `proposed`; none → `invited` (guest). v1 ONLY exercises the **owner-placed → accepted** path (you plan for yourself + people you own). Proposals/delegation/guests are schema-ready, NOT built.
+- **Actuals** (what was really eaten) is a separate per-person timeline — NOT built yet, but the design separates intention (plan) from reality (actuals).
+- **Co-owner removal governance** (e.g. both parents own a child): DEFERRED. Lean = you can remove yourself, removing another owner needs consent. `person_access` already records granted_by/granted_at/revoked_at to support whatever's built later.
+
+### Schema (mealplan_01_schema.sql + later migrations, all LIVE)
+- **meal** — the shared event: id (gen_random_uuid), created_by, owner_person_id→person, meal_date, slot (enum), source (enum), recipe_id→recipe_canonicals, dish_name, note, **scheduled_time (time)**, timestamps.
+- **meal_participant** — meal_id, person_id, status (participation_status enum), placed_by, placed_at; unique(meal_id,person_id).
+- **person_meal_prefs** — person_id PK, plan_active, active_slots (meal_slot[]), horizon_days (default 5), activated_at, **slot_times (jsonb)** for habitual meal times.
+- **media** — recipe_id XOR step_id, type/role/url. Future-proof (dish-page images later); EMPTY in v1.
+- Enums: `meal_slot` (breakfast/lunch/dinner/snack/**meal**), `participation_status`, `meal_source`, `media_type`, `media_role`.
+- RLS: ALL public-scoped using `accessible_person_ids(auth.uid())`/`owned_person_ids(auth.uid())` — both confirmed **SETOF uuid**, so policies use `X in (select fn(auth.uid()))` (matches existing People policies). gen_random_uuid defaults; re-grant after adding columns.
+
+### API routes (all under src/app/api/my/meal-plan/)
+- `route.ts` — **GET** the plan (meals + participants + recipe title/cuisine/time/servings + scheduledTime) for ?from&to. **THIS IS THE READ ROUTE — has GET only.**
+- `prefs/route.ts` — GET/PUT activation (plan_active, active_slots, horizon).
+- `generate/route.ts` — POST: fills empty (date,slot) cells in the horizon by SELECTING & ARRANGING existing recipes (variety, avoids household allergens, slot-appropriate), stamps scheduled_time from habits, owner-placed accepted participation. Logs feature `meal_plan`. Robust JSON parse (raw→fence-stripped→first {...}); max_tokens 4000.
+- `meal/route.ts` — POST add / PATCH swap / DELETE remove a meal. Stamps scheduled_time on add. **Has POST/PATCH/DELETE, NO GET.**
+- `participant/route.ts` — POST/DELETE add/remove a person you OWN on a meal.
+- `options/route.ts` — GET recipe list for the swap/add picker (?q filter).
+- `household/route.ts` — GET people you own (for the avatar "+" picker).
+- `habits/route.ts` — GET/PUT habitual meal times (slot_times). Override-capable shape (see Time model).
+- ⚠️ **FILE-PLACEMENT HAZARD:** these are many `route.ts` files differing only by folder. Mis-placing the meal-mutation route OVER the read route caused a 405 (GET missing) once. ALWAYS verify each route file's first-line path comment matches its folder.
+
+### UI — the menu (src/components/plan/PlanView.tsx)
+- **PlanView** is the shared menu component (extracted from the old /plan page). Rendered by BOTH `/plan` (thin wrapper `src/app/plan/page.tsx`) AND the logged-in home.
+- Three states: **no-plan** (activation card → pick meals → optional "Adjust meal times" fine-tune → Start) / **active day view** (today's meals, serif dish-name link, cuisine·time·serves, participant avatars, Swap/Remove) / **active week view** (rolling horizon, compact, dish-name links + swap icon + × remove).
+- **Avatars = the who's-eating control:** tap an avatar → popover (name + "Remove from this meal"); dashed "+" → add a household member you own. NOT tap-to-instantly-remove.
+- **"+ Add a meal"** always available → pick slot (incl. generic "Meal") → recipe picker.
+- Both day & week views **sort by scheduled_time** (byTime comparator): timed meals in time order, snack/generic (no habitual time) last, slot order as tiebreaker. Day-view slot SECTIONS also order by time.
+- Activation fine-tune: optional, collapsed by default (fast path = defaults 07:30/12:30/19:00); only offers time inputs for the named meals the user selected; saves via habits API before first generate.
+
+### TIME MODEL (LOCKED + LIVE) — "help people cook on time"
+- Each meal has `scheduled_time`; **time drives ordering**, not slot or an order-number.
+- Times **derived from habits**, NOT shown in the menu and NOT asked at activation by default (fast path). Defaults 07:30/12:30/19:00.
+- `src/lib/meal-times.ts` — `timeForSlot(slot, isoDate, slotTimes)` resolver. Named slots get a time; **snack/generic 'meal' get null → sort after the last meal**.
+- **slot_times shape is OVERRIDE-CAPABLE (built, only `default` populated):**
+  `{ default:{breakfast,lunch,dinner}, rest_days:[...], overrides:{...} }`. Rest-day variation is honoured by the resolver but NO UI sets it. **rest_days is USER-DEFINED — never hard-code Sat/Sun** (Friday-Sabbath, 6-day weeks, shift work, etc.).
+- **Labels are DESCRIPTIVE not prescriptive:** a lunch at 06:00 sorts before a 09:00 breakfast — allowed (timezone travel/shift work). VERIFIED live (Spaghetti Carbonara lunch @06:00 rendered above breakfast).
+- **Times are FROZEN at meal creation.** Editing habits later only affects NEW meals, not existing ones. (Open question for Profile habits editing: should editing a habit re-time existing planned meals? Currently no.)
+- Generic "Meal" slot: for multi-meal-a-day eaters (bodybuilder 6×/day). Available on manual add; generator NEVER defaults to it. Sorts by its time (default 15:00 if none).
+
+### HOME FLIPPED TO THE PLAN (Piece B) — src/components/home/LoggedInHome.tsx
+- Logged-in home now = search box (plain, kept) → **PlanView (the meal plan IS the home)** → **"Improve your plan"** section (4 benefit-led cards, NO % meter): Set your tastes→/my/profile, Add health details→/my/profile, Add your household→/my/people, Set your meal times→/plan.
+- REMOVED the old "Featured recipes" table and the dead "Meal Planner — Phase 3" placeholder (it pointed at non-existent /my/planner).
+- HomeClient.tsx already split LoggedInHome/LoggedOutHome by auth — LoggedOutHome UNTOUCHED.
+- NOTE: health & taste are SECTIONS inside the sectioned `/my/profile`, NOT standalone pages (`/my/health`,`/my/taste` do NOT exist) — cards link to /my/profile.
+
+### NAV LINKS ADDED (finally) — src/components/layout/Sidebar.tsx + MobileNav.tsx
+- Sidebar "My Kitchen": **Plan** (top, CalendarDays icon) · My Recipes · Ingredients · **People** (/my/people) · **Usage** (/my/usage). "About": **Pricing** (/pricing) · About · Help.
+- MobileNav: replaced the "Favorites" tab with **Plan** (still 5 tabs).
+- Labels use `t('nav.X')` WITH English fallback (t() returns the key path when missing; we detect that and show the English word). **TODO: add nav keys to messages/{locale}.json** (en/sv/zh/ar): plan, people, usage, pricing. Until then labels are English-only.
+
+## USAGE TRACKING — meal_plan now logged
+`meal_plan` added to `AiFeature` in `src/lib/ai/anthropic.ts`. Generation logs it. **Cost-measurement loop still OPEN:** real `meal_plan` rows now exist in ai_usage_log — analysing them (the biggest unknown in the pricing math) is a pending non-build task.
+
+## NEW DESIGN DOC (this session)
+`Soupdog_Plan_Architecture_Groups_And_Schedule_Types_v0.1.docx` — how the consumer plan generalises to commercial (canteen/airline/restaurant/room-service/fast-food/nutritionist/elderly-care). Key concepts: **Offering vs Plan** two layers; recombinable **axes** (who/grouping/when/what/how-much); **Group** generalises the unit-of-planning (household = one group type; table/flight/route/client are others); **Schedule type** generalises "when" (calendar/service/sitting-course/journey/on-demand — the time model is the *calendar* type). DISCIPLINE: don't build the abstraction yet; name seams so it isn't precluded (plan belongs to a person OR eventually a group; meal is a set of *components*).
+
+## OPEN THREADS / NEXT (updated — supersedes earlier "meal planning doesn't exist")
+- **#3 Meals = composed DISHES + DRINKS (+ a MEAL EDITOR).** SHARPEST next feature: today it's a *dish* planner (one recipe per meal). Evolve `meal` to hold multiple **components** (main/side/drink; each optionally a recipe; type field). Build a **meal editor** (user-composes, like the dish editor) — AI assists, not the only path. Design the "components" shape generally so it serves commercial later. Drinks ride on this (a drink = a component, type=drink, recipe optional).
+- **#2 Plan-switcher (manage others' plans).** Mostly UI on the existing spine: pick whose plan you're viewing/editing (kids, the dog, eventually nutritionist clients); pin favourites to home. Consumer-scale stepping stone to Groups. Lower effort.
+- **Conversational/"smarter" search box (PARKED, well-specified).** The central home search box becomes a box you can TALK to: free = plain search, paying members = conversational ("a quick veg dinner for tonight"), NEVER labelled "AI" (outcome-framed), COST-GATED (needs the quota gate — chat invites many calls), and it doubles as an entry point to the planner (propose a dish → add to plan). Its own slice; ideally after enforcement gate.
+- **Drag-to-reorder** meals (rewrites scheduled_time; dinner-before-breakfast allowed). UNBLOCKED now that meals have times. Needs DnD (touch-friendly for kitchen/tablet). Own slice.
+- **Profile habits editing** — change habitual times AFTER activation (the "home" of that data; activation only sets it once). Decide: should editing re-time existing meals?
+- **Rest-day overrides UI** — data model ready (slot_times.rest_days/overrides); no UI. User-defined rest days, never hard-coded.
+- **#5 Groups / B2B** — see the new design doc. Build when a real B2B need is concrete; validate consumer first.
+- **Cost measurement** — analyse real `meal_plan` usage in ai_usage_log; replace placeholder credit costs before charging.
+- **i18n nav keys** — add plan/people/usage/pricing to messages/{locale}.json (currently English fallback only).
+- **Enforcement + Stripe** — unchanged; launch-time billing work.
+- **Test-data hygiene:** test meals accumulated on "today" during debugging; `cleanup_test_meals.sql` pattern (keep one per slot, or delete today's & regenerate) clears them.
+
+## KEY LESSONS REINFORCED THIS SESSION
+- **Verify the foundation before building on it** caught: the read-route 405 (file misplacement), the "added meal invisible" bug (day view only rendered active slots — fixed to union of active + present slots), the generate 500 (truncated JSON — raised tokens + robust parse).
+- **Flat-file `--`-to-folder delivery keeps biting on multi-`route.ts` drops.** Standard check: every delivered route/page file's FIRST-LINE path comment must match the folder it's placed in. Big-vs-tiny file swap (PlanView 28KB vs plan/page.tsx 6 lines) is an easy tell.
+- **SETOF uuid helpers** → policies use `X in (select fn(auth.uid()))`. Confirmed via probe before writing meal RLS — no 42501 this time.
