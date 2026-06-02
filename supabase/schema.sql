@@ -792,3 +792,182 @@ create trigger appliance_updated_at       before update on appliance_profiles fo
 create trigger products_updated_at        before update on products           for each row execute procedure update_updated_at();
 create trigger inventory_updated_at       before update on inventory_items    for each row execute procedure update_updated_at();
 create trigger flavor_updated_at          before update on flavor_preferences for each row execute procedure update_updated_at();
+
+
+-- ═══════════════════════════════════════════════════════════════
+--  PEOPLE & GROUPS  (added 2026-06-02 — reconciled from live DB)
+--  person / person_access / health_profile / cooking_competency.
+--  person ≠ account. Built Phases 0–2 + household + avatars.
+--
+--  RLS LESSONS (hard-won — see HANDOVER 2026-06-02):
+--   * Policies scoped to `public` (auth.uid() conditions enforce), NOT
+--     `to authenticated` — the authenticated role does not resolve in
+--     policies on this DB.
+--   * SELECT policies depending on a separate grant table carry a BOOTSTRAP
+--     clause `OR NOT EXISTS (... person_access ...)` so INSERT...RETURNING
+--     works for a brand-new (not-yet-granted) row (else misleading 42501).
+--   * These tables have column-level grants: re-run `grant all on <t> to
+--     authenticated` after ANY add-column. id default uuid_generate_v4()
+--     needs EXECUTE for authenticated. Prefer gen_random_uuid() on NEW tables.
+-- ═══════════════════════════════════════════════════════════════
+
+-- ---- enums -----------------------------------------------------------------
+create type access_level as enum ('owner','read_write','read_only','scoped');
+create type role as enum
+  ('self','parent','caregiver','nurse','trainer','friend','restaurant','delivery');
+
+-- ---- person ----------------------------------------------------------------
+create table person (
+  id                uuid primary key default uuid_generate_v4(),
+  display_name      text,
+  full_name         text,
+  date_of_birth     date,
+  country           text,
+  avatar_color      text,                       -- palette KEY (e.g. 'olive'), not hex; null = deterministic from id
+  residency_region  text not null default 'global',
+  is_managed        boolean not null default false,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+alter table person enable row level security;
+
+-- ---- person_access (the grant: who may do what to whom) --------------------
+create table person_access (
+  id            uuid primary key default uuid_generate_v4(),
+  account_id    uuid not null,                  -- auth.users id
+  person_id     uuid not null references person(id) on delete cascade,
+  access_level  access_level not null,
+  role          role not null,
+  scope         jsonb,                           -- null = full scope
+  consent_basis text,
+  granted_by    uuid,
+  granted_at    timestamptz not null default now(),
+  revoked_at    timestamptz
+);
+alter table person_access enable row level security;
+
+-- ---- health_profile (residency-scoped personal data) -----------------------
+create table health_profile (
+  person_id          uuid primary key references person(id) on delete cascade,
+  height_cm          numeric,
+  weight_kg          numeric,
+  sex_at_birth       text,
+  activity_level     text,
+  allergies          text[] not null default '{}',
+  medical_conditions text[] not null default '{}',
+  notes              text,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+alter table health_profile enable row level security;
+
+-- ---- cooking_competency (per-person skill, area + level 0-3) ---------------
+create table cooking_competency (
+  id         uuid primary key default uuid_generate_v4(),
+  person_id  uuid not null references person(id) on delete cascade,
+  area       text not null,
+  level      smallint not null default 0,
+  updated_at timestamptz not null default now(),
+  unique (person_id, area)
+);
+alter table cooking_competency enable row level security;
+
+-- ---- SECURITY DEFINER helpers (avoid RLS recursion) ------------------------
+-- (bodies reconstructed to match build; signatures confirmed live. For byte-exact
+--  use: select pg_get_functiondef('accessible_person_ids(uuid)'::regprocedure);)
+create or replace function accessible_person_ids(acc uuid)
+returns setof uuid language sql stable security definer as $$
+  select person_id from person_access where account_id = acc and revoked_at is null
+$$;
+
+create or replace function owned_person_ids(acc uuid)
+returns setof uuid language sql stable security definer as $$
+  select person_id from person_access
+  where account_id = acc and revoked_at is null and access_level = 'owner'
+$$;
+-- provision_self_person(acc uuid) — security definer; called by handle_new_user
+-- trigger on auth.users to auto-create a self-person + owner grant on signup.
+
+-- ---- grants (required IN ADDITION to RLS; re-run after add-column) ----------
+grant usage on schema public to authenticated, anon;
+grant all on person             to authenticated;
+grant all on person_access      to authenticated;
+grant all on health_profile     to authenticated;
+grant all on cooking_competency to authenticated;
+grant select on person to anon;
+grant execute on function accessible_person_ids(uuid) to authenticated, anon;
+grant execute on function owned_person_ids(uuid)      to authenticated, anon;
+grant execute on function provision_self_person(uuid) to authenticated, anon;
+grant execute on function uuid_generate_v4()          to authenticated, anon;
+
+-- ---- RLS policies (all public-scoped) --------------------------------------
+-- person
+create policy person_select on person for select using (
+  id in (select accessible_person_ids(auth.uid()))
+  or not exists (select 1 from person_access where person_id = person.id)  -- BOOTSTRAP
+);
+create policy person_insert on person for insert with check (true);
+create policy person_update on person for update using (
+  id in (select owned_person_ids(auth.uid()))
+);
+create policy person_delete on person for delete using (
+  id in (select owned_person_ids(auth.uid()))
+);
+
+-- person_access
+create policy pa_select on person_access for select using (
+  account_id = auth.uid() or person_id in (select owned_person_ids(auth.uid()))
+);
+create policy pa_insert on person_access for insert with check (
+  account_id = auth.uid() or person_id in (select owned_person_ids(auth.uid()))
+);
+create policy pa_update on person_access for update using (
+  granted_by = auth.uid() or person_id in (select owned_person_ids(auth.uid()))
+);
+create policy pa_delete on person_access for delete using (
+  account_id = auth.uid() or person_id in (select owned_person_ids(auth.uid()))
+);
+
+-- health_profile
+create policy hp_select on health_profile for select using (
+  person_id in (select accessible_person_ids(auth.uid()))
+);
+create policy hp_write on health_profile for all
+  using (person_id in (
+    select person_id from person_access
+    where account_id = auth.uid() and revoked_at is null
+      and access_level in ('owner','read_write')))
+  with check (
+    person_id in (
+      select person_id from person_access
+      where account_id = auth.uid() and revoked_at is null
+        and access_level in ('owner','read_write'))
+    or not exists (select 1 from person_access where person_id = health_profile.person_id)  -- BOOTSTRAP
+  );
+create policy hp_delete on health_profile for delete using (
+  person_id in (select owned_person_ids(auth.uid()))
+);
+
+-- cooking_competency
+create policy cc_select on cooking_competency for select using (
+  person_id in (select accessible_person_ids(auth.uid()))
+);
+create policy cc_write on cooking_competency for all
+  using (person_id in (
+    select person_id from person_access
+    where account_id = auth.uid() and revoked_at is null
+      and access_level in ('owner','read_write')))
+  with check (person_id in (
+    select person_id from person_access
+    where account_id = auth.uid() and revoked_at is null
+      and access_level in ('owner','read_write')));
+
+-- ---- updated_at triggers ---------------------------------------------------
+create trigger person_updated_at             before update on person             for each row execute procedure update_updated_at();
+create trigger health_profile_updated_at     before update on health_profile     for each row execute procedure update_updated_at();
+create trigger cooking_competency_updated_at before update on cooking_competency for each row execute procedure update_updated_at();
+-- (person_access has no updated_at; uses granted_at/revoked_at.)
+
+-- ═══════════════════════════════════════════════════════════════
+--  END People & Groups
+-- ═══════════════════════════════════════════════════════════════
