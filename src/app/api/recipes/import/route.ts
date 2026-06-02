@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { aiMessage } from '@/lib/ai/anthropic';
 
 const SYSTEM_PROMPT = `You are a recipe parsing system for Soupdog, a structured food execution platform.
 
@@ -95,31 +96,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'text or file required' }, { status: 400 });
   }
 
-  // Build the message content — text or file
   let userContent: any;
 
   if (file && mediaType) {
     const isPdf   = mediaType === 'application/pdf';
     const isImage = mediaType.startsWith('image/');
-
     if (!isPdf && !isImage) {
       return NextResponse.json({ error: 'Unsupported file type. Use PDF or image.' }, { status: 400 });
     }
-
     if (isPdf) {
       userContent = [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: file },
-        },
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file } },
         { type: 'text', text: 'Parse the recipe from this document.' },
       ];
     } else {
       userContent = [
-        {
-          type:   'image',
-          source: { type: 'base64', media_type: mediaType, data: file },
-        },
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: file } },
         { type: 'text', text: 'Parse the recipe from this image.' },
       ];
     }
@@ -131,28 +123,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 6000,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: userContent }],
-      }),
+    const result = await aiMessage({
+      model:      'claude-sonnet-4-6',
+      feature:    'import_parse',
+      accountId:  user.id,
+      max_tokens: 6000,
+      system:     SYSTEM_PROMPT,
+      messages:   [{ role: 'user', content: userContent }],
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('[import] Anthropic error:', err);
+    if (!result.ok) {
+      console.error('[import] Anthropic error:', result.errorText);
       return NextResponse.json({ error: 'AI parsing failed' }, { status: 502 });
     }
 
-    const data  = await res.json();
+    const data  = result.data;
     const raw   = data.content?.[0]?.text ?? '';
     const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
 

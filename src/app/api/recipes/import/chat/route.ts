@@ -4,6 +4,7 @@
 
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { aiStreamStart, makeUsageCollector } from '@/lib/ai/anthropic';
 
 const HAIKU_MODEL  = 'claude-haiku-4-5-20251001';
 const SONNET_MODEL = 'claude-sonnet-4-6';
@@ -112,27 +113,27 @@ export async function POST(req: NextRequest) {
   messages.push({ role: 'user', content: userContent });
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type':      'application/json',
-        'x-api-key':         process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: useHaiku ? 2000 : 8000,
-        system:     SYSTEM_PROMPT,
-        messages,
-        stream:     true,
-      }),
+    const started = await aiStreamStart({
+      model,
+      feature:    useHaiku ? 'chat_question' : 'chat_modify',
+      accountId:  user.id,
+      max_tokens: useHaiku ? 2000 : 8000,
+      system:     SYSTEM_PROMPT,
+      messages,
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error('[chat] Anthropic error:', err);
+    if (!started.ok || !started.res) {
+      console.error('[chat] Anthropic error:', started.errorText);
       return new Response(JSON.stringify({ error: 'Request failed' }), { status: 502 });
     }
+    const res = started.res;
+
+    // Collects token usage from message_start / message_delta events and logs once.
+    const usage = makeUsageCollector({
+      model,
+      feature: useHaiku ? 'chat_question' : 'chat_modify',
+      accountId: user.id,
+    });
 
     // Stream the response back, collecting the full text as we go
     // We send a special header so the client knows to expect streaming
@@ -159,6 +160,7 @@ export async function POST(req: NextRequest) {
 
               try {
                 const event = JSON.parse(data);
+                usage.observe(event);
                 if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
                   const text = event.delta.text;
                   fullText += text;
@@ -212,8 +214,10 @@ export async function POST(req: NextRequest) {
             }
           }
         } catch (err) {
+          usage.finish(false, 'stream error');
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', error: 'Stream error' })}\n\n`));
         } finally {
+          usage.finish(true);
           controller.close();
         }
       }
