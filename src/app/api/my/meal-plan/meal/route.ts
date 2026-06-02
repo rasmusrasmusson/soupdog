@@ -28,7 +28,7 @@ async function ownedIds(db: any, accountId: string): Promise<string[]> {
     : [];
 }
 
-const VALID_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack'];
+const VALID_SLOTS = ['breakfast', 'lunch', 'dinner', 'snack', 'meal'];
 
 // ── POST: add a meal ──
 export async function POST(req: NextRequest) {
