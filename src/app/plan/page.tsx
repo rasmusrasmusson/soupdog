@@ -111,6 +111,13 @@ export default function PlanPage() {
     });
     setModal(null); await reloadMeals();
   }
+  async function doRemove(mealId: string) {
+    await fetch('/api/my/meal-plan/meal', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mealId }),
+    });
+    await reloadMeals();
+  }
   async function addParticipant(mealId: string, personId: string) {
     await fetch('/api/my/meal-plan/participant', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -158,9 +165,10 @@ export default function PlanPage() {
           onAdd={(slot) => setModal({ kind: 'add', date: today, slot })}
           onAddPerson={addParticipant}
           onRemovePerson={removeParticipant}
+          onRemove={doRemove}
         />
       ) : (
-        <WeekView meals={meals} onSwap={(m) => setModal({ kind: 'swap', meal: m })} />
+        <WeekView meals={meals} onSwap={(m) => setModal({ kind: 'swap', meal: m })} onRemove={doRemove} />
       )}
 
       {error && <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 16 }}>{error}</div>}
@@ -184,17 +192,19 @@ export default function PlanPage() {
 }
 
 // ── Day view ──
-function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, onRemovePerson }: {
+function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, onRemovePerson, onRemove }: {
   meals: Meal[]; activeSlots: string[]; household: Person[];
   onSwap: (m: Meal) => void; onAdd: (slot: string) => void;
   onAddPerson: (mealId: string, personId: string) => void; onRemovePerson: (mealId: string, personId: string) => void;
+  onRemove: (mealId: string) => void;
 }) {
   const [addMenu, setAddMenu] = useState(false);
-  const bySlot: Record<string, Meal | undefined> = {};
-  for (const m of meals) bySlot[m.slot] = m;
-  // Show a row for every active slot AND every slot that actually has a meal
-  // today (so a meal added to a non-active slot still appears).
-  const slotsWithMeals = meals.map(m => m.slot);
+  // Group meals by slot, keeping ALL meals in each slot (no collapsing) so the
+  // day view lists every meal and agrees with the week view.
+  const bySlot: Record<string, Meal[]> = {};
+  for (const m of meals) (bySlot[m.slot] ??= []).push(m);
+  // Render a row-group for every active slot AND every slot that has a meal.
+  const slotsWithMeals = Object.keys(bySlot);
   const orderedSlots = SLOT_ORDER.filter(s => activeSlots.includes(s) || slotsWithMeals.includes(s));
 
   return (
@@ -202,12 +212,16 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
       <div style={{ fontFamily: SERIF, fontSize: 27, color: 'var(--fg)', margin: '0 0 26px' }}>Today</div>
       <div style={{ borderTop: B }}>
         {orderedSlots.map(slot => {
-          const m = bySlot[slot];
+          const slotMeals = bySlot[slot] ?? [];
           return (
             <div key={slot} style={{ padding: '22px 2px', borderBottom: B }}>
               <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 7 }}>{SLOT_LABEL[slot] ?? slot}</div>
-              {m ? (
-                <MealRow meal={m} household={household} onSwap={onSwap} onAddPerson={onAddPerson} onRemovePerson={onRemovePerson} />
+              {slotMeals.length > 0 ? (
+                slotMeals.map((m, i) => (
+                  <div key={m.id} style={{ marginTop: i === 0 ? 0 : 20 }}>
+                    <MealRow meal={m} household={household} onSwap={onSwap} onAddPerson={onAddPerson} onRemovePerson={onRemovePerson} onRemove={onRemove} />
+                  </div>
+                ))
               ) : (
                 <div style={{ fontSize: 14, color: 'var(--muted)' }}>
                   Nothing planned — <span onClick={() => onAdd(slot)} style={{ color: ACCENT, cursor: 'pointer' }}>add something</span>
@@ -240,7 +254,7 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
 }
 
 // ── Week view ──
-function WeekView({ meals, onSwap }: { meals: Meal[]; onSwap: (m: Meal) => void }) {
+function WeekView({ meals, onSwap, onRemove }: { meals: Meal[]; onSwap: (m: Meal) => void; onRemove: (mealId: string) => void }) {
   const byDate: Record<string, Meal[]> = {};
   for (const m of meals) (byDate[m.date] ??= []).push(m);
   const dates = Object.keys(byDate).sort();
@@ -269,6 +283,7 @@ function WeekView({ meals, onSwap }: { meals: Meal[]; onSwap: (m: Meal) => void 
                   <span onClick={() => onSwap(m)} title="Swap dish" style={{ cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
                     <SwapIcon />
                   </span>
+                  <span onClick={() => onRemove(m.id)} title="Remove meal" style={{ cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', fontSize: 16, lineHeight: 1 }}>×</span>
                 </div>
               </div>
             ))}
@@ -280,9 +295,10 @@ function WeekView({ meals, onSwap }: { meals: Meal[]; onSwap: (m: Meal) => void 
 }
 
 // ── Meal hero row (day view) ──
-function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
+function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemove }: {
   meal: Meal; household: Person[];
   onSwap: (m: Meal) => void; onAddPerson: (mealId: string, personId: string) => void; onRemovePerson: (mealId: string, personId: string) => void;
+  onRemove: (mealId: string) => void;
 }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [openPerson, setOpenPerson] = useState<string | null>(null); // personId whose popover is open
@@ -294,7 +310,11 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
     <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
         <div>
-          <div style={{ fontFamily: SERIF, fontSize: 21, color: 'var(--fg)', marginBottom: 4 }}>{meal.dishName}</div>
+          {meal.recipeSlug ? (
+            <a href={`/recipes/${meal.recipeSlug}`} style={{ fontFamily: SERIF, fontSize: 21, color: 'var(--fg)', marginBottom: 4, textDecoration: 'none', display: 'inline-block' }}>{meal.dishName}</a>
+          ) : (
+            <div style={{ fontFamily: SERIF, fontSize: 21, color: 'var(--fg)', marginBottom: 4 }}>{meal.dishName}</div>
+          )}
           {meta && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{meta}</div>}
         </div>
         <div style={{ position: 'relative' }}>
@@ -348,8 +368,8 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 18, marginTop: 14 }}>
-        {meal.recipeSlug && <a href={`/recipes/${meal.recipeSlug}`} style={{ fontSize: 12.5, color: ACCENT, textDecoration: 'none' }}>View recipe</a>}
         <span onClick={() => onSwap(meal)} style={{ fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>Swap</span>
+        <span onClick={() => onRemove(meal.id)} style={{ fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>Remove</span>
       </div>
     </>
   );
