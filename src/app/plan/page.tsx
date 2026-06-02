@@ -189,6 +189,7 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
   onSwap: (m: Meal) => void; onAdd: (slot: string) => void;
   onAddPerson: (mealId: string, personId: string) => void; onRemovePerson: (mealId: string, personId: string) => void;
 }) {
+  const [addMenu, setAddMenu] = useState(false);
   const bySlot: Record<string, Meal | undefined> = {};
   for (const m of meals) bySlot[m.slot] = m;
   const orderedSlots = SLOT_ORDER.filter(s => activeSlots.includes(s));
@@ -213,6 +214,24 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
           );
         })}
       </div>
+
+      {/* Always-available add: pick any slot */}
+      <div style={{ textAlign: 'center', marginTop: 18, position: 'relative' }}>
+        <span onClick={() => setAddMenu(v => !v)} style={{ fontSize: 12.5, color: ACCENT, cursor: 'pointer' }}>+ Add a meal</span>
+        {addMenu && (
+          <div style={{ ...popover, left: '50%', right: 'auto', transform: 'translateX(-50%)', top: 28, minWidth: 160 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', padding: '2px 8px 8px' }}>Which meal?</div>
+            {SLOT_ORDER.map(slot => (
+              <div key={slot} onClick={() => { setAddMenu(false); onAdd(slot); }}
+                style={{ padding: '8px', cursor: 'pointer', fontSize: 13.5, borderRadius: 6, textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                {SLOT_LABEL[slot]}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -236,11 +255,17 @@ function WeekView({ meals, onSwap }: { meals: Meal[]; onSwap: (m: Meal) => void 
               <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 2px', borderBottom: B }}>
                 <div>
                   <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#b3b0a8', marginRight: 10 }}>{SLOT_LABEL[m.slot]}</span>
-                  <span style={{ fontFamily: SERIF, fontSize: 16, color: 'var(--fg)' }}>{m.dishName}</span>
+                  {m.recipeSlug ? (
+                    <a href={`/recipes/${m.recipeSlug}`} style={{ fontFamily: SERIF, fontSize: 16, color: 'var(--fg)', textDecoration: 'none' }}>{m.dishName}</a>
+                  ) : (
+                    <span style={{ fontFamily: SERIF, fontSize: 16, color: 'var(--fg)' }}>{m.dishName}</span>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <AvatarStack participants={m.participants} small />
-                  <span onClick={() => onSwap(m)} style={{ fontSize: 12, color: 'var(--muted)', cursor: 'pointer' }}>Swap</span>
+                  <span onClick={() => onSwap(m)} title="Swap dish" style={{ cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center' }}>
+                    <SwapIcon />
+                  </span>
                 </div>
               </div>
             ))}
@@ -256,7 +281,8 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
   meal: Meal; household: Person[];
   onSwap: (m: Meal) => void; onAddPerson: (mealId: string, personId: string) => void; onRemovePerson: (mealId: string, personId: string) => void;
 }) {
-  const [pickPerson, setPickPerson] = useState(false);
+  const [openAdd, setOpenAdd] = useState(false);
+  const [openPerson, setOpenPerson] = useState<string | null>(null); // personId whose popover is open
   const inMeal = new Set(meal.participants.map(p => p.personId));
   const addable = household.filter(h => !inMeal.has(h.id));
   const meta = metaLine(meal);
@@ -271,24 +297,47 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {meal.participants.map((p, i) => (
-              <span key={p.id} title={`${p.name} — tap to remove`}
-                onClick={() => onRemovePerson(meal.id, p.personId)}
+              <span key={p.id} title={p.name}
+                onClick={() => { setOpenPerson(v => v === p.personId ? null : p.personId); setOpenAdd(false); }}
                 style={{ width: 30, height: 30, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '2px solid var(--bg)', marginLeft: i === 0 ? 0 : -6, cursor: 'pointer' }}>
                 {monogram(p.name)}
               </span>
             ))}
             {addable.length > 0 && (
-              <span title="Add someone" onClick={() => setPickPerson(v => !v)}
+              <span title="Add someone" onClick={() => { setOpenAdd(v => !v); setOpenPerson(null); }}
                 style={{ width: 30, height: 30, borderRadius: '50%', border: '1px dashed var(--border)', color: 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, marginLeft: meal.participants.length ? 4 : 0, cursor: 'pointer' }}>+</span>
             )}
           </div>
-          {pickPerson && addable.length > 0 && (
-            <div style={{ position: 'absolute', right: 0, top: 36, background: 'var(--surface)', border: B, borderRadius: 8, padding: 6, zIndex: 10, minWidth: 160, boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+
+          {/* person popover: name + remove */}
+          {openPerson && (() => {
+            const p = meal.participants.find(x => x.personId === openPerson);
+            if (!p) return null;
+            return (
+              <div style={popover}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 6px 10px' }}>
+                  <span style={{ width: 28, height: 28, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{monogram(p.name)}</span>
+                  <span style={{ fontSize: 13.5, color: 'var(--fg)' }}>{p.name}</span>
+                </div>
+                <div onClick={() => { onRemovePerson(meal.id, p.personId); setOpenPerson(null); }}
+                  style={{ borderTop: B, padding: '9px 8px 2px', fontSize: 13, color: '#9c5f4a', cursor: 'pointer' }}>
+                  Remove from this meal
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* add-person picker */}
+          {openAdd && addable.length > 0 && (
+            <div style={popover}>
+              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', padding: '2px 8px 8px' }}>Add to this meal</div>
               {addable.map(h => (
-                <div key={h.id} onClick={() => { onAddPerson(meal.id, h.id); setPickPerson(false); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 8px', cursor: 'pointer', fontSize: 13, borderRadius: 6 }}>
-                  <span style={{ width: 22, height: 22, borderRadius: '50%', background: colorFor(h.id, h.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>{monogram(h.name)}</span>
-                  {h.name}
+                <div key={h.id} onClick={() => { onAddPerson(meal.id, h.id); setOpenAdd(false); }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px', cursor: 'pointer', fontSize: 13.5, borderRadius: 6 }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: colorFor(h.id, h.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>{monogram(h.name)}</span>
+                  <span style={{ whiteSpace: 'nowrap' }}>{h.name}</span>
                 </div>
               ))}
             </div>
@@ -300,6 +349,17 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson }: {
         <span onClick={() => onSwap(meal)} style={{ fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>Swap</span>
       </div>
     </>
+  );
+}
+
+function SwapIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 4 3 8l4 4" />
+      <path d="M3 8h14" />
+      <path d="m17 20 4-4-4-4" />
+      <path d="M21 16H7" />
+    </svg>
   );
 }
 
@@ -404,3 +464,9 @@ function toggleStyle(active: boolean): React.CSSProperties {
   return { padding: '5px 13px', fontSize: 12, border: 'none', cursor: 'pointer', background: active ? 'var(--surface)' : 'transparent', color: active ? ACCENT : 'var(--muted)' };
 }
 const primaryBtn: React.CSSProperties = { background: ACCENT, color: '#fff', border: 'none', fontSize: 13.5, padding: '10px 20px', borderRadius: 8, cursor: 'pointer' };
+
+const popover: React.CSSProperties = {
+  position: 'absolute', right: 0, top: 38, background: 'var(--surface)', border: B,
+  borderRadius: 10, padding: 8, zIndex: 20, minWidth: 200,
+  boxShadow: '0 6px 22px rgba(0,0,0,0.10)',
+};
