@@ -13,6 +13,7 @@ export type AiFeature =
   | 'chat_modify'
   | 'nutrition_estimate'
   | 'nutrition_backfill'
+  | 'meal_plan'
   | 'other';
 
 type LogArgs = {
