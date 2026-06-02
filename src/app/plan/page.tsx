@@ -223,9 +223,19 @@ function DayView({ meals, activeSlots, household, onSwap, onAdd, onAddPerson, on
                   </div>
                 ))
               ) : (
-                <div style={{ fontSize: 14, color: 'var(--muted)' }}>
-                  Nothing planned — <span onClick={() => onAdd(slot)} style={{ color: ACCENT, cursor: 'pointer' }}>add something</span>
-                </div>
+                <button
+                  onClick={() => onAdd(slot)}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 7,
+                    border: '1px dashed var(--border)', borderRadius: 8,
+                    background: 'transparent', color: ACCENT, cursor: 'pointer',
+                    fontSize: 13.5, padding: '9px 15px', fontFamily: 'inherit',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <span style={{ fontSize: 15, lineHeight: 1 }}>+</span> Add {SLOT_LABEL[slot]?.toLowerCase() ?? slot}
+                </button>
               )}
             </div>
           );
