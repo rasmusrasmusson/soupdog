@@ -93,9 +93,17 @@ export default function PlanPage() {
     load().catch(() => setError('Could not load your plan')).finally(() => setLoading(false));
   }, [user, authLoading, load]);
 
-  async function activate(slots: string[]) {
+  async function activate(slots: string[], times?: Record<string, string>) {
     setBusy(true); setError(null);
     try {
+      // If the user fine-tuned meal times, save them first so the first
+      // generated plan uses them.
+      if (times && Object.keys(times).length > 0) {
+        await fetch('/api/my/meal-plan/habits', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ default: times }),
+        });
+      }
       await fetch('/api/my/meal-plan/prefs', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planActive: true, activeSlots: slots, horizonDays: 5 }),
@@ -477,10 +485,26 @@ function RecipePicker({ title, onPick, onClose }: { title: string; onPick: (reci
 }
 
 // ── No-plan / activation ──
-function NoPlan({ onActivate, busy, error }: { onActivate: (slots: string[]) => void; busy: boolean; error: string | null }) {
+function NoPlan({ onActivate, busy, error }: { onActivate: (slots: string[], times?: Record<string, string>) => void; busy: boolean; error: string | null }) {
   const [slots, setSlots] = useState<string[]>(['dinner']);
   const [setup, setSetup] = useState(false);
+  const [tune, setTune] = useState(false);
+  const DEFAULT_TIMES: Record<string, string> = { breakfast: '07:30', lunch: '12:30', dinner: '19:00' };
+  const [times, setTimes] = useState<Record<string, string>>(DEFAULT_TIMES);
+
   function toggleSlot(s: string) { setSlots(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]); }
+  function setTime(slot: string, v: string) { setTimes(prev => ({ ...prev, [slot]: v })); }
+
+  // only offer time tuning for the named meals the user actually selected
+  const tunableSlots = ['breakfast', 'lunch', 'dinner'].filter(s => slots.includes(s));
+
+  function start() {
+    const chosen = slots.length ? slots : ['dinner'];
+    // only send times for selected named slots, and only if the user opened tuning
+    const send: Record<string, string> = {};
+    if (tune) for (const s of tunableSlots) if (times[s]) send[s] = times[s];
+    onActivate(chosen, Object.keys(send).length ? send : undefined);
+  }
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto', padding: '40px 32px 80px' }}>
@@ -494,7 +518,7 @@ function NoPlan({ onActivate, busy, error }: { onActivate: (slots: string[]) => 
         ) : (
           <div>
             <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10 }}>Which meals should I plan?</div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
               {['breakfast', 'lunch', 'dinner'].map(s => (
                 <button key={s} onClick={() => toggleSlot(s)}
                   style={{ fontSize: 13, padding: '7px 15px', borderRadius: 999, cursor: 'pointer', border: slots.includes(s) ? `1px solid ${ACCENT}` : B, background: slots.includes(s) ? ACCENT : 'var(--surface)', color: slots.includes(s) ? '#fff' : 'var(--fg)' }}>
@@ -502,7 +526,31 @@ function NoPlan({ onActivate, busy, error }: { onActivate: (slots: string[]) => 
                 </button>
               ))}
             </div>
-            <button onClick={() => onActivate(slots.length ? slots : ['dinner'])} disabled={busy}
+
+            {/* optional fine-tune: collapsed by default; fast path skips it */}
+            {tunableSlots.length > 0 && (
+              <div style={{ marginBottom: 18 }}>
+                {!tune ? (
+                  <span onClick={() => setTune(true)} style={{ fontSize: 12.5, color: ACCENT, cursor: 'pointer' }}>
+                    Adjust meal times (optional)
+                  </span>
+                ) : (
+                  <div style={{ border: B, borderRadius: 10, padding: '14px 16px' }}>
+                    <div style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 4 }}>When do you usually eat?</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>This helps Soupdog suggest when to start cooking. You can change it later.</div>
+                    {tunableSlots.map(s => (
+                      <div key={s} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0' }}>
+                        <span style={{ fontSize: 14, color: 'var(--fg)' }}>{SLOT_LABEL[s]}</span>
+                        <input type="time" value={times[s] ?? ''} onChange={e => setTime(s, e.target.value)}
+                          style={{ fontSize: 14, padding: '5px 8px', border: B, borderRadius: 7, background: 'var(--bg)', color: 'var(--fg)', fontFamily: 'inherit' }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={start} disabled={busy}
               style={{ ...primaryBtn, opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>
               {busy ? 'Setting up your menu…' : 'Start my plan'}
             </button>
@@ -511,7 +559,7 @@ function NoPlan({ onActivate, busy, error }: { onActivate: (slots: string[]) => 
         {error && <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>{error}</div>}
       </div>
       <p style={{ fontSize: 12, color: 'var(--muted)', marginTop: 18, lineHeight: 1.6 }}>
-        You can change which meals are planned, who&rsquo;s eating, and swap any dish at any time.
+        You can change which meals are planned, who&rsquo;s eating, when you eat, and swap any dish at any time.
       </p>
     </div>
   );
