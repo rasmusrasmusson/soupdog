@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
     .select(`
       id, meal_date, slot, source, dish_name, note, recipe_id,
       recipe_canonicals!recipe_id ( id, slug,
-        recipe_versions!current_version_id ( title )
+        recipe_versions!current_version_id ( title, cuisine, total_time_seconds, base_servings )
       ),
       meal_participant ( id, status, person_id,
         person!person_id ( id, full_name, display_name, avatar_color )
@@ -70,6 +70,9 @@ export async function GET(req: NextRequest) {
       slot: m.slot,
       source: m.source,
       dishName: ver?.title || m.dish_name || 'Meal',
+      cuisine: ver?.cuisine ?? null,
+      totalTimeMinutes: ver?.total_time_seconds ? Math.round(ver.total_time_seconds / 60) : null,
+      servings: ver?.base_servings ?? null,
       recipeId: m.recipe_id,
       recipeSlug: can?.slug ?? null,
       note: m.note ?? null,
