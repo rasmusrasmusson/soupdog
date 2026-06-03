@@ -13,7 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Pencil, Flame, Clock } from 'lucide-react';
-import { PrintButton, PrintHeader, PrintFooter } from '@/components/recipe/PrintRecipe';
+import { PrintButton, PrintHeader } from '@/components/recipe/PrintRecipe';
 
 type CompType = 'dish' | 'side' | 'drink';
 interface StepIng { name: string; quantityValue: number; quantityUnit: string; prep: string | null }
@@ -150,7 +150,7 @@ export default function MealRecipePage() {
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-10">
       {/* Print-only masthead (hidden on screen). */}
-      <PrintHeader title={data.title} subtitle={[data.servings != null ? `Serves ${data.servings}` : null, hasMerge && data.mergedTotalMinutes != null ? `${data.mergedTotalMinutes} min` : null].filter(Boolean).join('  ·  ')} />
+      <PrintHeader title={data.title} subtitle={[data.servings != null ? `Serves ${data.servings}` : null, hasMerge && data.mergedTotalMinutes != null ? `${data.mergedTotalMinutes} min` : null].filter(Boolean).join('  ·  ')} url={typeof window !== 'undefined' ? window.location.href : undefined} />
 
       {/* Breadcrumb (hidden in print) */}
       <div className="no-print" style={{ ...MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -158,7 +158,7 @@ export default function MealRecipePage() {
         <span>/</span>
         <span>Recipe</span>
         <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
-          <PrintButton />
+          <PrintButton title={data.title} />
           <Link href={`/my/meals/${id}`} style={{ color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }} className="hover:underline">
             <Pencil size={12} /> Edit meal
           </Link>
@@ -296,7 +296,6 @@ export default function MealRecipePage() {
           )}
         </>
       )}
-      <PrintFooter />
     </div>
   );
 }

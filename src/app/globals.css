@@ -104,13 +104,20 @@ body {
     color: #111 !important;
   }
 
-  /* Hide app chrome: header, sidebar, mobile nav, right panel, footers. */
+  /* Hide app chrome: header, sidebar, mobile nav, right panel, footers, and any
+     fixed/sticky bars (these otherwise REPEAT on every printed page). */
   header,
   nav,
   aside,
   footer,
   [data-print="hide"],
   .no-print {
+    display: none !important;
+  }
+  /* Any positioned overlay/sticky/fixed bar must not print (belt-and-suspenders:
+     mobile sticky progress bar, sticky toolbars, etc.). */
+  .fixed, [style*="position: fixed"], [style*="position:fixed"],
+  [style*="position: sticky"], [style*="position:sticky"] {
     display: none !important;
   }
 
@@ -164,9 +171,6 @@ body {
 
   /* Tables print with their content, not as horizontal-scroll boxes. */
   .table-responsive { overflow: visible !important; border: none !important; }
-
-  /* Print-footer: subtle source line on each page via the running element. */
-  .print-footer { display: block !important; }
 }
 
 /* Print: neutralise full-height flex + inner scroll containers used by the

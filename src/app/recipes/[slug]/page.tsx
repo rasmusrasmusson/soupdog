@@ -499,7 +499,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
 
         {/* Print-only masthead (hidden on screen). */}
-        <PrintHeader title={recipe.title} subtitle={recipe.cuisine ?? undefined} />
+        <PrintHeader title={recipe.title} subtitle={recipe.cuisine ?? undefined} url={typeof window !== 'undefined' ? window.location.href : undefined} />
 
         {/* Title + meta */}
         <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
@@ -507,8 +507,8 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
               {recipe.title}
             </h1>
-            <span className="flex items-center gap-3 flex-shrink-0">
-              <PrintButton />
+            <span className="flex items-center gap-3 flex-shrink-0 no-print">
+              <PrintButton title={recipe.title} />
               <BookmarkButton canonicalId={recipe.id} />
             </span>
           </div>
@@ -777,7 +777,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       </div>
 
       {/* Right panel */}
-      <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px]">
+      <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px] no-print">
         <PanelSection title="Progress">
           <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
           <div className="mt-2"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
@@ -807,7 +807,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
       </aside>
 
       {/* Mobile sticky bar */}
-      <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4">
+      <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4 no-print">
         <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
         <div className="flex-1 min-w-0"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
         <div className="flex-1 min-w-0"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
