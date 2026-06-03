@@ -48,6 +48,12 @@ interface MealRecipe {
 
 type ViewMode = 'cook' | 'sections' | 'separate';
 
+interface Narrative {
+  intro?: string;
+  steps: { n: number; text: string }[];
+  outro?: string;
+}
+
 const MONO = { fontFamily: 'var(--font-mono)' } as const;
 const SERIF = { fontFamily: 'var(--font-serif, Georgia, serif)' } as const;
 const B = '1px solid var(--border)';
@@ -66,6 +72,11 @@ export default function MealRecipePage() {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>('cook');
 
+  // L2 narrative: lazily fetched on first entry to cook mode, then cached client-side.
+  const [narrative, setNarrative] = useState<Narrative | null>(null);
+  const [narrativeState, setNarrativeState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
+  const [showSteps, setShowSteps] = useState(false);   // toggle: prose vs the raw L1 timeline
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -74,6 +85,29 @@ export default function MealRecipePage() {
     } finally { setLoading(false); }
   }, [id]);
   useEffect(() => { if (id) load(); }, [id, load]);
+
+  // Lazy-generate the cooking narrative the first time the cook tab is shown and
+  // a merge exists. Cached server-side; this only pays an AI call when needed.
+  const fetchNarrative = useCallback(async () => {
+    if (narrativeState !== 'idle') return;
+    setNarrativeState('loading');
+    try {
+      const res = await fetch(`/api/my/meals/${id}/narrative`, { method: 'POST' });
+      if (res.ok) {
+        const d = await res.json();
+        if (d.narrative) { setNarrative(d.narrative); setNarrativeState('done'); return; }
+      }
+      setNarrativeState('failed');
+    } catch {
+      setNarrativeState('failed');
+    }
+  }, [id, narrativeState]);
+
+  useEffect(() => {
+    if (mode === 'cook' && data && (data.merged?.scheduled?.length ?? 0) > 0) {
+      fetchNarrative();
+    }
+  }, [mode, data, fetchNarrative]);
 
   if (loading) {
     return <div className="max-w-3xl mx-auto px-4 md:px-8 py-10" style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
@@ -129,7 +163,7 @@ export default function MealRecipePage() {
             <button onClick={() => setMode('separate')} style={toggle(mode === 'separate')}>Dishes separately</button>
           </div>
 
-          {/* ── COOK TOGETHER (L1 timeline) ── */}
+          {/* ── COOK TOGETHER (L2 narrative over L1 timeline) ── */}
           {mode === 'cook' && hasMerge && (
             <>
               <section style={{ marginBottom: 30 }}>
@@ -145,7 +179,57 @@ export default function MealRecipePage() {
                   ))}
                 </div>
               </section>
-              <CookTimeline merged={data.merged!} />
+
+              {/* Method: prose (L2) by default; toggle to the timed step list (L1). */}
+              <section>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <SectionTitle>Cook it together</SectionTitle>
+                  {narrativeState === 'done' && (
+                    <button onClick={() => setShowSteps(s => !s)}
+                      style={{ ...MONO, fontSize: 10, color: 'var(--muted)', background: 'none', border: B, borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
+                      {showSteps ? 'Read as method' : 'Show timed steps'}
+                    </button>
+                  )}
+                </div>
+
+                {/* Narrative loading */}
+                {narrativeState === 'loading' && (
+                  <div style={{ ...MONO, fontSize: 12, color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 16px' }}>
+                    <Loader2 size={13} className="animate-spin" /> Writing the method…
+                  </div>
+                )}
+
+                {/* Narrative prose (default when done and not toggled to steps) */}
+                {narrativeState === 'done' && narrative && !showSteps && (
+                  <div>
+                    {narrative.intro ? (
+                      <p style={{ fontSize: 14.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 16, lineHeight: 1.6 }}>{narrative.intro}</p>
+                    ) : null}
+                    <div style={{ borderTop: B }}>
+                      {narrative.steps.map((s) => (
+                        <div key={s.n} style={{ display: 'flex', gap: 14, padding: '12px 0', borderBottom: B }}>
+                          <span style={{ ...MONO, fontSize: 12, color: '#b3b0a8', flexShrink: 0, width: 22, textAlign: 'right' }}>{s.n}</span>
+                          <div style={{ fontSize: 15, color: 'var(--fg)', lineHeight: 1.65 }}>{s.text}</div>
+                        </div>
+                      ))}
+                    </div>
+                    {narrative.outro ? (
+                      <p style={{ fontSize: 14, color: 'var(--muted)', marginTop: 16, lineHeight: 1.6 }}>{narrative.outro}</p>
+                    ) : null}
+                  </div>
+                )}
+
+                {/* The timed step list — shown when toggled, or as fallback if the
+                    narrative failed or is still idle. Always available. */}
+                {(showSteps || narrativeState === 'failed' || narrativeState === 'idle') && (
+                  <CookTimeline merged={data.merged!} bare />
+                )}
+                {narrativeState === 'failed' && (
+                  <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginTop: 10 }}>
+                    Showing the timed steps — the written method couldn’t be generated just now.
+                  </p>
+                )}
+              </section>
             </>
           )}
 
@@ -207,7 +291,7 @@ function DishSection({ c, showIngredients }: { c: Component; showIngredients: bo
 // Each step shows which dish it belongs to, a relative "start" label, duration/
 // temp, and a "meanwhile" tag when it fills another dish's passive window. Holds
 // (keep-warm) render distinctly.
-function CookTimeline({ merged }: { merged: MergedPayload }) {
+function CookTimeline({ merged, bare }: { merged: MergedPayload; bare?: boolean }) {
   const steps = merged.scheduled ?? [];
   if (steps.length === 0) {
     return <div style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No timed steps to schedule.</div>;
@@ -222,10 +306,12 @@ function CookTimeline({ merged }: { merged: MergedPayload }) {
   let n = 0;
   return (
     <section>
-      <SectionTitle>Cook it together</SectionTitle>
-      <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 16, maxWidth: 540, lineHeight: 1.6 }}>
-        One plan for the whole meal, timed so everything is ready together. Steps from different dishes are interleaved — start each when its time comes.
-      </p>
+      {!bare && <SectionTitle>Cook it together</SectionTitle>}
+      {!bare && (
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 16, maxWidth: 540, lineHeight: 1.6 }}>
+          One plan for the whole meal, timed so everything is ready together. Steps from different dishes are interleaved — start each when its time comes.
+        </p>
+      )}
       <div style={{ borderTop: B }}>
         {steps.map((s) => {
           const isHold = s.type === 'hold';
