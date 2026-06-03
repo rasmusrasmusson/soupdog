@@ -82,6 +82,24 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
   const groups = groupSteps(recipe.steps);
   const showGroupTitles = groups.length > 1 || (groups[0]?.label ?? '') !== '';
 
+  // Unique tools across all steps (mise-en-place list). Prefer the recipe's
+  // equipment list if present; otherwise derive from per-step tools. Dedupe
+  // case-insensitively, preserve first-seen order.
+  const tools: string[] = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (t?: string) => {
+      const name = (t ?? '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key); out.push(name);
+    };
+    (recipe.equipment ?? []).forEach(e => add((e as { name?: string }).name));
+    recipe.steps.forEach(s => (s.tools ?? []).forEach(add));
+    return out;
+  })();
+
   return (
     <div className="print-only recipe-print" style={{ ...SANS, color: '#111', background: '#fff' }}>
       {/* ── Header ─────────────────────────────────────────────── */}
@@ -107,14 +125,14 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
         </div>
       </div>
 
-      {/* ── Body: two columns ──────────────────────────────────── */}
-      <div className="recipe-print-cols">
-        {/* Left: ingredients */}
-        <div className="recipe-print-ingredients">
+      {/* ── Body: single column (read the lists first, then cook) ── */}
+      <div className="recipe-print-body">
+        {/* Ingredients */}
+        <div>
           <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 8, breakAfter: 'avoid' }}>
             Ingredients
           </h2>
-          <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+          <ul className="recipe-print-twocol-list" style={{ listStyle: 'none', margin: '0 0 18px', padding: 0 }}>
             {recipe.ingredients.map((ing) => (
               <li key={ing.ingredientId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderBottom: '1px solid #eee', breakInside: 'avoid' }}>
                 <span style={{ ...SANS, fontSize: 11.5, color: '#111' }}>
@@ -129,7 +147,19 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
           </ul>
         </div>
 
-        {/* Right: method as flowing numbered blocks */}
+        {/* Tools / equipment — mise-en-place: get everything out before cooking. */}
+        {tools.length > 0 ? (
+          <div style={{ breakInside: 'avoid', marginBottom: 18 }}>
+            <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 8, breakAfter: 'avoid' }}>
+              Tools
+            </h2>
+            <div style={{ ...SANS, fontSize: 11.5, color: '#222', lineHeight: 1.7 }}>
+              {tools.join('  ·  ')}
+            </div>
+          </div>
+        ) : null}
+
+        {/* Method as flowing numbered blocks */}
         <div className="recipe-print-method">
           <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 8, breakAfter: 'avoid' }}>
             Method
@@ -190,14 +220,18 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
         </section>
       ) : null}
 
-      {/* ── Tail: QR (modest, at the end) + footer logo ────────── */}
-      <div style={{ marginTop: 22, paddingTop: 12, borderTop: '1px solid #1a1a1a', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+      {/* ── Footer: centred Soupdog logo + QR (scan to open online) ──
+         NOTE: this is an in-flow content footer at the END of the recipe. The
+         URL + date strip the browser prints at the very bottom of each page is
+         the BROWSER'S own header/footer (not ours) — it can't be removed via CSS;
+         users untick "Headers and footers" in the print dialog to hide it. */}
+      <div style={{ marginTop: 26, paddingTop: 14, borderTop: '1px solid #1a1a1a', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/wordmark.svg" alt="Soupdog" style={{ height: 18, width: 'auto', opacity: 0.85 }} />
+        <img src="/wordmark.svg" alt="Soupdog" style={{ height: 20, width: 'auto', opacity: 0.9 }} />
         {url ? (
-          <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.1em', color: '#aaa', maxWidth: 90, textAlign: 'right' }}>SCAN TO OPEN ONLINE</span>
-            <QRCodeSVG value={url} size={48} level="M" includeMargin={false} />
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+            <QRCodeSVG value={url} size={56} level="M" includeMargin={false} />
+            <span style={{ ...MONO, fontSize: 8, letterSpacing: '0.14em', color: '#aaa' }}>SCAN TO OPEN ONLINE</span>
           </div>
         ) : null}
       </div>

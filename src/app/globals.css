@@ -107,16 +107,16 @@ body {
   .screen-only.screen-only { display: none !important; }
   .print-only.print-only { display: block !important; }
 
-  /* Two-column cookbook body: ingredients (narrow) + method (wide). */
-  .recipe-print-cols {
-    display: grid;
-    grid-template-columns: 1fr 1.9fr;
-    gap: 26px;
-    align-items: start;
+  /* Single-column cookbook body (read ingredients + tools first, then cook).
+     A long INGREDIENTS list flows into 2 sub-columns to stay compact and avoid
+     a tall thin list pushing the method down — but the method itself is full
+     width, single column, so later pages don't leave an empty second column. */
+  .recipe-print-body { display: block; }
+  .recipe-print-twocol-list {
+    columns: 2;
+    column-gap: 28px;
   }
-  /* Ingredients column can repeat its heading is unnecessary; keep it from
-     breaking awkwardly but allow long lists to flow. */
-  .recipe-print-ingredients { break-inside: auto; }
+  .recipe-print-twocol-list > li { break-inside: avoid; }
   .recipe-print-method { break-inside: auto; }
 
   /* Ink-friendly: white paper, near-black text, no decorative fills. */
