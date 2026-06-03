@@ -238,7 +238,7 @@ function RecipePicker({ type, existing, onPick, onClose }: {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/my/meal-plan/options').then(r => r.json())
+    fetch('/api/my/meal-plan/options?level=dish').then(r => r.json())
       .then(d => setOpts(d.options ?? [])).finally(() => setLoading(false));
   }, []);
 
