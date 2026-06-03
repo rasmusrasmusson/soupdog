@@ -2,6 +2,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { formatDuration } from '@/lib/utils';
 import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
+import { PrintButton, PrintHeader } from '@/components/recipe/PrintRecipe';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
@@ -497,13 +498,19 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     <div className="flex h-full">
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
 
+        {/* Print-only masthead (hidden on screen). */}
+        <PrintHeader title={recipe.title} subtitle={recipe.cuisine ?? undefined} />
+
         {/* Title + meta */}
         <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
           <div className="flex items-start justify-between gap-4 mb-4">
             <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
               {recipe.title}
             </h1>
-            <BookmarkButton canonicalId={recipe.id} />
+            <span className="flex items-center gap-3 flex-shrink-0">
+              <PrintButton />
+              <BookmarkButton canonicalId={recipe.id} />
+            </span>
           </div>
           <div className="hidden md:grid border border-[var(--border)] text-[11px]"
             style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>

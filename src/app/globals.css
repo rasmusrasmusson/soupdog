@@ -77,3 +77,102 @@ body {
 
 /* Safe area support for notched phones */
 .safe-area-pb { padding-bottom: env(safe-area-inset-bottom); }
+
+/* ───────────────────────────────────────────────────────────────────────────
+   PRINT STYLES  (Print / Save as PDF for dish & meal recipes)
+   Print is a STYLESHEET, not a separate page: we hide the app chrome, switch to
+   ink-friendly white/black, prevent ugly page breaks, and let the BROWSER'S
+   print dialog handle paper size (A4/Letter) & orientation. Content uses relative
+   units so it reflows correctly on any paper.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* Screen: hide the print-only branding (shown only when printing). */
+.print-only { display: none; }
+
+@media print {
+  /* Page box: clean margins on ANY paper (A4 or Letter both work). The browser
+     dialog still lets the user pick size/orientation; portrait is the sensible
+     default for a vertical recipe and needs no setting from us. */
+  @page {
+    size: auto;
+    margin: 18mm 16mm;
+  }
+
+  /* Ink-friendly: white paper, near-black text, no decorative fills. */
+  html, body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Hide app chrome: header, sidebar, mobile nav, right panel, footers. */
+  header,
+  nav,
+  aside,
+  footer,
+  [data-print="hide"],
+  .no-print {
+    display: none !important;
+  }
+
+  /* Let the main content take the full page (no sidebar offset, no scroll box). */
+  main {
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Reset the constrained reading column so the recipe fills the page width. */
+  .max-w-3xl,
+  .max-w-2xl,
+  .max-w-4xl {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Show the print-only Soupdog wordmark at the top of the printout. */
+  .print-only {
+    display: block !important;
+  }
+
+  /* Surfaces/fills → flat white; coloured pills/badges → plain outlined text so
+     they don't dump ink or print as grey blocks. */
+  [style*="var(--surface)"],
+  [style*="var(--accent-subtle)"],
+  [style*="background"] {
+    background: transparent !important;
+  }
+
+  /* Keep links black & unobtrusive (no blue, no underline noise). */
+  a { color: #111 !important; text-decoration: none !important; }
+
+  /* Borders: thin, light grey rules read well on paper. */
+  [style*="border"] { border-color: #ccc !important; }
+
+  /* PAGE-BREAK HYGIENE — the single biggest quality lever.
+     Never split a heading from its content; never split a step/row mid-row. */
+  h1, h2, h3 { break-after: avoid-page; }
+  section { break-inside: auto; }
+  /* Each step row, ingredient row, and timeline item stays whole. */
+  [data-print="row"],
+  li,
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;     /* legacy alias for older engines */
+  }
+  /* Avoid orphaned section titles at the bottom of a page. */
+  [data-print="section"] { break-inside: avoid; }
+
+  /* Tables print with their content, not as horizontal-scroll boxes. */
+  .table-responsive { overflow: visible !important; border: none !important; }
+
+  /* Print-footer: subtle source line on each page via the running element. */
+  .print-footer { display: block !important; }
+}
+
+/* Print: neutralise full-height flex + inner scroll containers used by the
+   recipe view, so content flows naturally across pages instead of being clipped
+   to a viewport-height scroll box. */
+@media print {
+  .flex.h-full { display: block !important; height: auto !important; }
+  .overflow-y-auto { overflow: visible !important; height: auto !important; max-height: none !important; }
+}

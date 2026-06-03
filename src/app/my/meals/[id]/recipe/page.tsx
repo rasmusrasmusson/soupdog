@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Pencil, Flame, Clock } from 'lucide-react';
+import { PrintButton, PrintHeader, PrintFooter } from '@/components/recipe/PrintRecipe';
 
 type CompType = 'dish' | 'side' | 'drink';
 interface StepIng { name: string; quantityValue: number; quantityUnit: string; prep: string | null }
@@ -148,14 +149,20 @@ export default function MealRecipePage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-10">
-      {/* Breadcrumb */}
-      <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 18 }}>
+      {/* Print-only masthead (hidden on screen). */}
+      <PrintHeader title={data.title} subtitle={[data.servings != null ? `Serves ${data.servings}` : null, hasMerge && data.mergedTotalMinutes != null ? `${data.mergedTotalMinutes} min` : null].filter(Boolean).join('  ·  ')} />
+
+      {/* Breadcrumb (hidden in print) */}
+      <div className="no-print" style={{ ...MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Link href="/my/meals" style={{ color: 'var(--muted)', textDecoration: 'none' }} className="hover:text-[var(--accent)]">Meals</Link>
-        <span style={{ margin: '0 8px' }}>/</span>
+        <span>/</span>
         <span>Recipe</span>
-        <Link href={`/my/meals/${id}`} style={{ float: 'right', color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }} className="hover:underline">
-          <Pencil size={12} /> Edit meal
-        </Link>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+          <PrintButton />
+          <Link href={`/my/meals/${id}`} style={{ color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }} className="hover:underline">
+            <Pencil size={12} /> Edit meal
+          </Link>
+        </span>
       </div>
 
       {/* Hero */}
@@ -187,7 +194,7 @@ export default function MealRecipePage() {
       ) : (
         <>
           {/* View-mode toggle */}
-          <div style={{ display: 'inline-flex', border: B, borderRadius: 7, overflow: 'hidden', marginBottom: 28 }}>
+          <div className="no-print" style={{ display: 'inline-flex', border: B, borderRadius: 7, overflow: 'hidden', marginBottom: 28 }}>
             {hasMerge && <button onClick={() => setMode('cook')} style={toggle(mode === 'cook')}>Cook together</button>}
             <button onClick={() => setMode('sections')} style={toggle(mode === 'sections')}>By dish</button>
             <button onClick={() => setMode('separate')} style={toggle(mode === 'separate')}>Dishes separately</button>
@@ -289,6 +296,7 @@ export default function MealRecipePage() {
           )}
         </>
       )}
+      <PrintFooter />
     </div>
   );
 }
