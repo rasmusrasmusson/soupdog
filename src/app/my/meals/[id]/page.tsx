@@ -31,7 +31,12 @@ const MONO = { fontFamily: 'var(--font-mono)' } as const;
 const SERIF = { fontFamily: 'var(--font-serif, Georgia, serif)' } as const;
 const B = '1px solid var(--border)';
 const TYPE_LABEL: Record<CompType, string> = { dish: 'Dish', side: 'Side', drink: 'Drink' };
-const TYPE_ORDER: CompType[] = ['dish', 'side', 'drink'];
+// UI offers Dish + Drink only. 'side' stays in the data model (and renders if an
+// existing component has it) but is no longer a button — a side is just a dish
+// playing a supporting role; the main/side distinction is inferred later (sizing/plating).
+const TYPE_ORDER: CompType[] = ['dish', 'drink'];
+// All types that can appear as a section (so a legacy 'side' component still shows).
+const ALL_TYPES: CompType[] = ['dish', 'side', 'drink'];
 
 export default function MealEditorPage() {
   const params = useParams();
@@ -141,11 +146,13 @@ export default function MealEditorPage() {
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>Soupdog will size each component to the meal (override per component below).</span>
       </div>
 
-      {/* Components grouped by type, in dish → side → drink order */}
-      {TYPE_ORDER.map(type => {
+      {/* Components grouped by type. Render dish & drink always, plus any other
+          type (e.g. a legacy 'side') that has rows, so nothing is hidden. */}
+      {ALL_TYPES.filter(type => TYPE_ORDER.includes(type) || components.some(c => c.componentType === type)).map(type => {
         const rows = components
           .map((c, i) => ({ c, i }))
           .filter(({ c }) => c.componentType === type);
+        const isOfferable = TYPE_ORDER.includes(type);
         return (
           <div key={type} style={{ marginBottom: 26 }}>
             <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 10 }}>
@@ -164,10 +171,12 @@ export default function MealEditorPage() {
                       {[c.cuisine, c.totalTimeMinutes ? `${c.totalTimeMinutes} min` : null].filter(Boolean).join(' · ') || '—'}
                     </div>
                   </div>
-                  {/* type switcher */}
+                  {/* type switcher — offers Dish/Drink, plus the current value if it's
+                      something else (e.g. a legacy Side) so it stays selectable. */}
                   <select value={c.componentType} onChange={e => setType(i, e.target.value as CompType)}
                     style={{ ...MONO, fontSize: 10, padding: '3px 4px', border: B, background: 'var(--bg)', color: 'var(--muted)' }}>
-                    {TYPE_ORDER.map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+                    {(TYPE_ORDER.includes(c.componentType) ? TYPE_ORDER : [c.componentType, ...TYPE_ORDER])
+                      .map(t => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
                   </select>
                   {/* per-component servings override */}
                   <input type="number" min={1} value={c.servingsTarget ?? ''} placeholder="serv"
@@ -179,13 +188,15 @@ export default function MealEditorPage() {
                 </div>
               ))}
             </div>
-            <button onClick={() => setPicker(type)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, border: '1px dashed var(--border)',
-                borderRadius: 8, background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, padding: '8px 14px' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <Plus size={14} /> Add {TYPE_LABEL[type].toLowerCase()}
-            </button>
+            {isOfferable && (
+              <button onClick={() => setPicker(type)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 10, border: '1px dashed var(--border)',
+                  borderRadius: 8, background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 13, padding: '8px 14px' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <Plus size={14} /> Add {TYPE_LABEL[type].toLowerCase()}
+              </button>
+            )}
           </div>
         );
       })}

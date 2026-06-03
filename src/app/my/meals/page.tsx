@@ -8,7 +8,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, Pencil, Trash2, BookOpen, Loader2, UtensilsCrossed } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookOpen, Loader2, UtensilsCrossed, Eye, EyeOff } from 'lucide-react';
 
 interface MyMeal {
   id: string; slug: string; title: string;
@@ -27,6 +27,7 @@ export default function MyMealsPage() {
   const [creating, setCreating] = useState(false);
   const creatingRef = useRef(false);   // synchronous guard — state is async, this isn't
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,6 +72,21 @@ export default function MyMealsPage() {
       await fetch(`/api/my/meals/${id}`, { method: 'DELETE' });
       setMeals(prev => prev.filter(m => m.id !== id));
     } finally { setDeleting(null); }
+  }
+
+  // Publish/unpublish reuses the existing recipe publish endpoint — a meal is a
+  // canonical, so the same route works. Publishing is gated on having ≥1 component
+  // (an empty published meal would be a broken public page).
+  async function handleTogglePublish(id: string, current: boolean, componentCount: number) {
+    if (!current && componentCount < 1) return;   // can't publish an empty meal
+    setToggling(id);
+    try {
+      await fetch(`/api/my/recipes/${id}/publish`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ publish: !current }),
+      });
+      setMeals(prev => prev.map(m => m.id === id ? { ...m, isPublished: !current } : m));
+    } finally { setToggling(null); }
   }
 
   function compositionLabel(m: MyMeal): string {
@@ -126,7 +142,7 @@ export default function MyMealsPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12 }}>
           <thead>
             <tr style={{ background: 'var(--surface-hover)' }}>
-              <TH>Meal</TH><TH>Composition</TH><TH>Cuisine</TH><TH last>Actions</TH>
+              <TH>Meal</TH><TH>Composition</TH><TH>Cuisine</TH><TH>Status</TH><TH last>Actions</TH>
             </tr>
           </thead>
           <tbody>
@@ -138,6 +154,17 @@ export default function MyMealsPage() {
                 </TD>
                 <TD mono>{compositionLabel(m)}</TD>
                 <TD mono>{m.cuisine ?? '—'}</TD>
+                <TD>
+                  <span style={{
+                    ...MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.1em',
+                    padding: '2px 8px', border: B,
+                    borderColor: m.isPublished ? 'var(--accent)' : 'var(--border)',
+                    color: m.isPublished ? 'var(--accent)' : 'var(--muted)',
+                    background: m.isPublished ? 'var(--accent-subtle)' : 'transparent',
+                  }}>
+                    {m.isPublished ? 'Published' : 'Draft'}
+                  </span>
+                </TD>
                 <TD last>
                   <div style={{ display: 'flex', gap: 2 }}>
                     <Link href={`/my/meals/${m.id}/recipe`} title="View unified recipe"
@@ -150,6 +177,16 @@ export default function MyMealsPage() {
                       className="hover:text-[var(--accent)] transition-colors">
                       <Pencil size={12} strokeWidth={1.5} />
                     </Link>
+                    {/* Publish / Unpublish — disabled (with reason) for empty meals */}
+                    <button onClick={() => handleTogglePublish(m.id, m.isPublished, m.componentCount)}
+                      disabled={toggling === m.id || (!m.isPublished && m.componentCount < 1)}
+                      title={m.isPublished ? 'Unpublish' : (m.componentCount < 1 ? 'Add a dish before publishing' : 'Publish')}
+                      style={{ padding: 6, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+                      className="hover:text-[var(--accent)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                      {toggling === m.id
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : m.isPublished ? <EyeOff size={12} strokeWidth={1.5} /> : <Eye size={12} strokeWidth={1.5} />}
+                    </button>
                     {confirmDelete === m.id ? (
                       <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                         <button onClick={() => setConfirmDelete(null)}
