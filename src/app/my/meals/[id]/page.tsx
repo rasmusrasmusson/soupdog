@@ -82,6 +82,10 @@ export default function MealEditorPage() {
           })),
         }),
       });
+      // Rebuild the materialised unified recipe from the saved components. Awaited
+      // so that navigating to the recipe view shows the fresh merge. Best-effort:
+      // a failed build never blocks the save (the recipe view falls back to L0).
+      try { await fetch(`/api/my/meals/${id}/build`, { method: 'POST' }); } catch { /* non-fatal */ }
       if (thenGo) router.push(thenGo);
     } finally { setSaving(false); }
   }

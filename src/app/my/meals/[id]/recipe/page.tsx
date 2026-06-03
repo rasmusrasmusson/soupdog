@@ -26,11 +26,27 @@ interface Component {
   note: string | null; totalTimeMinutes: number | null; steps: Step[];
 }
 interface CombinedIng { name: string; quantityValue: number | null; quantityUnit: string | null; mixedUnits: boolean }
+interface MergedStep {
+  id: string; dishTitle: string; dishCanonicalId: string; group: string | null;
+  type: 'human' | 'machine' | 'passive' | 'hold';
+  instruction: string; durationSeconds: number; temperatureCelsius: number | null;
+  ingredients: StepIng[];
+  startOffsetSeconds: number; endOffsetSeconds: number; isHold: boolean; meanwhile: boolean;
+}
+interface MergedPayload {
+  totalSeconds: number;
+  scheduled: MergedStep[];
+  hasDurations: boolean;
+}
 interface MealRecipe {
   id: string; slug: string; title: string; servings: number | null;
   approxTotalMinutes: number | null; approxActiveMinutes: number | null;
   components: Component[]; combinedIngredients: CombinedIng[];
+  merged: MergedPayload | null;
+  mergedTotalMinutes: number | null;
 }
+
+type ViewMode = 'cook' | 'sections' | 'separate';
 
 const MONO = { fontFamily: 'var(--font-mono)' } as const;
 const SERIF = { fontFamily: 'var(--font-serif, Georgia, serif)' } as const;
@@ -48,7 +64,7 @@ export default function MealRecipePage() {
   const id = params?.id as string;
   const [data, setData] = useState<MealRecipe | null>(null);
   const [loading, setLoading] = useState(true);
-  const [separate, setSeparate] = useState(false);
+  const [mode, setMode] = useState<ViewMode>('cook');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,6 +85,7 @@ export default function MealRecipePage() {
   }
 
   const empty = data.components.length === 0;
+  const hasMerge = !!(data.merged && (data.merged.scheduled?.length ?? 0) > 0);
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-10">
@@ -86,12 +103,17 @@ export default function MealRecipePage() {
       <h1 style={{ ...SERIF, fontSize: 34, color: 'var(--fg)', marginBottom: 8, fontWeight: 400 }}>{data.title}</h1>
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 4, letterSpacing: '0.04em' }}>
         {data.servings != null && <span>Serves {data.servings}</span>}
-        {data.approxTotalMinutes != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={11} /> ~{data.approxTotalMinutes} min total</span>}
+        {hasMerge && data.mergedTotalMinutes != null
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={11} /> {data.mergedTotalMinutes} min, start to serve</span>
+          : data.approxTotalMinutes != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={11} /> ~{data.approxTotalMinutes} min total</span>}
         <span>{data.components.length} component{data.components.length !== 1 ? 's' : ''}</span>
       </div>
-      <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 24, maxWidth: 520, lineHeight: 1.6 }}>
-        Times are approximate — this view lists the dishes together; smart scheduling that overlaps and shares prep is coming.
-      </p>
+      {!hasMerge && (
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 24, maxWidth: 520, lineHeight: 1.6 }}>
+          Re-save this meal in the editor to generate the cook-together plan.
+        </p>
+      )}
+      {hasMerge && <div style={{ marginBottom: 20 }} />}
 
       {empty ? (
         <div style={{ border: `1px dashed var(--border)`, padding: '40px 24px', textAlign: 'center', color: 'var(--muted)' }}>
@@ -100,55 +122,154 @@ export default function MealRecipePage() {
         </div>
       ) : (
         <>
-          {/* Toggle */}
+          {/* View-mode toggle */}
           <div style={{ display: 'inline-flex', border: B, borderRadius: 7, overflow: 'hidden', marginBottom: 28 }}>
-            <button onClick={() => setSeparate(false)} style={toggle(!separate)}>Together</button>
-            <button onClick={() => setSeparate(true)} style={toggle(separate)}>Dishes separately</button>
+            {hasMerge && <button onClick={() => setMode('cook')} style={toggle(mode === 'cook')}>Cook together</button>}
+            <button onClick={() => setMode('sections')} style={toggle(mode === 'sections')}>By dish</button>
+            <button onClick={() => setMode('separate')} style={toggle(mode === 'separate')}>Dishes separately</button>
           </div>
 
-          {!separate && (
-            <section style={{ marginBottom: 36 }}>
-              <SectionTitle>Everything you need</SectionTitle>
-              <div style={{ borderTop: B }}>
-                {data.combinedIngredients.map((ing, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 2px', borderBottom: B }}>
-                    <span style={{ fontSize: 14.5, color: 'var(--fg)' }}>{ing.name}</span>
-                    <span style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
-                      {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
+          {/* ── COOK TOGETHER (L1 timeline) ── */}
+          {mode === 'cook' && hasMerge && (
+            <>
+              <section style={{ marginBottom: 30 }}>
+                <SectionTitle>Everything you need</SectionTitle>
+                <div style={{ borderTop: B }}>
+                  {data.combinedIngredients.map((ing, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 2px', borderBottom: B }}>
+                      <span style={{ fontSize: 14.5, color: 'var(--fg)' }}>{ing.name}</span>
+                      <span style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
+                        {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <CookTimeline merged={data.merged!} />
+            </>
           )}
 
-          {/* Components as labelled sections */}
-          {data.components.map(c => (
-            <section key={c.componentId} style={{ marginBottom: 40 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-                <h2 style={{ ...SERIF, fontSize: 23, color: 'var(--fg)', fontWeight: 400 }}>
-                  {c.slug ? <Link href={`/recipes/${c.slug}`} style={{ color: 'inherit', textDecoration: 'none' }} className="hover:text-[var(--accent)]">{c.title}</Link> : c.title}
-                </h2>
-                <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#b3b0a8', border: B, padding: '2px 8px', borderRadius: 999 }}>
-                  {TYPE_LABEL[c.type]}
-                </span>
-              </div>
-              <div style={{ ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 16 }}>
-                {[c.cuisine, c.totalTimeMinutes ? `${c.totalTimeMinutes} min` : null,
-                  (c.servingsTarget ?? c.baseServings) ? `serves ${c.servingsTarget ?? c.baseServings}` : null]
-                  .filter(Boolean).join(' · ')}
-              </div>
+          {/* ── BY DISH (L0 sections + combined ingredients) ── */}
+          {(mode === 'sections' || (mode === 'cook' && !hasMerge)) && (
+            <>
+              <section style={{ marginBottom: 36 }}>
+                <SectionTitle>Everything you need</SectionTitle>
+                <div style={{ borderTop: B }}>
+                  {data.combinedIngredients.map((ing, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 2px', borderBottom: B }}>
+                      <span style={{ fontSize: 14.5, color: 'var(--fg)' }}>{ing.name}</span>
+                      <span style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
+                        {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              {data.components.map(c => <DishSection key={c.componentId} c={c} showIngredients={false} />)}
+            </>
+          )}
 
-              {separate && (
-                <ComponentIngredientList steps={c.steps} />
-              )}
-
-              <StepGroups steps={c.steps} />
-            </section>
-          ))}
+          {/* ── DISHES SEPARATELY (per-dish, full) ── */}
+          {mode === 'separate' && (
+            data.components.map(c => <DishSection key={c.componentId} c={c} showIngredients={true} />)
+          )}
         </>
       )}
     </div>
+  );
+}
+
+// One dish rendered as a labelled section (used by "By dish" and "Separately").
+function DishSection({ c, showIngredients }: { c: Component; showIngredients: boolean }) {
+  return (
+    <section style={{ marginBottom: 40 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <h2 style={{ ...SERIF, fontSize: 23, color: 'var(--fg)', fontWeight: 400 }}>
+          {c.slug ? <Link href={`/recipes/${c.slug}`} style={{ color: 'inherit', textDecoration: 'none' }} className="hover:text-[var(--accent)]">{c.title}</Link> : c.title}
+        </h2>
+        <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#b3b0a8', border: B, padding: '2px 8px', borderRadius: 999 }}>
+          {TYPE_LABEL[c.type]}
+        </span>
+      </div>
+      <div style={{ ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 16 }}>
+        {[c.cuisine, c.totalTimeMinutes ? `${c.totalTimeMinutes} min` : null,
+          (c.servingsTarget ?? c.baseServings) ? `serves ${c.servingsTarget ?? c.baseServings}` : null]
+          .filter(Boolean).join(' · ')}
+      </div>
+      {showIngredients && <ComponentIngredientList steps={c.steps} />}
+      <StepGroups steps={c.steps} />
+    </section>
+  );
+}
+
+// ── The L1 cook-together timeline ──────────────────────────────────────────
+// One ordered list of steps across all dishes, scheduled backward from serving.
+// Each step shows which dish it belongs to, a relative "start" label, duration/
+// temp, and a "meanwhile" tag when it fills another dish's passive window. Holds
+// (keep-warm) render distinctly.
+function CookTimeline({ merged }: { merged: MergedPayload }) {
+  const steps = merged.scheduled ?? [];
+  if (steps.length === 0) {
+    return <div style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No timed steps to schedule.</div>;
+  }
+  const fmtOffset = (s: number) => {
+    if (s <= 0) return 'at serving';
+    const h = Math.floor(s / 3600), m = Math.round((s % 3600) / 60);
+    if (h > 0) return `${h}h${m.toString().padStart(2, '0')} before`;
+    if (m > 0) return `${m} min before`;
+    return 'just before';
+  };
+  let n = 0;
+  return (
+    <section>
+      <SectionTitle>Cook it together</SectionTitle>
+      <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 16, maxWidth: 540, lineHeight: 1.6 }}>
+        One plan for the whole meal, timed so everything is ready together. Steps from different dishes are interleaved — start each when its time comes.
+      </p>
+      <div style={{ borderTop: B }}>
+        {steps.map((s) => {
+          const isHold = s.type === 'hold';
+          const nonBlocking = s.type === 'machine' || s.type === 'passive';
+          if (!isHold) n += 1;
+          return (
+            <div key={s.id} style={{
+              display: 'flex', gap: 14, padding: '12px 0', borderBottom: B,
+              background: isHold ? 'var(--accent-subtle)' : 'transparent',
+            }}>
+              <span style={{ ...MONO, fontSize: 12, color: '#b3b0a8', flexShrink: 0, width: 26, textAlign: 'right' }}>
+                {isHold ? '⏸' : n}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 3 }}>
+                  <span style={{ ...MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)' }}>
+                    {s.dishTitle}
+                  </span>
+                  {s.meanwhile && !isHold && (
+                    <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)', border: B, padding: '1px 6px', borderRadius: 999 }}>
+                      meanwhile
+                    </span>
+                  )}
+                  {nonBlocking && (
+                    <span style={{ ...MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                      hands-free
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 14.5, color: 'var(--fg)', lineHeight: 1.6 }}>{s.instruction}</div>
+                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 5, ...MONO, fontSize: 10.5, color: 'var(--muted)' }}>
+                  <span>{fmtOffset(s.startOffsetSeconds)}</span>
+                  {s.temperatureCelsius ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Flame size={10} /> {s.temperatureCelsius}°C</span> : null}
+                  {s.durationSeconds ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Clock size={10} /> {Math.round(s.durationSeconds / 60)} min</span> : null}
+                  {s.ingredients?.map((ing, k) => (
+                    <span key={k}>{ing.name}{ing.quantityValue ? ` (${fmtQty(ing.quantityValue, ing.quantityUnit)})` : ''}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 

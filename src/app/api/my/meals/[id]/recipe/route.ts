@@ -132,6 +132,15 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       mixedUnits:    x.mixed,
     }));
 
+  // Materialised L1 merge, if built (the editor builds it on save). The page
+  // renders this as the "Cook together" timeline; if absent, it falls back to
+  // the L0 sectioned view below.
+  const { data: mergedRow } = await db
+    .from('meal_merged_recipe')
+    .select('payload, total_seconds, built_at')
+    .eq('meal_canonical_id', id)
+    .single();
+
   return NextResponse.json({
     id:        meal.id,
     slug:      meal.slug,
@@ -144,5 +153,8 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
     approxActiveMinutes: totalActiveSeconds ? Math.round(totalActiveSeconds / 60) : null,
     components,
     combinedIngredients,
+    // L1 timeline (null if not built yet)
+    merged: mergedRow?.payload ?? null,
+    mergedTotalMinutes: mergedRow?.total_seconds ? Math.round(mergedRow.total_seconds / 60) : null,
   });
 }
