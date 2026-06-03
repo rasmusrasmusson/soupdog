@@ -87,9 +87,9 @@ body {
    ─────────────────────────────────────────────────────────────────────────── */
 
 /* Screen: hide the print-only cookbook layout entirely (it renders only on paper).
-   Use high-specificity + !important so it can't leak onto the web page (this was
-   the QR-showing-on-web bug). */
-.print-only { display: none !important; }
+   Doubled-class selector raises specificity above Tailwind's single-class display
+   utilities (.flex/.block/.grid), which otherwise tie and win on source order. */
+.print-only.print-only { display: none !important; }
 
 @media print {
   /* Page box: clean margins on ANY paper (A4 or Letter both work). The browser
@@ -100,9 +100,12 @@ body {
     margin: 16mm 15mm;
   }
 
-  /* On paper: hide the SCREEN view, show the PRINT cookbook layout. */
-  .screen-only { display: none !important; }
-  .print-only { display: block !important; }
+  /* On paper: hide the SCREEN view, show the PRINT cookbook layout.
+     Doubled-class selectors so these beat Tailwind's .flex/.h-full/.grid display
+     utilities (equal single-class specificity would otherwise let Tailwind win on
+     source order — this was why the web view kept printing alongside the layout). */
+  .screen-only.screen-only { display: none !important; }
+  .print-only.print-only { display: block !important; }
 
   /* Two-column cookbook body: ingredients (narrow) + method (wide). */
   .recipe-print-cols {
@@ -184,12 +187,4 @@ body {
 
   /* Tables print with their content, not as horizontal-scroll boxes. */
   .table-responsive { overflow: visible !important; border: none !important; }
-}
-
-/* Print: neutralise full-height flex + inner scroll containers used by the
-   recipe view, so content flows naturally across pages instead of being clipped
-   to a viewport-height scroll box. */
-@media print {
-  .flex.h-full { display: block !important; height: auto !important; }
-  .overflow-y-auto { overflow: visible !important; height: auto !important; max-height: none !important; }
 }
