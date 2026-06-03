@@ -25,13 +25,17 @@ You are given a PRE-COMPUTED, ORDERED schedule of steps drawn from several dishe
 interleaved and timed so everything finishes together. Your ONLY job is to rewrite this exact
 schedule as one flowing, natural cooking method that a home cook can follow.
 
-STRICT RULES:
-- Follow the GIVEN ORDER of steps exactly. Do not reorder.
-- Do not invent new steps, ingredients, temperatures, or times. Use only what is given.
-- Do not change any timing or temperature. You may restate a given time/temp in words.
-- Weave the steps into a coherent narrative with natural connective phrases when one step
-  runs during another's hands-free window (e.g. "While the chicken roasts, ..."). The schedule
-  marks which steps are hands-free and which run "meanwhile" — use that to phrase overlaps.
+STRICT RULES — these are absolute:
+- You are given N steps, each with an "order" number. Output EXACTLY N steps, ONE per input
+  step, in the SAME order. Never merge two input steps into one, never split one into two,
+  and NEVER repeat a step. Your output step count MUST equal the input step count.
+- Each output step MUST carry the same "order" number as the input step it rewrites (echo it
+  back as "n"). Step n in your output is a rewrite of the input step with order n — nothing else.
+- Do not reorder. Do not invent new steps, ingredients, temperatures, or times. Use only what
+  is given. You may restate a given time/temp in words.
+- Weave in natural connective phrases when a step runs during another's hands-free window
+  (e.g. "While the chicken roasts, ..."). The schedule marks handsFree / meanwhile — use it to
+  phrase overlaps. But connective phrasing must NOT change the number of steps.
 - Keep each step recognisably one instruction. Be concise and warm, not chatty. No preamble,
   no commentary about the meal being clever. British English.
 - Keep-warm/holding steps must be stated plainly as their own step.
@@ -40,8 +44,8 @@ Respond with ONLY a JSON object, no markdown:
 {"intro": "one short sentence orienting the cook (optional, may be empty)",
  "steps": [{"n": 1, "text": "the instruction as flowing prose"}, ...],
  "outro": "one short serving sentence (optional, may be empty)"}
-The number of steps in your output should match the number of NON-HOLD cooking steps given,
-plus any hold steps, in the same order. Number them sequentially from 1.`;
+Output exactly as many step objects as you were given, numbered to match each input step's
+"order". Do not add, drop, or duplicate any.`;
 
 function buildUserPayload(payload: any): string {
   const steps = (payload?.scheduled ?? []).map((s: any, i: number) => ({
@@ -126,6 +130,27 @@ export async function POST(_: NextRequest, context: { params: Promise<{ id: stri
   if (!narrative || !Array.isArray(narrative.steps)) {
     return NextResponse.json({ error: 'bad_shape', message: 'Narrative missing steps.' }, { status: 500 });
   }
+
+  // FAITHFULNESS CHECK: the narrative must have exactly one step per L1 step. The
+  // L1 timeline is the source of truth (deterministic, verified correct). If the
+  // model duplicated, dropped, or merged steps (count mismatch), the narrative is
+  // not trustworthy — reject WITHOUT caching so the client falls back to the
+  // correct L1 timeline (it already renders CookTimeline on narrative failure).
+  const expected = steps.length;
+  const got = narrative.steps.length;
+  if (got !== expected) {
+    return NextResponse.json({
+      error: 'count_mismatch',
+      message: `Narrative had ${got} steps but the schedule has ${expected}; not caching.`,
+    }, { status: 502 });
+  }
+
+  // Normalise numbering to the canonical 1..N order regardless of what the model
+  // echoed, so the displayed numbers always match the schedule order.
+  narrative.steps = narrative.steps.map((s: any, i: number) => ({
+    n: i + 1,
+    text: typeof s?.text === 'string' ? s.text : String(s?.text ?? ''),
+  }));
 
   // Cache it against the timeline it was built from.
   await db.from('meal_merged_recipe')
