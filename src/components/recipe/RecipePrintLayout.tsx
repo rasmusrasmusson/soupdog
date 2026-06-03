@@ -85,7 +85,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
   return (
     <div className="print-only recipe-print" style={{ ...SANS, color: '#111', background: '#fff' }}>
       {/* ── Header ─────────────────────────────────────────────── */}
-      <header style={{ borderBottom: '2px solid #1a1a1a', paddingBottom: 12, marginBottom: 16 }}>
+      <div style={{ borderBottom: '2px solid #1a1a1a', paddingBottom: 12, marginBottom: 16 }}>
         <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.22em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 6 }}>
           {recipe.cuisine ? `${recipe.cuisine} · Recipe` : 'Recipe'}
         </div>
@@ -105,12 +105,12 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
           {recipe.activeTimeSeconds ? <OverviewItem icon="active" label="Active" value={formatDuration(recipe.activeTimeSeconds)} /> : null}
           <OverviewItem icon="difficulty" label="Level" value={recipe.difficulty} />
         </div>
-      </header>
+      </div>
 
       {/* ── Body: two columns ──────────────────────────────────── */}
       <div className="recipe-print-cols">
         {/* Left: ingredients */}
-        <aside className="recipe-print-ingredients">
+        <div className="recipe-print-ingredients">
           <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 8, breakAfter: 'avoid' }}>
             Ingredients
           </h2>
@@ -127,10 +127,10 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
               </li>
             ))}
           </ul>
-        </aside>
+        </div>
 
         {/* Right: method as flowing numbered blocks */}
-        <main className="recipe-print-method">
+        <div className="recipe-print-method">
           <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 8, breakAfter: 'avoid' }}>
             Method
           </h2>
@@ -168,7 +168,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
               })}
             </section>
           ))}
-        </main>
+        </div>
       </div>
 
       {/* ── Nutrition (compact) ────────────────────────────────── */}
@@ -191,7 +191,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
       ) : null}
 
       {/* ── Tail: QR (modest, at the end) + footer logo ────────── */}
-      <footer style={{ marginTop: 22, paddingTop: 12, borderTop: '1px solid #1a1a1a', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
+      <div style={{ marginTop: 22, paddingTop: 12, borderTop: '1px solid #1a1a1a', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 16 }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/wordmark.svg" alt="Soupdog" style={{ height: 18, width: 'auto', opacity: 0.85 }} />
         {url ? (
@@ -200,7 +200,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
             <QRCodeSVG value={url} size={48} level="M" includeMargin={false} />
           </div>
         ) : null}
-      </footer>
+      </div>
     </div>
   );
 }
