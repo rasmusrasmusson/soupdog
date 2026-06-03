@@ -14,10 +14,9 @@ export async function GET(req: NextRequest) {
   const db = supabase as any;
 
   const q = (req.nextUrl.searchParams.get('q') || '').trim().toLowerCase();
-  // Optional composition-level filter. When ?level=dish is passed (the meal editor
-  // does this), only dishes are returned — so meals don't appear as addable
-  // components inside another meal. Absent = unchanged behaviour (the meal-plan
-  // picker passes nothing and still sees everything).
+  // Optional composition-level filter. ?level=dish (the meal editor passes this)
+  // returns only dishes, so meals never appear as addable components inside a
+  // meal. Absent = no level restriction (the Plan picker sees everything, as before).
   const level = (req.nextUrl.searchParams.get('level') || '').trim();
 
   let query = db
