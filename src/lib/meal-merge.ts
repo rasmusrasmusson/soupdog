@@ -321,11 +321,34 @@ export function normalizeStepType(s: { step_type?: string; appliance_settings?: 
 // both the build and recipe routes). Centralised so the source hash is computed
 // from identical data on both sides.
 export function dishesFromComponentRows(comps: any[]): MergeInputDish[] {
-  return (comps ?? []).map((c: any) => {
+  // Dedupe by component canonical id FIRST. If a meal accidentally links the same
+  // dish more than once (e.g. a component added twice during editing), we must not
+  // schedule it twice — that was the cause of duplicated step groups (e.g. the
+  // sambol appearing twice) in the merged timeline. Keep the first occurrence.
+  const seenCanon = new Set<string>();
+  const uniqueComps = (comps ?? []).filter((c: any) => {
+    const key = c?.component_canonical_id;
+    if (!key) return true;            // keep rows without an id (shouldn't happen)
+    if (seenCanon.has(key)) return false;
+    seenCanon.add(key);
+    return true;
+  });
+
+  return uniqueComps.map((c: any) => {
     const can = Array.isArray(c.recipe_canonicals) ? c.recipe_canonicals[0] : c.recipe_canonicals;
     const cv = can && (Array.isArray(can.recipe_versions) ? can.recipe_versions[0] : can.recipe_versions);
     const vIngs = cv?.version_ingredients ?? [];
-    const steps = (cv?.version_steps ?? [])
+    // Dedupe step rows by id (defensive: a nested select or a bad save could
+    // return the same step twice → duplicated steps in the merged timeline).
+    const rawSteps = (cv?.version_steps ?? []);
+    const seenStep = new Set<string>();
+    const dedupedSteps = rawSteps.filter((s: any) => {
+      if (s?.id == null) return true;
+      if (seenStep.has(s.id)) return false;
+      seenStep.add(s.id);
+      return true;
+    });
+    const steps = dedupedSteps
       .slice()
       .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
       .map((s: any) => ({

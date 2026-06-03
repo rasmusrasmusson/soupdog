@@ -464,6 +464,33 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
     return true;
   });
 
+  // Recipe-level tool list. Tools usually live per-step in applianceSettings
+  // (applianceId → APPLIANCES name, and/or stepTools[].name), NOT in the top-level
+  // recipe.equipment array — so derive a deduped list across all steps for a
+  // mise-en-place "Tools" section. Falls back to recipe.equipment names too.
+  const derivedTools: string[] = (() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const add = (t?: string) => {
+      const name = (t ?? '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key); out.push(name);
+    };
+    (recipe.equipment ?? []).forEach(e => add(e.name));
+    recipe.steps.forEach(s => {
+      const set = s.applianceSettings as { applianceId?: string; stepTools?: { name?: string }[] } | undefined;
+      if (set?.applianceId) {
+        const appliance = APPLIANCES.find(a => a.id === set.applianceId);
+        add(appliance?.name ?? appliance?.model);
+      }
+      (set?.stepTools ?? []).forEach(t => add(t?.name));
+      (s.tools ?? []).forEach(add);
+    });
+    return out;
+  })();
+
   const groups: { label: string; steps: (RecipeStep & { globalIndex: number })[] }[] = [];
   recipe.steps.forEach((step, i) => {
     const label = step.group?.trim() || '';
@@ -587,8 +614,8 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             </div>
           </section>
 
-          {/* Equipment */}
-          {recipe.equipment && recipe.equipment.length > 0 && (
+          {/* Equipment / Tools */}
+          {recipe.equipment && recipe.equipment.length > 0 ? (
             <section>
               <SectionHeader title="Equipment" />
               <div className="overflow-x-auto">
@@ -607,7 +634,18 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
                 </table>
               </div>
             </section>
-          )}
+          ) : derivedTools.length > 0 ? (
+            <section>
+              <SectionHeader title="Tools" meta={`${derivedTools.length} items`} />
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginTop: 4 }}>
+                {derivedTools.map((t) => (
+                  <span key={t} style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)' }}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {/* Procedure */}
           <section>
