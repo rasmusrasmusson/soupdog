@@ -44,6 +44,8 @@ interface MealRecipe {
   components: Component[]; combinedIngredients: CombinedIng[];
   merged: MergedPayload | null;
   mergedTotalMinutes: number | null;
+  mergeMissing?: boolean;
+  mergeStale?: boolean;
 }
 
 type ViewMode = 'cook' | 'sections' | 'separate';
@@ -71,17 +73,40 @@ export default function MealRecipePage() {
   const [data, setData] = useState<MealRecipe | null>(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState<ViewMode>('cook');
+  const [building, setBuilding] = useState(false);   // auto-rebuild in progress
 
   // L2 narrative: lazily fetched on first entry to cook mode, then cached client-side.
   const [narrative, setNarrative] = useState<Narrative | null>(null);
   const [narrativeState, setNarrativeState] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
   const [showSteps, setShowSteps] = useState(false);   // toggle: prose vs the raw L1 timeline
 
-  const load = useCallback(async () => {
+  // Load the recipe. If the cook-together plan is missing or stale (the meal
+  // changed since it was last built), rebuild it automatically and reload — so
+  // the user never has to manually "merge"; opening the recipe always shows a
+  // current plan. The rebuild is deterministic and fast (no AI); the L2 narrative
+  // then regenerates lazily as before.
+  const load = useCallback(async (allowAutoBuild = true) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/my/meals/${id}/recipe`);
-      if (res.ok) setData(await res.json());
+      if (!res.ok) return;
+      const d = await res.json();
+      setData(d);
+
+      if (allowAutoBuild && (d.mergeMissing || d.mergeStale)) {
+        // Plan is out of date — rebuild it, then reload once (without re-triggering
+        // a build, to avoid any loop). Reset the narrative so it regenerates for
+        // the fresh plan.
+        setBuilding(true);
+        setNarrative(null);
+        setNarrativeState('idle');
+        try {
+          await fetch(`/api/my/meals/${id}/build`, { method: 'POST' });
+          const res2 = await fetch(`/api/my/meals/${id}/recipe`);
+          if (res2.ok) setData(await res2.json());
+        } catch { /* fall back to whatever we have */ }
+        finally { setBuilding(false); }
+      }
     } finally { setLoading(false); }
   }, [id]);
   useEffect(() => { if (id) load(); }, [id, load]);
@@ -142,12 +167,17 @@ export default function MealRecipePage() {
           : data.approxTotalMinutes != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={11} /> ~{data.approxTotalMinutes} min total</span>}
         <span>{data.components.length} component{data.components.length !== 1 ? 's' : ''}</span>
       </div>
-      {!hasMerge && (
-        <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 24, maxWidth: 520, lineHeight: 1.6 }}>
-          Re-save this meal in the editor to generate the cook-together plan.
+      {building && (
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 24, maxWidth: 520, lineHeight: 1.6, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Loader2 size={12} className="animate-spin" /> Preparing your cook-together plan…
         </p>
       )}
-      {hasMerge && <div style={{ marginBottom: 20 }} />}
+      {!building && !hasMerge && !empty && (
+        <p style={{ fontSize: 11.5, color: 'var(--muted)', fontStyle: 'italic', marginBottom: 24, maxWidth: 520, lineHeight: 1.6 }}>
+          Add timed steps to your dishes to generate a cook-together plan.
+        </p>
+      )}
+      {!building && hasMerge && <div style={{ marginBottom: 20 }} />}
 
       {empty ? (
         <div style={{ border: `1px dashed var(--border)`, padding: '40px 24px', textAlign: 'center', color: 'var(--muted)' }}>

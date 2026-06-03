@@ -11,6 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { sourceHashForDishes, dishesFromComponentRows } from '@/lib/meal-merge';
 
 export async function GET(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
@@ -43,7 +44,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
           id, title, cuisine, total_time_seconds, active_time_seconds, base_servings,
           version_steps (
             id, order_index, step_type, group_label, instruction,
-            duration_seconds, temperature_celsius
+            duration_seconds, temperature_celsius, appliance_settings
           ),
           version_ingredients (
             id, order_index, quantity_value, quantity_unit, food_state, prep_note, optional, step_id,
@@ -132,14 +133,21 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       mixedUnits:    x.mixed,
     }));
 
-  // Materialised L1 merge, if built (the editor builds it on save). The page
-  // renders this as the "Cook together" timeline; if absent, it falls back to
-  // the L0 sectioned view below.
+  // Materialised L1 merge, if built. The page renders this as the "Cook together"
+  // timeline. We also report whether it's STALE (the meal's components/timings
+  // changed since it was built) or MISSING, so the page can auto-rebuild on view
+  // — the user never has to manually "merge".
   const { data: mergedRow } = await db
     .from('meal_merged_recipe')
-    .select('payload, total_seconds, built_at')
+    .select('payload, total_seconds, built_at, source_hash')
     .eq('meal_canonical_id', id)
     .single();
+
+  // Current hash from live components (identical computation to the build route).
+  const currentHash = sourceHashForDishes(dishesFromComponentRows(comps ?? []));
+  const hasComponents = (comps ?? []).length > 0;
+  const mergeMissing = hasComponents && !mergedRow?.payload;
+  const mergeStale = hasComponents && !!mergedRow?.payload && mergedRow.source_hash !== currentHash;
 
   return NextResponse.json({
     id:        meal.id,
@@ -153,8 +161,10 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
     approxActiveMinutes: totalActiveSeconds ? Math.round(totalActiveSeconds / 60) : null,
     components,
     combinedIngredients,
-    // L1 timeline (null if not built yet)
+    // L1 timeline (null if not built yet) + freshness flags for auto-rebuild.
     merged: mergedRow?.payload ?? null,
     mergedTotalMinutes: mergedRow?.total_seconds ? Math.round(mergedRow.total_seconds / 60) : null,
+    mergeMissing,
+    mergeStale,
   });
 }

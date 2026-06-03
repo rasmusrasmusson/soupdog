@@ -296,3 +296,61 @@ export function offsetToClock(offsetSeconds: number, serveDate?: Date | null): s
   if (h > 0) return `T\u2212${h}h${m.toString().padStart(2, '0')}`;
   return `T\u2212${m}m`;
 }
+
+// Stable source hash for a meal's dishes — used to detect when a stored merge is
+// stale (the meal's components or their step timings changed since it was built).
+// Build route stores this; the recipe route recomputes it from current data and
+// compares, so the cook-together plan can auto-rebuild on view when out of date.
+// MUST stay identical across both callers — hence it lives here, not duplicated.
+export function sourceHashForDishes(dishes: MergeInputDish[]): string {
+  return JSON.stringify(
+    dishes.map(d => [d.canonicalId, d.type, d.steps.map(s => [s.id, s.durationSeconds, s.type])])
+  );
+}
+
+// Normalize a raw version_step row's type to a MergeStepType. Shared so the build
+// route and the staleness check in the recipe route classify steps identically.
+export function normalizeStepType(s: { step_type?: string; appliance_settings?: any }): MergeStepType {
+  const t = s.step_type;
+  if (t === 'machine' || t === 'passive' || t === 'human') return t;
+  if (s.appliance_settings) return 'machine';   // appliance → non-blocking
+  return 'human';
+}
+
+// Build the merge-shaped dishes array from raw meal_component rows (as selected by
+// both the build and recipe routes). Centralised so the source hash is computed
+// from identical data on both sides.
+export function dishesFromComponentRows(comps: any[]): MergeInputDish[] {
+  return (comps ?? []).map((c: any) => {
+    const can = Array.isArray(c.recipe_canonicals) ? c.recipe_canonicals[0] : c.recipe_canonicals;
+    const cv = can && (Array.isArray(can.recipe_versions) ? can.recipe_versions[0] : can.recipe_versions);
+    const vIngs = cv?.version_ingredients ?? [];
+    const steps = (cv?.version_steps ?? [])
+      .slice()
+      .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+      .map((s: any) => ({
+        id: s.id,
+        dishTitle: cv?.title ?? '(untitled)',
+        dishCanonicalId: c.component_canonical_id,
+        group: (s.group_label && s.group_label !== '__default__') ? s.group_label : null,
+        type: normalizeStepType(s),
+        instruction: s.instruction ?? '',
+        durationSeconds: s.duration_seconds ?? 0,
+        temperatureCelsius: s.temperature_celsius ?? null,
+        ingredients: vIngs
+          .filter((vi: any) => vi.step_id === s.id)
+          .map((vi: any) => ({
+            name: vi.ingredients?.name ?? '',
+            quantityValue: vi.quantity_value ?? 0,
+            quantityUnit: vi.quantity_unit ?? 'g',
+            prep: vi.prep_note ?? null,
+          })),
+      }));
+    return {
+      canonicalId: c.component_canonical_id,
+      title: cv?.title ?? '(untitled)',
+      type: (c.component_type ?? 'dish') as 'dish' | 'side' | 'drink',
+      steps,
+    };
+  });
+}
