@@ -86,7 +86,9 @@ export async function POST(req: NextRequest) {
         canonical_id:        canonical.id,
         version_number:      1,
         title,
-        base_servings:       body.servings ?? null,
+        // base_servings is NOT-NULL on recipe_versions — never pass null. A new
+        // meal defaults to 4 covers; the user adjusts it in the editor.
+        base_servings:       body.servings ?? 4,
         difficulty:          'medium',
         total_time_seconds:  0,
         is_canonical_version: true,
