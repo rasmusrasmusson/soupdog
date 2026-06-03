@@ -2,7 +2,8 @@
 import React, { useState, useEffect, use } from 'react';
 import { formatDuration } from '@/lib/utils';
 import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
-import { PrintButton, PrintHeader } from '@/components/recipe/PrintRecipe';
+import { PrintButton } from '@/components/recipe/PrintRecipe';
+import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
 import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
@@ -495,11 +496,9 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
 
 
   return (
-    <div className="flex h-full">
+    <>
+    <div className="flex h-full screen-only">
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
-
-        {/* Print-only masthead (hidden on screen). */}
-        <PrintHeader title={recipe.title} subtitle={recipe.cuisine ?? undefined} url={typeof window !== 'undefined' ? window.location.href : undefined} />
 
         {/* Title + meta */}
         <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
@@ -820,6 +819,10 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
         </div>
       </div>
     </div>
+
+    {/* Dedicated cookbook print layout (renders only when printing). */}
+    <RecipePrintLayout recipe={recipe} url={typeof window !== 'undefined' ? window.location.href : undefined} />
+    </>
   );
 }
 

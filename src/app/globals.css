@@ -86,8 +86,10 @@ body {
    units so it reflows correctly on any paper.
    ─────────────────────────────────────────────────────────────────────────── */
 
-/* Screen: hide the print-only branding (shown only when printing). */
-.print-only { display: none; }
+/* Screen: hide the print-only cookbook layout entirely (it renders only on paper).
+   Use high-specificity + !important so it can't leak onto the web page (this was
+   the QR-showing-on-web bug). */
+.print-only { display: none !important; }
 
 @media print {
   /* Page box: clean margins on ANY paper (A4 or Letter both work). The browser
@@ -95,8 +97,24 @@ body {
      default for a vertical recipe and needs no setting from us. */
   @page {
     size: auto;
-    margin: 18mm 16mm;
+    margin: 16mm 15mm;
   }
+
+  /* On paper: hide the SCREEN view, show the PRINT cookbook layout. */
+  .screen-only { display: none !important; }
+  .print-only { display: block !important; }
+
+  /* Two-column cookbook body: ingredients (narrow) + method (wide). */
+  .recipe-print-cols {
+    display: grid;
+    grid-template-columns: 1fr 1.9fr;
+    gap: 26px;
+    align-items: start;
+  }
+  /* Ingredients column can repeat its heading is unnecessary; keep it from
+     breaking awkwardly but allow long lists to flow. */
+  .recipe-print-ingredients { break-inside: auto; }
+  .recipe-print-method { break-inside: auto; }
 
   /* Ink-friendly: white paper, near-black text, no decorative fills. */
   html, body {
@@ -134,11 +152,6 @@ body {
     max-width: none !important;
     margin: 0 !important;
     padding: 0 !important;
-  }
-
-  /* Show the print-only Soupdog wordmark at the top of the printout. */
-  .print-only {
-    display: block !important;
   }
 
   /* Surfaces/fills → flat white; coloured pills/badges → plain outlined text so
