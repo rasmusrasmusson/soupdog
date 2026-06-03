@@ -23,6 +23,7 @@
 
 import { QRCodeSVG } from 'qrcode.react';
 import { formatDuration } from '@/lib/utils';
+import { APPLIANCES } from '@/lib/appliances';
 import type { Recipe, RecipeStep } from '@/types';
 
 const SERIF = { fontFamily: "var(--font-serif, 'IBM Plex Serif', Georgia, serif)" } as const;
@@ -63,6 +64,35 @@ function fmtQty(value: number, unit: string): string {
   return unit ? `${n} ${unit}` : `${n}`;
 }
 
+// Temperature unit → short symbol ("celsius" → "C", "fahrenheit" → "F").
+function fmtTemp(t?: { value: number; unit: string }): string | null {
+  if (!t || t.value == null) return null;
+  const u = (t.unit || '').toLowerCase();
+  const sym = u.startsWith('c') ? 'C' : u.startsWith('f') ? 'F' : (t.unit || '');
+  return `${t.value}°${sym}`;
+}
+
+// Tool/appliance names used in a step. Mirrors the web ToolCell data model:
+// tools live in applianceSettings — an appliance (applianceId → APPLIANCES name)
+// and/or a stepTools[] array of { name }. (step.tools is not populated by the
+// page mapper, which is why the print Tools list was empty before.)
+function stepToolNames(step: RecipeStep): string[] {
+  const out: string[] = [];
+  const s = (step as { applianceSettings?: {
+    applianceId?: string;
+    stepTools?: { name?: string }[];
+  } }).applianceSettings;
+  if (s?.applianceId) {
+    const appliance = APPLIANCES.find((a: { id: string; model?: string; name?: string }) => a.id === s.applianceId);
+    const name = appliance?.name ?? appliance?.model;
+    if (name) out.push(name);
+  }
+  (s?.stepTools ?? []).forEach(t => { if (t?.name) out.push(t.name); });
+  // Fallback to step.tools if it ever gets populated.
+  (step.tools ?? []).forEach(t => { if (t) out.push(t); });
+  return out;
+}
+
 // Group steps by their section label (same logic as the web view).
 function groupSteps(steps: RecipeStep[]) {
   const groups: { label: string; steps: (RecipeStep & { idx: number })[] }[] = [];
@@ -82,9 +112,9 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
   const groups = groupSteps(recipe.steps);
   const showGroupTitles = groups.length > 1 || (groups[0]?.label ?? '') !== '';
 
-  // Unique tools across all steps (mise-en-place list). Prefer the recipe's
-  // equipment list if present; otherwise derive from per-step tools. Dedupe
-  // case-insensitively, preserve first-seen order.
+  // Unique tools across all steps (mise-en-place list). Combine the recipe's
+  // equipment list with per-step tools/appliances. Dedupe case-insensitively,
+  // preserve first-seen order.
   const tools: string[] = (() => {
     const seen = new Set<string>();
     const out: string[] = [];
@@ -96,7 +126,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
       seen.add(key); out.push(name);
     };
     (recipe.equipment ?? []).forEach(e => add((e as { name?: string }).name));
-    recipe.steps.forEach(s => (s.tools ?? []).forEach(add));
+    recipe.steps.forEach(s => stepToolNames(s).forEach(add));
     return out;
   })();
 
@@ -175,9 +205,9 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                 const stepIngs = (s.ingredients ?? [])
                   .map(id => ingById.get(id)).filter(Boolean) as Recipe['ingredients'];
                 const meta = [
-                  s.temperature ? `${s.temperature.value}°${s.temperature.unit || 'C'}` : null,
+                  fmtTemp(s.temperature),
                   s.durationSeconds ? formatDuration(s.durationSeconds) : null,
-                  (s.tools && s.tools.length) ? s.tools.join(', ') : null,
+                  (() => { const t = stepToolNames(s); return t.length ? t.join(', ') : null; })(),
                 ].filter(Boolean);
                 return (
                   <div key={s.id} style={{ display: 'flex', gap: 10, padding: '7px 0', breakInside: 'avoid' }}>
