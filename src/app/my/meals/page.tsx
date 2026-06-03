@@ -5,7 +5,7 @@
 // the two filtered views of the single recipe catalogue (Dishes is the other,
 // = the existing /my/recipes). Create a meal, then compose it in the editor.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Pencil, Trash2, BookOpen, Loader2, UtensilsCrossed } from 'lucide-react';
@@ -25,6 +25,7 @@ export default function MyMealsPage() {
   const [meals, setMeals] = useState<MyMeal[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const creatingRef = useRef(false);   // synchronous guard — state is async, this isn't
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
@@ -39,6 +40,8 @@ export default function MyMealsPage() {
   }, []);
 
   async function createMeal() {
+    if (creatingRef.current) return;   // hard guard against double-clicks (state updates are async)
+    creatingRef.current = true;
     setCreating(true);
     try {
       const res = await fetch('/api/my/meals', {
@@ -47,9 +50,19 @@ export default function MyMealsPage() {
       });
       if (res.ok) {
         const { id } = await res.json();
+        // Navigate into the editor. Keep `creating` true through the push so the
+        // button stays disabled and we don't flash back to the list. Do NOT reset
+        // creatingRef here — we're leaving the page.
         router.push(`/my/meals/${id}`);
+        return;
       }
-    } finally { setCreating(false); }
+      // Only reach here if the request failed — re-enable the button.
+      creatingRef.current = false;
+      setCreating(false);
+    } catch {
+      creatingRef.current = false;
+      setCreating(false);
+    }
   }
 
   async function handleDelete(id: string) {
