@@ -7,8 +7,11 @@ import { logAiUsage } from '@/lib/ai/anthropic';
 export const maxDuration = 300;
 
 // Sentinel written when the model declines to estimate an item (genuine
-// non-foods like goraka/pasta water). It is truthy JSON, so the row drops out
-// of the `nutrition_per_100g IS NULL` queue and is never re-processed.
+// non-foods like goraka/pasta water) OR when we can't recover a usable estimate
+// for it from a malformed response. It is truthy JSON, so the row drops out of
+// the `nutrition_per_100g IS NULL` queue and is never re-processed. Marking
+// rather than leaving NULL is what guarantees the queue always drains — a
+// permanently-unparseable item can never loop forever.
 const UNESTIMABLE = { estimated: false } as const;
 
 // Service-role client: server-only, bypasses RLS.
@@ -58,6 +61,58 @@ function normalizeNutrition(raw: any): Record<string, number> | null {
     if (n !== null) { out[k] = n; anyValue = true; }
   }
   return anyValue ? out : null;
+}
+
+// Strip markdown fences and surrounding prose, leaving the JSON object.
+function stripToJson(text: string): string {
+  let s = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  // If there's leading/trailing chatter, keep from the first { to the last }.
+  const first = s.indexOf('{');
+  const last = s.lastIndexOf('}');
+  if (first !== -1 && last !== -1 && last > first) s = s.slice(first, last + 1);
+  return s;
+}
+
+// Per-item salvage: when the whole-object JSON.parse fails (one bad entry, a
+// stray token, an unterminated value), recover each `"N": <value>` entry
+// independently so good items still land. Returns a map of index→parsed-value.
+// Unrecoverable entries are simply absent from the map (caller marks them).
+function salvageEntries(jsonish: string, count: number): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (let i = 1; i <= count; i++) {
+    // Find `"i":` and then take a balanced {...} object or the literal null.
+    const keyRe = new RegExp(`"${i}"\\s*:\\s*`, 'g');
+    const m = keyRe.exec(jsonish);
+    if (!m) continue;
+    const start = m.index + m[0].length;
+    const rest = jsonish.slice(start);
+
+    // null literal
+    if (/^null\b/.test(rest)) { out[String(i)] = null; continue; }
+
+    // balanced object starting at the first {
+    if (rest[0] === '{') {
+      let depth = 0, end = -1, inStr = false, esc = false;
+      for (let j = 0; j < rest.length; j++) {
+        const c = rest[j];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (c === '\\') esc = true;
+          else if (c === '"') inStr = false;
+        } else {
+          if (c === '"') inStr = true;
+          else if (c === '{') depth++;
+          else if (c === '}') { depth--; if (depth === 0) { end = j; break; } }
+        }
+      }
+      if (end !== -1) {
+        const objStr = rest.slice(0, end + 1);
+        try { out[String(i)] = JSON.parse(objStr); }
+        catch { /* leave absent → caller marks unestimable */ }
+      }
+    }
+  }
+  return out;
 }
 
 // Returns counts for this batch. `processed` = rows that left the NULL queue
@@ -118,15 +173,23 @@ async function runBatch(): Promise<{ filled: number; marked: number; processed: 
   const u = data.usage ?? {};
   void logAiUsage({ accountId: null, db, model: 'claude-haiku-4-5-20251001', feature: 'nutrition_backfill', inputTokens: u.input_tokens ?? 0, outputTokens: u.output_tokens ?? 0, success: true });
   const text = data.content?.[0]?.text ?? '';
-  const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+  const clean = stripToJson(text);
 
+  // RESILIENT PARSE. Two tiers:
+  //   1. strict whole-object parse (the happy path);
+  //   2. if that throws, per-item salvage so ONE bad entry can't sink the
+  //      whole batch. Any item we still can't recover is marked unestimable
+  //      below, so it leaves the queue and the batch always makes progress.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let nutritionMap: Record<string, any> = {};
+  let parseMode: 'strict' | 'salvaged' = 'strict';
   try {
     nutritionMap = JSON.parse(clean);
   } catch {
-    console.error('[backfill] JSON parse failed. Raw text:', text);
-    throw new Error('Failed to parse nutrition JSON');
+    parseMode = 'salvaged';
+    nutritionMap = salvageEntries(clean, unique.length);
+    const recovered = Object.keys(nutritionMap).length;
+    console.warn(`[backfill] whole-object parse failed; salvaged ${recovered}/${unique.length} items. Raw head:`, text.slice(0, 200));
   }
 
   let filled = 0;
@@ -134,6 +197,8 @@ async function runBatch(): Promise<{ filled: number; marked: number; processed: 
 
   for (let i = 0; i < unique.length; i++) {
     const ing = unique[i];
+    // `nutritionMap` may legitimately lack an index (salvage couldn't recover
+    // it) — normalizeNutrition(undefined) returns null → we mark unestimable.
     const nutrition = normalizeNutrition(nutritionMap[String(i + 1)]);
 
     if (nutrition) {
@@ -143,12 +208,14 @@ async function runBatch(): Promise<{ filled: number; marked: number; processed: 
       if (error) console.error('[backfill] update failed for', ing.name, error.message);
       else filled++;
     } else {
-      // Model declined — mark unestimable so it leaves the queue permanently.
+      // Model declined, OR we couldn't recover this item from a malformed
+      // response. Either way mark unestimable so it leaves the queue
+      // permanently — this is what makes a bad item non-fatal AND non-looping.
       const { error } = await db.from('ingredients')
         .update({ nutrition_per_100g: UNESTIMABLE })
         .eq('id', ing.id);
       if (error) console.error('[backfill] mark failed for', ing.name, error.message);
-      else { marked++; console.warn('[backfill] marked unestimable:', ing.name); }
+      else { marked++; console.warn('[backfill] marked unestimable:', ing.name, parseMode === 'salvaged' ? '(unrecovered in salvage)' : ''); }
     }
   }
 
