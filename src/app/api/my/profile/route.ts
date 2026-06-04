@@ -48,13 +48,15 @@ export async function GET() {
   let dateOfBirth: string | null = null;
   let fullName: string | null = null;
   let country: string | null = null;
+  let avatarColor: string | null = null;
   const { id: pid } = await getSelfPersonId(db, user.id);
   if (pid) {
     const { data: person } = await db
-      .from('person').select('date_of_birth, full_name, country').eq('id', pid).maybeSingle();
+      .from('person').select('date_of_birth, full_name, country, avatar_color').eq('id', pid).maybeSingle();
     dateOfBirth = person?.date_of_birth ?? null;
     fullName = person?.full_name ?? null;
     country = person?.country ?? null;
+    avatarColor = person?.avatar_color ?? null;
   }
 
   return NextResponse.json({
@@ -72,6 +74,7 @@ export async function GET() {
       date_of_birth: dateOfBirth,
       full_name: fullName,
       country: country,
+      avatar_color: avatarColor,
     },
     email: user.email ?? null,
     isNew: !data,
@@ -118,6 +121,7 @@ export async function PUT(req: NextRequest) {
     if ('date_of_birth' in body) personPatch.date_of_birth = body.date_of_birth || null;
     if ('full_name' in body) personPatch.full_name = (body.full_name ?? '').trim() || null;
     if ('country' in body) personPatch.country = (body.country ?? '').trim() || null;
+    if ('avatar_color' in body) personPatch.avatar_color = body.avatar_color || null;
 
     const { error: personErr } = await db.from('person').update(personPatch).eq('id', pid);
     if (personErr) {
