@@ -48,7 +48,18 @@ comment on table public.person_nutrient_targets is
 
 
 -- ----------------------------------------------------------------------------
--- STEP 0b · Row Level Security (matches the person_access scoping pattern).
+-- STEP 0b · Table-level privileges.
+-- A freshly created table grants NOTHING to the Supabase API roles, so the
+-- PostgREST 'authenticated' role hits "permission denied" before RLS is even
+-- evaluated. RLS decides WHICH ROWS; these grants let the role touch the table
+-- at all. RLS below still scopes every row to the caller's person grants.
+-- ----------------------------------------------------------------------------
+grant select, insert, update, delete
+  on table public.person_nutrient_targets to authenticated;
+
+
+-- ----------------------------------------------------------------------------
+-- STEP 0c · Row Level Security (matches the person_access scoping pattern).
 -- A caller may read/write a person's targets if they hold an active grant on
 -- that person (own self-grant, or a delegated grant). Idempotent.
 -- ----------------------------------------------------------------------------
