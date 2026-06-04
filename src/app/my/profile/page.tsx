@@ -10,6 +10,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Avatar, AvatarColorPicker } from '@/components/people/Avatar';
 
 // ── design tokens ──
 const C = {
@@ -26,6 +27,7 @@ type Profile = {
   unit_system: string; language: string; skill_level: string;
   allergies: string[]; dietary_restrictions: string[]; preferred_cuisines: string[];
   date_of_birth: string | null; country: string | null;
+  avatar_color: string | null;
 };
 
 const UNIT_OPTIONS = [
@@ -324,12 +326,12 @@ export default function ProfilePage() {
   // modal state
   const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking'
     | 'h_sex' | 'h_body' | 'h_activity' | 'h_allergies' | 'h_conditions'
-    | 't_cuisines' | 't_ingredients' | 't_axes' | 'health_all' | 'taste_all'>(null);
+    | 't_cuisines' | 't_ingredients' | 't_axes' | 'health_all' | 'taste_all' | 'avatar'>(null);
   const [draft, setDraft] = useState<any>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
+    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, avatar_color: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
     fetch('/api/my/cooking').then((r) => r.json()).then(setCooking).catch(() => {});
     fetch('/api/my/health').then((r) => r.json()).then((d) => setHealth(d.health)).catch(() => {});
     fetch('/api/my/taste').then((r) => r.json()).then((d) => setTaste(d.taste)).catch(() => {});
@@ -426,6 +428,14 @@ export default function ProfilePage() {
     <div>
       <SectionHeader title="Personal info" subtitle="Who you are and how Soupdog talks to you." />
       <Panel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
+          <Avatar id={p.id} name={p.display_name || p.full_name} colorKey={p.avatar_color} size={48} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: C.muted }}>Avatar colour</div>
+            <div style={{ fontSize: 14, color: C.fg, textTransform: 'capitalize' }}>{p.avatar_color || 'Auto (from your name)'}</div>
+          </div>
+          <button type="button" onClick={() => { setDraft({ avatar_color: p.avatar_color }); setModal('avatar'); }} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.accent, borderRadius: 7, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}>Edit</button>
+        </div>
         <Row label="Display name" value={p.display_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
         <Row label="Full name" value={p.full_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
         <Row label="Date of birth" value={p.date_of_birth ? `${p.date_of_birth}${age != null ? `  ·  ${age} yrs` : ''}` : ''} onEdit={() => { setDraft({ dob: p.date_of_birth }); setModal('dob'); }} />
@@ -551,6 +561,15 @@ export default function ProfilePage() {
         <Modal title="Name" onClose={() => setModal(null)} saving={saving} onSave={() => saveProfile({ display_name: draft.display_name, full_name: draft.full_name })}>
           <div style={{ marginBottom: 16 }}><label style={labelS}>Display name</label><input style={inputS} value={draft.display_name ?? ''} onChange={(e) => setDraft({ ...draft, display_name: e.target.value })} placeholder="What should we call you?" /></div>
           <div><label style={labelS}>Full name</label><input style={inputS} value={draft.full_name ?? ''} onChange={(e) => setDraft({ ...draft, full_name: e.target.value })} placeholder="Your full / legal name (optional)" /></div>
+        </Modal>
+      )}
+      {modal === 'avatar' && (
+        <Modal title="Avatar colour" onClose={() => setModal(null)} saving={saving} onSave={() => saveProfile({ avatar_color: draft.avatar_color ?? null })}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+            <Avatar id={p.id} name={p.display_name || p.full_name} colorKey={draft.avatar_color} size={56} />
+            <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>Pick a colour for your monogram, or tap the selected one again to go back to the automatic colour.</p>
+          </div>
+          <AvatarColorPicker value={draft.avatar_color} onChange={(key) => setDraft({ ...draft, avatar_color: key })} />
         </Modal>
       )}
       {modal === 'dob' && (
