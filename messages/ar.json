@@ -139,3 +139,21 @@
     "copyright": "© 2025 soupdog"
   }
 }
+{
+  "nav": {
+    "browse": "تصفح",
+    "recipes": "الوصفات",
+    "search": "بحث",
+    "ingredients": "المكونات",
+    "myIngredients": "المكونات",
+    "myRecipes": "وصفاتي",
+    "plan": "الخطة",
+    "people": "الأشخاص",
+    "usage": "الاستخدام",
+    "pricing": "الأسعار",
+    "help": "المساعدة",
+    "aboutSoupdog": "عن Soupdog",
+    "about": "عن",
+    "myKitchen": "مطبخي"
+  }
+}

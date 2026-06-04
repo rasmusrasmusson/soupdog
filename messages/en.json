@@ -132,3 +132,21 @@
   },
   "footer": {}
 }
+{
+  "nav": {
+    "browse": "Browse",
+    "recipes": "Recipes",
+    "search": "Search",
+    "ingredients": "Ingredients",
+    "myIngredients": "Ingredients",
+    "myRecipes": "My Recipes",
+    "plan": "Plan",
+    "people": "People",
+    "usage": "Usage",
+    "pricing": "Pricing",
+    "help": "Help",
+    "aboutSoupdog": "About Soupdog",
+    "about": "About",
+    "myKitchen": "My Kitchen"
+  }
+}
