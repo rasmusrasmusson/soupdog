@@ -536,3 +536,100 @@ The headline paid feature now exists, works end-to-end, and is the logged-in hom
 - **Verify the foundation before building on it** caught: the read-route 405 (file misplacement), the "added meal invisible" bug (day view only rendered active slots — fixed to union of active + present slots), the generate 500 (truncated JSON — raised tokens + robust parse).
 - **Flat-file `--`-to-folder delivery keeps biting on multi-`route.ts` drops.** Standard check: every delivered route/page file's FIRST-LINE path comment must match the folder it's placed in. Big-vs-tiny file swap (PlanView 28KB vs plan/page.tsx 6 lines) is an easy tell.
 - **SETOF uuid helpers** → policies use `X in (select fn(auth.uid()))`. Confirmed via probe before writing meal RLS — no 42501 this time.
+
+
+
+# SESSION UPDATE — 2026-06-04 (Demand Model Doc A · Phase 1 SHIPPED & VERIFIED)
+
+## SHIPPED THIS ARC (on prod, verified in console)
+Doc A (Demand Model v0.4) **Phase 1** is functionally complete: a real person's
+needs now drive a real meal recommendation, with honest confidence throughout.
+Builds directly on Phase 0 (person_nutrient_targets, shipped earlier same day).
+
+Pipeline: **resolve → aggregate → score → plate.** Two pure lib modules + one
+inspection route. NOTHING existing was modified — all new files.
+
+### Files (all new)
+- `src/lib/demand/resolve-requirement.ts` — the per-field CASCADE resolver.
+  `resolveRequirement(db, personId)` reads person(date_of_birth),
+  health_profile(sex_at_birth), person_nutrient_targets → returns each daily
+  field (energy/protein/carbs/fat/fiber/sodium/satiety) as a ResolvedField
+  {value, rung, source, confidence, deferred?}. KNOWN value wins (conf 0.9);
+  else falls to the PERSONA floor (conf 0.3). overallConfidence = weakest
+  non-deferred field. Exports inferPersona() + nutrientKind().
+- `src/lib/demand/aggregate-and-match.ts` — occasion shares, table aggregation,
+  scoring, plating. Key exports: occasionFraction, participantOccasionNeed,
+  aggregateTable, scoreMeal, rankMeals, platingSplit.
+- `src/app/api/my/meals/[id]/match/route.ts` — runs the whole pipeline for one
+  meal. `GET /api/my/meals/{id}/match?slot=dinner`. Reads meal_participant
+  (active only), falls back to caller's self-person if none. Returns
+  { slot, meal, table, score, plating }. Read-only inspection route.
+
+### Model = per-field fallback, NOT a persona ladder (important mental model)
+Each field independently takes the best source it can find; the persona is the
+FLOOR under whatever is still unknown — never "climbed and discarded." A user
+with known fibre but unknown sodium gets known fibre (0.9) + persona sodium
+(0.3) SIMULTANEOUSLY. The logged-out visitor is just "every field on the bottom
+rung" — no separate anonymous path. Personas: toddler / child / adult_female /
+adult_male / adult_unspecified. Age band selects the family (no "toddler male"),
+sex narrows within adult. inferPersona(dob, sex).
+
+### Decisions settled this arc
+- **Aggregation = option C** (Doc A §11 "participant aggregation"):
+  - ADDITIVE nutrients (energy, protein, carbs, fat, fibre) → SUMMED across the
+    table into tableTotals, then plated. (NUTRIENT_KIND map encodes this.)
+  - SATIETY → per-person near-constraint (satietyFloor = max individual need),
+    never summed.
+  - CONSTRAINT nutrients (sodium, future ceilings) → carried but DEFERRED
+    (deferred:true flag); NOT optimised in P1. Needs goals overlay (P5) +
+    per-component plating (P4).
+- **Occasion share = fixed per-slot fractions** (stand-in until day-tracking in
+  P2): breakfast .25, lunch .35, dinner .40, snack .10, meal .33. Doc A §11
+  "how occasion shares are set before we know the day."
+- **Scoring** = scale dish to table's energy need → measure coverage per field
+  (capped at 1, energy×2 / protein·fibre×1.5 weighting) → satiety as near-hard
+  gate (energy coverage ≥0.85 or 0.5× penalty) → variant confidence nudges ties.
+  A legible heuristic, NOT an optimiser; weights are [OPEN], tune with real data.
+- **Plating** = whole-portion only (§7). Split by share of dominant need
+  (default energy). Cook-friendly phrasing ("the larger, more generous helping"
+  / "a neater, smaller portion") — encourage, never shame. Per-component
+  ("more lentils") is Phase 4.
+
+### Verified (console, logged in)
+- `GET /api/my/requirement` → mixed result: fiber_g/protein_g rung:'known'
+  conf 0.9 (set earlier), rest rung:'persona' conf 0.3. Per-field model proven.
+- `GET /api/my/meals/{id}/match?slot=dinner` → returned
+  { slot, meal, table, score, plating } correctly. Standalone math check (§7
+  worked example, Rasmus 2500 / Natasha 2000) gave table totals summing right,
+  3-serving scale of a 600kcal dish, plating 0.56/0.44 (Rasmus larger). Correct.
+- NOTE: a meal with one resolved participant yields plating Array(1) (share 1.0)
+  — multi-person split needs ≥2 active meal_participant rows.
+- Gotcha (user-side, not a bug): first match call failed with "invalid input
+  syntax for type uuid: YOUR_MEAL_ID" — placeholder not replaced. Get a real id
+  from `GET /api/my/meal-plan` (returns { personId, from, to, meals[] }).
+
+## [OPEN] PLACEHOLDERS CARRIED (settle before later phases lean on them)
+- **Persona daily templates** in resolve-requirement.ts (PERSONAS map) — the
+  kcal/protein/etc per persona are reasonable averages, NOT a clinical spec.
+  Doc A §11 "Default daily template." Editable in one place.
+- **Slot fractions** in aggregate-and-match.ts (SLOT_FRACTION) — provisional.
+- **Scoring weights** — energy×2, protein/fibre×1.5, satiety gate at 0.85,
+  quality blend 0.9/0.1. All heuristic; Doc A §11 "satiety/nutrition weighting."
+
+## NEXT STEPS (pick one)
+- **Surface the score in the meal UI** so users (not just the console) see the
+  recommendation + plating. The match route is the data source; needs a
+  component on the meal page. (Highest user-visible value.)
+- **Multi-participant testing** — add a 2nd person to a meal to exercise the
+  two-way plating split live.
+- **Phase 2** — the ASK rung (host-opened popover, Doc A §4) + stated-habit
+  segments + daily running balance. Raises confidence where it changes the
+  answer; replaces the fixed-fraction occasion-share stand-in.
+- Variant-level quality (execution_variants.confidence) into scoreMeal — the
+  match route currently passes variantConfidence:null.
+
+## STILL PARKED (unchanged)
+Meal editor (basic+advanced); server-rendered PDF (Puppeteer); Doc B Phase 0
+(content_request row on algorithmic fallback — note: no content_request table
+exists yet, would be a first build). Settle remaining Doc A §11 / Doc B §11
+[OPEN]s before building beyond Phase 1.
