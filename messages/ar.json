@@ -15,7 +15,12 @@
     "aboutSoupdog": "حول Soupdog",
     "api": "واجهة برمجية",
     "help": "المساعدة",
-    "changelog": "سجل التغييرات"
+    "changelog": "سجل التغييرات",
+    "plan": "الخطة",
+    "people": "الأشخاص",
+    "usage": "الاستخدام",
+    "pricing": "الأسعار",
+    "search": "بحث"
   },
   "header": {
     "search": "ابحث عن وصفات، مكونات، تقنيات...",
@@ -137,23 +142,5 @@
   },
   "footer": {
     "copyright": "© 2025 soupdog"
-  }
-}
-{
-  "nav": {
-    "browse": "تصفح",
-    "recipes": "الوصفات",
-    "search": "بحث",
-    "ingredients": "المكونات",
-    "myIngredients": "المكونات",
-    "myRecipes": "وصفاتي",
-    "plan": "الخطة",
-    "people": "الأشخاص",
-    "usage": "الاستخدام",
-    "pricing": "الأسعار",
-    "help": "المساعدة",
-    "aboutSoupdog": "عن Soupdog",
-    "about": "عن",
-    "myKitchen": "مطبخي"
   }
 }

@@ -1,59 +1,50 @@
-# Soupdog Platform
+# i18n nav keys — merge instructions
 
-> A food process graph, recipe execution system, and connected appliance orchestration layer.
+Fills the missing nav translation keys so the navigation labels stop falling
+back to English in sv / zh / ar. The fallback mechanism (in Sidebar.tsx /
+MobileNav.tsx): `t('nav.X')` returns the key path itself when a key is missing,
+and the component shows the English fallback. Adding these keys makes them
+resolve properly.
 
-## Tech Stack
+## Where the message files live
+NOT in `src`. They are at the repo root:
+  messages/en.json
+  messages/sv.json
+  messages/zh.json
+  messages/ar.json
+(imported in locale-context.tsx as `../../messages/${locale}.json`.)
 
-| Layer       | Technology                          |
-|-------------|-------------------------------------|
-| Frontend    | Next.js 15, React 19, TypeScript    |
-| Styling     | Tailwind CSS v4, CSS variables      |
-| Icons       | Lucide React                        |
-| Hosting     | Vercel (recommended)                |
-| CMS         | Sanity (Phase 2+)                   |
-| Database    | PostgreSQL via Supabase             |
-| Auth        | Supabase Auth                       |
-| Search      | PG full-text → Meilisearch (Phase 2)|
+## What to do
+Each `*.nav.json` file here contains ONLY the `nav` object for that locale,
+covering EVERY nav key the app references (not just plan/people/usage/pricing —
+all of them, so nothing falls back).
 
-## Project Structure
+For each locale file `messages/<loc>.json`:
+1. Open it. It already has a top-level `nav` object (with at least `browse`,
+   `recipes`).
+2. MERGE the keys from `<loc>.nav.json` into that existing `nav` object — add
+   the missing keys, leave any existing ones as they are (your existing
+   translations win; these are only meant to fill gaps). Don't replace the
+   whole file — it has many other sections besides `nav`.
+3. Keep valid JSON (commas between keys, no trailing comma on the last one).
 
-```
-src/
-  app/                     # Next.js App Router pages
-    recipes/               # Recipe index + [slug] detail
-    ingredients/           # Ingredient pages
-    techniques/            # Technique pages
-    equipment/             # Equipment pages
-    search/                # Search page
-  components/
-    layout/                # Sidebar, RightPanel
-    recipe/                # RecipeCard, RecipeSteps, etc.
-    ui/                    # Shared primitives
-  data/                    # Sample/seed data
-  lib/                     # Utilities (units, slugs, time)
-  types/                   # All TypeScript types
-```
+If a locale file has NO `nav` object yet, paste the whole `nav` block from the
+snippet in.
 
-## Design System
+## TRANSLATION QUALITY — please check before relying on these
+- **en** — canonical, correct.
+- **sv** — Swedish, confident. ("Plan" is fine as-is in Swedish; "Personer" for
+  People in the household sense; "Användning" for Usage/consumption.)
+- **zh** — Simplified Chinese, REASONABLE but please have a native speaker
+  confirm, especially: 用量 (usage — used here in the AI-usage/quota sense; if
+  it means account usage you may prefer 使用情况), 成员 (people/members) vs 人员.
+- **ar** — Modern Standard Arabic, REASONABLE but please have a native speaker
+  confirm. RTL is already handled by the app (rtlLocales includes 'ar', dir
+  flips). Definite article "ال" prefixing is stylistic; some apps drop it for
+  nav brevity (وصفات vs الوصفات) — adjust to taste/consistency with the rest of
+  your ar.json.
 
-- **Fonts**: Fraunces (display) + DM Sans (body) + DM Mono
-- **Accent**: Terracotta `#c84b2f`
-- **Philosophy**: Minimal, structured, cookbook-inspired, information-dense
-
-## Development Phases
-
-- **Phase 1** ✅ Public recipe site, search, accounts, saved recipes  
-- **Phase 2** Structured recipe engine, equipment, translations  
-- **Phase 3** Inventory, household profiles, ratings  
-- **Phase 4** Connected appliances, cooking programs  
-- **Phase 5** B2B portals, analytics  
-- **Phase 6** Adaptive execution, process intelligence  
-
-## Getting Started
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
+## Test after merging + deploy
+Switch locale (the locale switcher sets a `locale` cookie). The nav labels for
+Plan / People / Usage / Pricing — and all others — should now show in the
+chosen language instead of English. Verify Arabic also flips to RTL.

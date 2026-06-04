@@ -15,7 +15,12 @@
     "aboutSoupdog": "关于 Soupdog",
     "api": "API",
     "help": "帮助",
-    "changelog": "更新日志"
+    "changelog": "更新日志",
+    "plan": "计划",
+    "people": "成员",
+    "usage": "用量",
+    "pricing": "定价",
+    "search": "搜索"
   },
   "header": {
     "search": "搜索食谱、食材、技法...",
@@ -137,23 +142,5 @@
   },
   "footer": {
     "copyright": "© 2025 soupdog"
-  }
-}
-{
-  "nav": {
-    "browse": "浏览",
-    "recipes": "食谱",
-    "search": "搜索",
-    "ingredients": "食材",
-    "myIngredients": "食材",
-    "myRecipes": "我的食谱",
-    "plan": "计划",
-    "people": "成员",
-    "usage": "用量",
-    "pricing": "定价",
-    "help": "帮助",
-    "aboutSoupdog": "关于 Soupdog",
-    "about": "关于",
-    "myKitchen": "我的厨房"
   }
 }

@@ -633,3 +633,46 @@ Meal editor (basic+advanced); server-rendered PDF (Puppeteer); Doc B Phase 0
 (content_request row on algorithmic fallback — note: no content_request table
 exists yet, would be a first build). Settle remaining Doc A §11 / Doc B §11
 [OPEN]s before building beyond Phase 1.
+
+
+# BACKLOG ITEM — Editor: accept Excel (.xlsx/.xls) and Word (.docx) recipe uploads
+
+**Why:** Some commercial kitchens keep recipes in Excel and Word, not PDF/images.
+Currently the import page accepts PDF + images (JPG/PNG/WebP/GIF) + pasted text;
+TXT is half-wired (UI allows it, route does not — see gotcha below).
+
+**Scope:** add .docx and .xlsx (and .xls) to the recipe import flow.
+
+**Key constraint — these are NOT native-document types for Claude.** PDF goes to
+the API as a `document` block and images as `image` blocks. DOCX/XLSX cannot;
+they must be TEXT-EXTRACTED server-side first, then sent through the existing
+TEXT path of the import route. So this is an extraction step, not a new media
+branch in the AI call.
+- .docx → `mammoth` (npm) → plain text / lightweight HTML.
+- .xlsx/.xls → SheetJS (`xlsx` npm) → CSV/text per sheet (recipes often live as
+  rows: ingredient | qty | unit, plus a method block). May need a small
+  heuristic or just hand the whole sheet text to Sonnet and let it parse.
+
+**Files to touch:**
+- `src/app/api/recipes/import/route.ts` — current logic only accepts
+  `application/pdf` + `image/*` and REJECTS everything else (line ~104). Add a
+  pre-step: if the incoming file is docx/xlsx, decode base64 → extract text →
+  feed the existing `text` path (the route already parses pasted text well).
+  Probably cleaner to extract in the route than the browser (keeps deps server-side).
+- `src/app/my/recipes/import/page.tsx` — extend `allowed` (line ~156) and the
+  input `accept` (line ~384) and the helper caption (line ~406, "JPG, PNG, WebP,
+  PDF, TXT") to include Word/Excel. Keep the 20MB cap.
+
+**Gotcha to fix while here:** TXT is inconsistent today — `accept` + `allowed`
+include text/plain, but the route's `file && mediaType` branch rejects anything
+non-PDF/image, so a dropped .txt file would 400. Pasted text works because it
+uses the text path. Folding docx/xlsx through text extraction is a chance to
+make the route handle "extractable file → text path" cleanly, TXT included.
+
+**Deps:** `mammoth`, `xlsx` (SheetJS). Both pure-JS, Vercel-safe.
+
+**Note:** UX language — user-facing copy says "Add recipe" not "import",
+"upload your recipe file" not "parse". Keep that.
+
+**Effort:** medium. The AI parsing is unchanged (reuses the text path); the work
+is extraction + wiring + the accept-list/caption update + per-format testing.

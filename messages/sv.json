@@ -15,7 +15,12 @@
     "aboutSoupdog": "Om Soupdog",
     "api": "API",
     "help": "Hjälp",
-    "changelog": "Ändringslogg"
+    "changelog": "Ändringslogg",
+    "plan": "Plan",
+    "people": "Personer",
+    "usage": "Användning",
+    "pricing": "Priser",
+    "search": "Sök"
   },
   "header": {
     "search": "Sök recept, ingredienser, tekniker...",
@@ -137,23 +142,5 @@
   },
   "footer": {
     "copyright": "© 2025 soupdog"
-  }
-}
-{
-  "nav": {
-    "browse": "Bläddra",
-    "recipes": "Recept",
-    "search": "Sök",
-    "ingredients": "Ingredienser",
-    "myIngredients": "Ingredienser",
-    "myRecipes": "Mina recept",
-    "plan": "Plan",
-    "people": "Personer",
-    "usage": "Användning",
-    "pricing": "Priser",
-    "help": "Hjälp",
-    "aboutSoupdog": "Om Soupdog",
-    "about": "Om",
-    "myKitchen": "Mitt kök"
   }
 }
