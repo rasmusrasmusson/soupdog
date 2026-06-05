@@ -7,31 +7,9 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { useLocale } from '@/lib/locale-context';
 import type { Locale } from '@/i18n/config';
+import { Avatar } from '@/components/people/Avatar';
 
 const unitOptions = ['metric', 'imperial', 'usCustomary'] as const;
-
-function Avatar({ email }: { email: string }) {
-  const initials = email
-    .split('@')[0]
-    .replace(/[^a-zA-Z]/g, ' ')
-    .trim()
-    .split(' ')
-    .filter(Boolean)
-    .map(w => w[0].toUpperCase())
-    .slice(0, 2)
-    .join('');
-  return (
-    <div title={email} style={{
-      width: 28, height: 28, borderRadius: '50%',
-      background: 'var(--accent)', color: '#fff',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
-      letterSpacing: '0.05em', flexShrink: 0, cursor: 'default', userSelect: 'none',
-    }}>
-      {initials || '?'}
-    </div>
-  );
-}
 
 export function Header() {
   const [unit, setUnit] = useState<typeof unitOptions[number]>('metric');
@@ -40,6 +18,20 @@ export function Header() {
   const { locale, setLocale, t, messages } = useLocale();
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // The user's chosen avatar colour + display name live on their profile, not on
+  // the auth user. Fetch once when logged in so the header monogram matches what
+  // they set in /my/profile. Muted styling — the header avatar is decorative.
+  const [avatar, setAvatar] = useState<{ color: string | null; name: string | null }>({ color: null, name: null });
+  useEffect(() => {
+    if (!user) { setAvatar({ color: null, name: null }); return; }
+    let active = true;
+    fetch('/api/my/profile')
+      .then(r => r.json())
+      .then(d => { if (active) setAvatar({ color: d?.profile?.avatar_color ?? null, name: d?.profile?.display_name ?? null }); })
+      .catch(() => { /* leave defaults; Avatar falls back to deterministic colour + initial */ });
+    return () => { active = false; };
+  }, [user]);
 
   const langOptions = Object.entries(messages?.languages ?? {
     en: 'English', sv: 'Svenska', zh: '中文', ar: 'العربية'
@@ -120,7 +112,13 @@ export function Header() {
         {!loading && (
           user ? (
             <div className="flex items-center gap-2">
-              <Avatar email={user.email ?? ''} />
+              <Avatar
+                id={user.id}
+                name={avatar.name || user.email || '?'}
+                colorKey={avatar.color}
+                size={28}
+                muted
+              />
               <button onClick={signOut}
                 className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono border border-[var(--border)] px-3 py-1.5 text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
                 <LogOut size={11} strokeWidth={1.5} /> {t('header.signOut')}
