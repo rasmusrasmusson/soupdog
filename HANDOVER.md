@@ -676,3 +676,96 @@ make the route handle "extractable file → text path" cleanly, TXT included.
 
 **Effort:** medium. The AI parsing is unchanged (reuses the text path); the work
 is extraction + wiring + the accept-list/caption update + per-format testing.
+
+
+# SESSION UPDATE — 2026-06-04/05 (Backlog clear-out: i18n, avatars, data-cleanup; two design notes)
+
+A long session that cleared essentially the entire SMALL backlog and surfaced
+two foundational design notes. Everything below is SHIPPED & verified unless
+marked otherwise. What remains after this is all large/design-led (see end).
+
+## SHIPPED — code (pushed to prod, builds green)
+- **i18n nav keys** — added plan/people/usage/pricing (+ all referenced nav keys)
+  to messages/{en,sv,zh,ar}.json. NOTE: messages/*.json are at REPO ROOT, not in
+  src; layout.tsx imports en.json directly, so a malformed/missing one breaks the
+  BUILD. (We hit this — a botched merge left a stray 2nd JSON object; fixed by
+  restoring from commit 4787435.) zh/ar translations are reasonable but unverified
+  by a native speaker.
+- **Profile avatar editor** — /my/profile Personal info: live <Avatar> + colour
+  picker (reuses AvatarColorPicker). avatar_color stores palette KEY not hex.
+- **Header avatar** — Header.tsx now uses the shared <Avatar muted>, fetching the
+  user's avatar_color/full_name/avatar_initials via /api/my/profile (was a local
+  email-initial disc that ignored the chosen colour).
+- **Two-letter initials + override** — shared Avatar now derives "NR" from full
+  name (first+last word; single word → first 2 chars) via deriveInitials(); an
+  optional `initials` prop overrides. New column person.avatar_initials (text,
+  nullable; NULL = derive). Editable in the profile avatar modal. Header + profile
+  use it; PlanView participant discs already show 2-letter via their own inline
+  monogram() but do NOT yet read the override (small follow-up — thread
+  avatar_initials through plan participants).
+- **PlanView popover dismiss** — participant/add popovers now close on
+  click-outside and Escape (ref + document listener, attached only while open).
+
+## SHIPPED — data cleanup (live DB, all dry-run-first)
+- **Backfill route hardened** — per-item JSON salvage so one bad Haiku item can't
+  sink the whole batch; unrecoverable items get the UNESTIMABLE sentinel so the
+  queue always drains. (admin/backfill-nutrition/route.ts)
+- **Case-dupe audit → RESOLVED** — only one find-or-create path exists and it
+  already uses ilike; zero existing case/whitespace dupes in data. (ilike doesn't
+  catch whitespace/punctuation variants — deeper, out of scope.)
+- **Red-meat family** — was empty. Marked generic Beef/Lamb/Pork is_category=true
+  (they're groupings, not cuts); linked the 2 real cuts to bands (ground beef →
+  redmeat_tender, lamb shoulder → redmeat_tough). NEW BACKLOG: build the cut
+  taxonomy (tenderloin/brisket/chuck… as children, banded).
+- **Ice cube** — backlog said "reclassify as food_state" = a CATEGORY ERROR. It's
+  an ingredient (frozen water). Fixed correctly: transformed_from_id → Water.
+- **Roles** — assigned single primary roles to 46 no-role ingredients (e2_expert).
+  Role distribution is healthy (not lopsided). drink/pizza handled separately.
+- **drink / pizza** — drink parents a real product (Coke Original Taste) → marked
+  is_category=true (NOT deleted). pizza was an unused stub → deleted.
+- **Test data** — quibbling broth + Xyzzy Test Stew removed (the other 4 nonsense
+  ingredients were already gone). Also removed the liquid_base role that leaked
+  onto quibbling broth during the role assignment.
+
+## NEW DESIGN NOTES (separate docs in docs/, NOT in this file)
+- **Soupdog_Ingredient_Process_Model_v0.1** — one invariant: every ingredient is
+  the single output of a process (≥1 tasks human/machine/passive-time, ≥0 tools,
+  ≥1 input ingredients, EXACTLY 1 output). One node type (ingredient), one edge
+  type (process). transformed_from_id = trivial process; a meal = a high-
+  composition ingredient (explains the meal-merge layer). food_state is an
+  ADJECTIVE, not a substitute for being an ingredient. composition_level = a
+  descriptor, not a type. Deferred cleanup it predicts: cold/hot water are
+  probably water+food_state wrongly promoted to nouns.
+- **Soupdog_Role_Strength_Design_Note_v0.1** — substitution needs MAGNITUDE not
+  just role presence. Macro roles (protein/fat/fiber/starch) derive magnitude
+  from nutrition_per_100g (don't duplicate); flavor/texture roles (acid/umami/
+  aromatic…) need a stored `intensity` (new column, deferred), distinct from
+  is_typical_primary (identity) and confidence (sure it applies). Build with the
+  substitution feature.
+
+## ARCHITECTURE NOTE surfaced this session
+- **`recipes` flattened-mirror table** exists ALONGSIDE recipe_canonicals/
+  recipe_versions and carries live FKs (recipes.recipe_version_id, .canonical_id).
+  It's a denormalized snapshot of a recipe. ANY recipe delete/migration must keep
+  it in sync — it caused an FK error during test-data cleanup. Likely a partial-
+  migration artifact (schema.sql is stale). Worth auditing whether it's still
+  written/read by current code or is legacy.
+
+## SMALL FOLLOW-UPS that surfaced (genuinely small)
+- Thread avatar_initials through PlanView participants (so the override shows on
+  plan discs too, not just header/profile).
+- Audit the `recipes` mirror table — legacy or live? keep-in-sync or retire?
+- Participant name → audience-scoped shareable profile (QR; family sees X,
+  restaurant sees Y). This is the Sharing & Delegation visibility-tiers phase —
+  file it there, the plan popover is the natural entry point. NOT a standalone build.
+
+## STATE: small backlog is now essentially CLEARED.
+What remains is all large/design-led, each its own focused session:
+- **Meal-planning enforcement + Stripe** (the real billing build; plan column,
+  checkout, credit_ledger, balance gate in src/lib/ai/anthropic.ts).
+- **Surface the Phase 1 score in the meal UI** (match route is the data source;
+  highest user-visible value; needs a component on the meal page).
+- **Demand Model Phase 2** (ask/habits rungs + daily running balance; settle the
+  Doc A §11 [OPEN]s first — persona templates, slot fractions, scoring weights).
+- **Sharing & Delegation Phase 0** (settle v0.2 §8 opens first).
+- **Red-meat cut taxonomy** (content task, from the family cleanup above).
