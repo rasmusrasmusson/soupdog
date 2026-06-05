@@ -36,18 +36,29 @@ export function deterministicColor(id: string): string {
   return AVATAR_PALETTE[h % AVATAR_PALETTE.length].value;
 }
 
-function initial(name: string | null | undefined): string {
-  return (name ?? '?').trim().charAt(0).toUpperCase() || '?';
+// Default monogram: initials of the first and last words of the name
+// (e.g. "Nils Rasmus Rasmusson" -> "NR"). Single-word names fall back to the
+// first two letters ("Rasmus" -> "RA"). An explicit `initials` override wins.
+export function deriveInitials(name: string | null | undefined): string {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) {
+    return words[0].slice(0, 2).toUpperCase();
+  }
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
-export function Avatar({ id, name, colorKey, size = 40, muted = false }: {
+export function Avatar({ id, name, colorKey, initials, size = 40, muted = false }: {
   id: string;
   name: string | null | undefined;
   colorKey?: string | null;
+  /** explicit monogram override; when set, wins over the name-derived default. */
+  initials?: string | null;
   size?: number;
   muted?: boolean;
 }) {
   const bg = colorForKey(colorKey) ?? deterministicColor(id);
+  const mono = (initials && initials.trim()) ? initials.trim().toUpperCase() : deriveInitials(name);
   return (
     <div
       aria-hidden
@@ -55,14 +66,14 @@ export function Avatar({ id, name, colorKey, size = 40, muted = false }: {
         width: size, height: size, borderRadius: size,
         background: bg, color: '#fff',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: size * 0.42, fontFamily: 'IBM Plex Serif, serif',
+        fontSize: size * (mono.length > 1 ? 0.36 : 0.42), fontFamily: 'IBM Plex Serif, serif',
         flex: '0 0 auto',
         opacity: muted ? 0.55 : 1,
         filter: muted ? 'saturate(0.8)' : 'none',
         transition: 'opacity 0.15s ease, filter 0.15s ease',
       }}
     >
-      {initial(name)}
+      {mono}
     </div>
   );
 }

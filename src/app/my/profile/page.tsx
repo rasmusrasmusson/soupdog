@@ -28,6 +28,7 @@ type Profile = {
   allergies: string[]; dietary_restrictions: string[]; preferred_cuisines: string[];
   date_of_birth: string | null; country: string | null;
   avatar_color: string | null;
+  avatar_initials: string | null;
 };
 
 const UNIT_OPTIONS = [
@@ -331,7 +332,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, avatar_color: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
+    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, avatar_color: null, avatar_initials: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
     fetch('/api/my/cooking').then((r) => r.json()).then(setCooking).catch(() => {});
     fetch('/api/my/health').then((r) => r.json()).then((d) => setHealth(d.health)).catch(() => {});
     fetch('/api/my/taste').then((r) => r.json()).then((d) => setTaste(d.taste)).catch(() => {});
@@ -429,12 +430,16 @@ export default function ProfilePage() {
       <SectionHeader title="Personal info" subtitle="Who you are and how Soupdog talks to you." />
       <Panel>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderBottom: `1px solid ${C.border}` }}>
-          <Avatar id={p.id} name={p.display_name || p.full_name} colorKey={p.avatar_color} size={48} />
+          <Avatar id={p.id} name={p.full_name || p.display_name} colorKey={p.avatar_color} initials={p.avatar_initials} size={48} />
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13, color: C.muted }}>Avatar colour</div>
-            <div style={{ fontSize: 14, color: C.fg, textTransform: 'capitalize' }}>{p.avatar_color || 'Auto (from your name)'}</div>
+            <div style={{ fontSize: 13, color: C.muted }}>Avatar</div>
+            <div style={{ fontSize: 14, color: C.fg }}>
+              <span style={{ textTransform: 'capitalize' }}>{p.avatar_color || 'Auto colour'}</span>
+              {' · '}
+              {p.avatar_initials ? `“${p.avatar_initials}”` : 'auto initials'}
+            </div>
           </div>
-          <button type="button" onClick={() => { setDraft({ avatar_color: p.avatar_color }); setModal('avatar'); }} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.accent, borderRadius: 7, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}>Edit</button>
+          <button type="button" onClick={() => { setDraft({ avatar_color: p.avatar_color, avatar_initials: p.avatar_initials }); setModal('avatar'); }} style={{ border: `1px solid ${C.border}`, background: C.surface, color: C.accent, borderRadius: 7, padding: '6px 12px', fontSize: 13, cursor: 'pointer' }}>Edit</button>
         </div>
         <Row label="Display name" value={p.display_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
         <Row label="Full name" value={p.full_name} onEdit={() => { setDraft({ display_name: p.display_name, full_name: p.full_name ?? '' }); setModal('name'); }} />
@@ -564,10 +569,21 @@ export default function ProfilePage() {
         </Modal>
       )}
       {modal === 'avatar' && (
-        <Modal title="Avatar colour" onClose={() => setModal(null)} saving={saving} onSave={() => saveProfile({ avatar_color: draft.avatar_color ?? null })}>
+        <Modal title="Avatar" onClose={() => setModal(null)} saving={saving} onSave={() => saveProfile({ avatar_color: draft.avatar_color ?? null, avatar_initials: draft.avatar_initials ?? null })}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-            <Avatar id={p.id} name={p.display_name || p.full_name} colorKey={draft.avatar_color} size={56} />
-            <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>Pick a colour for your monogram, or tap the selected one again to go back to the automatic colour.</p>
+            <Avatar id={p.id} name={p.full_name || p.display_name} colorKey={draft.avatar_color} initials={draft.avatar_initials} size={56} />
+            <p style={{ color: C.muted, fontSize: 13, margin: 0 }}>Pick a colour, and optionally set your own initials. Leave initials blank to use the ones from your name.</p>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 12, color: C.muted, marginBottom: 6 }}>Initials (optional, up to 3 letters)</label>
+            <input
+              type="text"
+              maxLength={3}
+              value={draft.avatar_initials ?? ''}
+              onChange={(e) => setDraft({ ...draft, avatar_initials: e.target.value.toUpperCase() })}
+              placeholder={(((p.full_name || p.display_name) ?? '').trim().split(/\s+/).filter(Boolean).length > 1 ? 'e.g. ' : '') + 'auto'}
+              style={{ width: 120, border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 10px', fontSize: 16, letterSpacing: '0.08em', textTransform: 'uppercase', background: C.surface, color: C.fg }}
+            />
           </div>
           <AvatarColorPicker value={draft.avatar_color} onChange={(key) => setDraft({ ...draft, avatar_color: key })} />
         </Modal>

@@ -22,13 +22,17 @@ export function Header() {
   // The user's chosen avatar colour + display name live on their profile, not on
   // the auth user. Fetch once when logged in so the header monogram matches what
   // they set in /my/profile. Muted styling — the header avatar is decorative.
-  const [avatar, setAvatar] = useState<{ color: string | null; name: string | null }>({ color: null, name: null });
+  const [avatar, setAvatar] = useState<{ color: string | null; name: string | null; initials: string | null }>({ color: null, name: null, initials: null });
   useEffect(() => {
-    if (!user) { setAvatar({ color: null, name: null }); return; }
+    if (!user) { setAvatar({ color: null, name: null, initials: null }); return; }
     let active = true;
     fetch('/api/my/profile')
       .then(r => r.json())
-      .then(d => { if (active) setAvatar({ color: d?.profile?.avatar_color ?? null, name: d?.profile?.display_name ?? null }); })
+      .then(d => { if (active) setAvatar({
+        color: d?.profile?.avatar_color ?? null,
+        name: d?.profile?.full_name || d?.profile?.display_name || null,
+        initials: d?.profile?.avatar_initials ?? null,
+      }); })
       .catch(() => { /* leave defaults; Avatar falls back to deterministic colour + initial */ });
     return () => { active = false; };
   }, [user]);
@@ -116,6 +120,7 @@ export function Header() {
                 id={user.id}
                 name={avatar.name || user.email || '?'}
                 colorKey={avatar.color}
+                initials={avatar.initials}
                 size={28}
                 muted
               />

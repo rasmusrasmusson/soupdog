@@ -49,14 +49,16 @@ export async function GET() {
   let fullName: string | null = null;
   let country: string | null = null;
   let avatarColor: string | null = null;
+  let avatarInitials: string | null = null;
   const { id: pid } = await getSelfPersonId(db, user.id);
   if (pid) {
     const { data: person } = await db
-      .from('person').select('date_of_birth, full_name, country, avatar_color').eq('id', pid).maybeSingle();
+      .from('person').select('date_of_birth, full_name, country, avatar_color, avatar_initials').eq('id', pid).maybeSingle();
     dateOfBirth = person?.date_of_birth ?? null;
     fullName = person?.full_name ?? null;
     country = person?.country ?? null;
     avatarColor = person?.avatar_color ?? null;
+    avatarInitials = person?.avatar_initials ?? null;
   }
 
   return NextResponse.json({
@@ -75,6 +77,7 @@ export async function GET() {
       full_name: fullName,
       country: country,
       avatar_color: avatarColor,
+      avatar_initials: avatarInitials,
     },
     email: user.email ?? null,
     isNew: !data,
@@ -122,6 +125,10 @@ export async function PUT(req: NextRequest) {
     if ('full_name' in body) personPatch.full_name = (body.full_name ?? '').trim() || null;
     if ('country' in body) personPatch.country = (body.country ?? '').trim() || null;
     if ('avatar_color' in body) personPatch.avatar_color = body.avatar_color || null;
+    if ('avatar_initials' in body) {
+      const raw = (body.avatar_initials ?? '').toString().trim().toUpperCase().slice(0, 3);
+      personPatch.avatar_initials = raw || null;  // empty clears the override → derive from name
+    }
 
     const { error: personErr } = await db.from('person').update(personPatch).eq('id', pid);
     if (personErr) {
