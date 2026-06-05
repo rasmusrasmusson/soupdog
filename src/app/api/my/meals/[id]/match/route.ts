@@ -87,11 +87,38 @@ export async function GET(
   const score = scoreMeal(candidate, table);
   const plating = platingSplit(table, 'energy_kcal');
 
+  // Resolve person_id → display_name so the UI can say "Rasmus: larger helping"
+  // rather than showing a bare uuid. Best-effort; falls back to "Someone".
+  const nameById: Record<string, string> = {};
+  {
+    const ids = Array.from(new Set(personIds));
+    const { data: persons } = await db
+      .from('person')
+      .select('id, display_name, full_name')
+      .in('id', ids);
+    for (const p of persons ?? []) {
+      nameById[p.id] = p.display_name || p.full_name || 'Someone';
+    }
+  }
+  const platingNamed = plating.map((p) => ({
+    ...p,
+    name: nameById[p.personId] ?? 'Someone',
+  }));
+  const participantsNamed = table.participants.map((p) => ({
+    personId: p.personId,
+    personaId: p.personaId,
+    name: nameById[p.personId] ?? 'Someone',
+    confidence: p.confidence,
+    satietyNeed: p.satietyNeed,
+  }));
+
   return NextResponse.json({
     slot,
     meal: { id: meal.id, title: candidate.title, baseServings: candidate.baseServings },
-    table,
+    table: { ...table, participants: participantsNamed },
     score,
-    plating,
+    plating: platingNamed,
+    // honesty surface for the UI: did this meal have nutrition data to assess?
+    hasNutrition: Object.keys(candidate.perServing).length > 0,
   });
 }

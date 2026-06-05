@@ -10,6 +10,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Trash2, Loader2, BookOpen, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import MealFitPanel from '@/components/meal/MealFitPanel';
 
 type CompType = 'dish' | 'side' | 'drink';
 interface Component {
@@ -204,6 +205,9 @@ export default function MealEditorPage() {
           </div>
         );
       })}
+
+      {/* Demand Model Phase 1 — confidence + plating + satiety for this table */}
+      {id && <MealFitPanel mealId={id as string} />}
 
       {/* Save bar */}
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, borderTop: B, background: 'var(--surface)',
