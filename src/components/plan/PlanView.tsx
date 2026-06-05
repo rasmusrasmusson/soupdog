@@ -4,7 +4,7 @@
 // Menu view + wired interactions: cuisine/time on hero, Swap (pick alternative),
 // manage participants via avatars (add/remove people you own), Add a meal.
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
 type Participant = { id: string; status: string; personId: string; name: string; avatarColor: string | null };
@@ -344,6 +344,30 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
 }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [openPerson, setOpenPerson] = useState<string | null>(null); // personId whose popover is open
+  const avatarsRef = useRef<HTMLDivElement>(null);
+
+  // Close the participant / add popovers on a click outside, or on Escape —
+  // standard dismiss behaviour. Only attaches a listener while one is open.
+  useEffect(() => {
+    if (!openPerson && !openAdd) return;
+    const close = () => { setOpenPerson(null); setOpenAdd(false); };
+    const onClick = (e: MouseEvent) => {
+      if (avatarsRef.current && !avatarsRef.current.contains(e.target as Node)) close();
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    // `capture` so we see the click before other handlers stop it; defer the
+    // attach a tick so the opening click itself doesn't immediately close it.
+    const id = setTimeout(() => {
+      document.addEventListener('click', onClick, true);
+      document.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      clearTimeout(id);
+      document.removeEventListener('click', onClick, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [openPerson, openAdd]);
+
   const inMeal = new Set(meal.participants.map(p => p.personId));
   const addable = household.filter(h => !inMeal.has(h.id));
   const meta = metaLine(meal);
@@ -359,7 +383,7 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
           )}
           {meta && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{meta}</div>}
         </div>
-        <div style={{ position: 'relative' }}>
+        <div ref={avatarsRef} style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {meal.participants.map((p, i) => (
               <span key={p.id} title={p.name}
