@@ -769,3 +769,72 @@ What remains is all large/design-led, each its own focused session:
   Doc A §11 [OPEN]s first — persona templates, slot fractions, scoring weights).
 - **Sharing & Delegation Phase 0** (settle v0.2 §8 opens first).
 - **Red-meat cut taxonomy** (content task, from the family cleanup above).
+
+
+# SESSION UPDATE — 2026-06-05 (Phase 1 surfaced in UI; Plan & End-Product Model note)
+
+## SHIPPED — code (pushed, builds green)
+- **"For your table" panel** (Demand Model Phase 1 surfacing) on the meal EDIT
+  view (`/my/meals/[id]/page.tsx`). New component
+  `src/components/meal/MealFitPanel.tsx`. Shows THREE honest signals:
+  1. **Confidence** — subtle dot (green ≥0.7 "Good estimate" / amber ≥0.45
+     "Rough estimate" / grey "Best guess"), tap for a plain note. Grey = "we
+     don't know enough yet" (an invitation, not an error).
+  2. **Plating** — multi-person meals only: a share bar + per-person guidance
+     ("Rasmus — the larger, more generous helping"), sorted largest-first.
+  3. **Satiety** — plain words ("should leave everyone full" / "may be a little
+     light"). Per the demand model's near-constraint.
+  - **Nutrition-fit verdict is DEFERRED to Phase 2** — judging one meal in
+    isolation gives wrong-in-isolation advice (a dessert flagged "too much
+    sugar" for someone who otherwise eats well). The real fit is longitudinal
+    (fits what you've eaten lately) and needs Phase 2's running balance.
+  - Match route (`/api/my/meals/[id]/match`) now also returns participant
+    **names** (joins person.display_name/full_name; was bare uuids) and a
+    `hasNutrition` flag.
+  - Panel placed on EDIT view BY DESIGN: the meal READ view is temporary
+    (pending the dish-recipe-view rebuild for meals — "stabilize meals first").
+    Revisit panel placement when that rebuild happens.
+  - Expect mostly GREY "Best guess" today (persona-level participants + dishes
+    lacking nutrition_per_serving). That's the system being honest, not broken.
+
+## NEW DESIGN NOTE (in docs/, standalone — NOT pasted here)
+- **docs/Soupdog_Plan_And_End_Product_Model_v0.1.md** — sequel to the
+  Ingredient–Process Model. Core: **a plan entry is one desired end-product, and
+  that end-product is an INGREDIENT; a recipe is the METHOD OF OBTAINING it**
+  (cooking is just one kind). One entry = one item. Test set (any plan/recipe
+  change must hold for all five): apple, bowl of oatmeal, 5-course dinner+wines,
+  wedding banquet for 200, order-a-pizza — each is ONE ingredient; the recipe is
+  how to get it. Recipe kinds: composed / simple / acquire / delivery / none.
+  Implies: the plan should reference the end-ingredient (today it FKs
+  recipe_id → recipe_canonicals); and recipe_canonicals + ingredients want to
+  unify (a meal IS an end-product ingredient). [OPEN]: merge-vs-bridge those
+  tables; how recipe-kind is stored; provenance edge for media/edit propagation.
+
+  ### >>> GATES the meal-plan rework <<<
+  The plan currently holds DISHES (recipe_id → recipe_canonicals). The intent is
+  for it to hold end-product ingredients ("only meals, but a meal can be a single
+  dish — actually it's all ingredients"). DO NOT repoint the plan schema until
+  this note's §3 (recipe kinds) and §4 (merge-vs-bridge) opens are settled AND
+  meals are stable. This is spine-level; settle the design first.
+
+## DESIGN-DOC SET now in docs/ (all standalone; this file only points at them)
+- Ingredient–Process Model v0.1 (every ingredient = single output of a process)
+- Role Strength v0.1 (substitution needs magnitude; macro from nutrition,
+  flavor/texture needs stored `intensity`)
+- Plan & End-Product Model v0.1 (this session)
+
+## BACKLOG items surfaced
+- Thread avatar_initials through PlanView participants (override only shows on
+  header/profile today).
+- Audit the `recipes` flattened-mirror table (legacy vs live).
+- Plating on RECIPES (the "add people to a recipe" idea), and plating-for-beauty
+  (generative plate/equipment selection — its own project).
+- Participant name → audience-scoped shareable profile (Sharing & Delegation
+  visibility-tiers phase; plan popover is the entry point).
+
+## NEXT (all large/design-led)
+- Settle the Plan & End-Product Model opens → then the meal-plan-as-ingredients
+  rework (the buildable consequence of this session's design work).
+- Demand Model Phase 2 (ask/habits + running balance) — turns the grey "Best
+  guess" real and unlocks the deferred nutrition-fit signal.
+- Meal-planning enforcement + Stripe; Sharing & Delegation Phase 0.
