@@ -26,6 +26,16 @@ interface SearchResult {
   title: string;
 }
 
+// A product found on Open Food Facts that isn't yet in our DB — offered to add.
+interface AddableProduct {
+  barcode: string;
+  name:    string;
+  brand?:  string | null;
+  image?:  string | null;
+  netWeightG?: number | null;
+  nutrition?: any;
+}
+
 // Detect if a query looks like a barcode (8-14 digits)
 function isBarcode(q: string) {
   return /^\d{8,14}$/.test(q.trim());
@@ -40,6 +50,17 @@ export default function SearchPage() {
   const [results,     setResults]     = useState<SearchResult[]>([]);
   const [loading,     setLoading]     = useState(false);
 
+  // Barcode "not in the system" results (from Open Food Facts) + add state.
+  const [addable,   setAddable]   = useState<AddableProduct[]>([]);
+  const [loggedIn,  setLoggedIn]  = useState(false);
+  const [adding,    setAdding]    = useState<string | null>(null); // barcode being added
+
+  // Know whether the user may add products (logged-in gate for now).
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setLoggedIn(!!data.user));
+  }, []);
+
   // Sync state from URL params on load — default 'All' not 'Recipes'
   useEffect(() => {
     const q    = searchParams.get('q') ?? '';
@@ -49,31 +70,53 @@ export default function SearchPage() {
   }, [searchParams]);
 
   const runSearch = useCallback(async (q: string, type: ContentType) => {
-    if (!q.trim()) { setResults([]); return; }
+    if (!q.trim()) { setResults([]); setAddable([]); return; }
     setLoading(true);
+    setAddable([]);
     try {
       const supabase = createClient();
       const db = supabase as any;
 
       // ── Barcode lookup ──────────────────────────────────────
       if (isBarcode(q)) {
-        const { data: barcodeResult } = await db
+        const code = q.trim();
+
+        // (a) what we already have, matched by stored barcode
+        const { data: dbMatches } = await db
           .from('ingredients')
           .select('id, slug, name, is_product')
-          .eq('barcode', q.trim())
+          .eq('barcode', code)
           .eq('is_product', true)
           .limit(5);
 
-        if (barcodeResult?.length) {
-          setResults(barcodeResult.map((r: any) => ({
-            id:    r.id,
-            slug:  r.slug,
-            type:  'product',
-            title: r.name,
-          })));
-          setLoading(false);
-          return;
-        }
+        const found: SearchResult[] = (dbMatches ?? []).map((r: any) => ({
+          id: r.id, slug: r.slug, type: 'product', title: r.name,
+        }));
+        setResults(found);
+
+        // (b) look the barcode up on Open Food Facts; offer to add anything we
+        //     don't already have. Best-effort — failures just mean no "addable".
+        try {
+          const res = await fetch(`/api/products/lookup?barcode=${encodeURIComponent(code)}`);
+          const off = await res.json();
+          if (off?.found) {
+            // Barcode lookup returns a flat product object (not a `products` array).
+            const haveInDb = (dbMatches ?? []).length > 0;
+            if (!haveInDb && (off.name || off.product_name)) {
+              setAddable([{
+                barcode:    off.barcode ?? off.off_id ?? code,
+                name:       off.name ?? off.product_name ?? 'Unknown product',
+                brand:      off.brand ?? null,
+                image:      off.image_url ?? null,
+                netWeightG: off.net_weight_g ?? null,
+                nutrition:  off.nutrition_per_100g ?? null,
+              }]);
+            }
+          }
+        } catch { /* OFF unavailable — leave addable empty */ }
+
+        setLoading(false);
+        return;
       }
 
       // ── Full-text search ────────────────────────────────────
@@ -106,6 +149,39 @@ export default function SearchPage() {
       setLoading(false);
     }
   }, []);
+
+  // Add an Open Food Facts product into our ingredients (logged-in only — the
+  // /api/my/products endpoint enforces auth, returning 401 otherwise). On
+  // success, move it from "not in the system" into the found results.
+  const handleAddProduct = async (p: AddableProduct) => {
+    setAdding(p.barcode);
+    try {
+      const res = await fetch('/api/my/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name:               p.name,
+          brand:              p.brand ?? null,
+          barcode:            p.barcode,
+          net_weight_g:       p.netWeightG ?? null,
+          nutrition_per_100g: p.nutrition ?? null,
+          off_id:             p.barcode,
+        }),
+      });
+      if (!res.ok) throw new Error('add failed');
+      const created = await res.json();
+      // POST returns { id, slug }; use the OFF name for the title.
+      setResults((prev) => [
+        { id: created.id, slug: created.slug, type: 'product', title: p.name },
+        ...prev,
+      ]);
+      setAddable((prev) => prev.filter((a) => a.barcode !== p.barcode));
+    } catch {
+      // leave it in the addable list; user can retry
+    } finally {
+      setAdding(null);
+    }
+  };
 
   useEffect(() => {
     runSearch(query, contentType);
@@ -185,39 +261,91 @@ export default function SearchPage() {
             Searching…
           </p>
         </div>
-      ) : results.length > 0 ? (
+      ) : (results.length > 0 || addable.length > 0) ? (
         <>
-          <div className="flex items-baseline gap-3 mb-6">
-            <h2 className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">
-              {results.length} {results.length === 1 ? 'Result' : 'Results'}
-            </h2>
-            <div className="flex-1 h-px bg-[var(--border)]" />
-          </div>
+          {/* Found results — no headline; they're just the results. */}
+          {results.length > 0 && (
+            <table className="w-full text-sm border-collapse mb-10">
+              <tbody>
+                {results.map(r => (
+                  <tr
+                    key={r.id}
+                    className="border-b border-[var(--border)] hover:bg-[var(--surface)] transition-colors"
+                  >
+                    <td className="py-3 pr-4">
+                      <Link
+                        href={resultUrl(r)}
+                        className="font-medium text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        {r.title}
+                      </Link>
+                    </td>
+                    <td className="py-3 text-right">
+                      {r.type === 'product' ? (
+                        <Link
+                          href={`/ingredients/${r.slug}`}
+                          className="font-mono text-[10px] uppercase tracking-widest border border-[var(--border)] px-2.5 py-1 rounded-sm text-[var(--accent)] hover:border-[var(--accent)] transition-colors"
+                        >
+                          View product &amp; recipes
+                        </Link>
+                      ) : (
+                        <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">
+                          {typeLabel(r.type)}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
 
-          <table className="w-full text-sm border-collapse">
-            <tbody>
-              {results.map(r => (
-                <tr
-                  key={r.id}
-                  className="border-b border-[var(--border)] hover:bg-[var(--surface)] transition-colors"
-                >
-                  <td className="py-3 pr-4">
-                    <Link
-                      href={resultUrl(r)}
-                      className="font-medium text-[var(--fg)] hover:text-[var(--accent)] transition-colors"
-                    >
-                      {r.title}
-                    </Link>
-                  </td>
-                  <td className="py-3 text-right">
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">
-                      {typeLabel(r.type)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Not in the system — Open Food Facts matches we could add. */}
+          {addable.length > 0 && (
+            <>
+              <div className="flex items-baseline gap-3 mb-4">
+                <h2 className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)]">
+                  Not in the system
+                </h2>
+                <div className="flex-1 h-px bg-[var(--border)]" />
+              </div>
+              <div className="flex flex-col gap-2 mb-6">
+                {addable.map(p => (
+                  <div
+                    key={p.barcode}
+                    className="flex items-center gap-3 border border-dashed border-[var(--border)] rounded-sm px-4 py-3"
+                  >
+                    {p.image && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.image} alt="" className="w-9 h-9 object-cover rounded-sm flex-shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-[var(--fg)] truncate">{p.name}</div>
+                      {p.brand && (
+                        <div className="font-mono text-[10px] text-[var(--muted)] truncate">{p.brand}</div>
+                      )}
+                    </div>
+                    {loggedIn ? (
+                      <button
+                        onClick={() => handleAddProduct(p)}
+                        disabled={adding === p.barcode}
+                        className="font-mono text-[10px] uppercase tracking-widest border border-[var(--accent)] px-3 py-1.5 rounded-sm text-[var(--accent)] hover:bg-[var(--accent)] hover:text-white transition-colors disabled:opacity-50"
+                      >
+                        {adding === p.barcode ? 'Adding…' : 'Add'}
+                      </button>
+                    ) : (
+                      <Link
+                        href="/login"
+                        className="font-mono text-[10px] uppercase tracking-widest text-[var(--muted)] hover:text-[var(--accent)] transition-colors"
+                      >
+                        Log in to add
+                      </Link>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </>
       ) : (
         <div className="py-12 text-center">
