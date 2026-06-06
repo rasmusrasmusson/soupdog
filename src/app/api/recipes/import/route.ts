@@ -1,10 +1,40 @@
 // src/app/api/recipes/import/route.ts
-// POST — parse recipe from text, image, or PDF using Claude
+// POST — parse recipe from text, image, PDF, Word (.docx) or Excel (.xlsx)
 // Accepts: { text } OR { file: base64string, mediaType: string }
+// .docx/.xlsx are extracted to text server-side, then run through the text path.
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
+import mammoth from 'mammoth';
+import * as XLSX from 'xlsx';
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const XLS_MIME  = 'application/vnd.ms-excel';
+
+// Pull readable text out of a Word doc (base64) so the existing text path can
+// parse it. mammoth returns plain text; structure is recovered by the AI step.
+async function extractDocx(base64: string): Promise<string> {
+  const buffer = Buffer.from(base64, 'base64');
+  const { value } = await mammoth.extractRawText({ buffer });
+  return value;
+}
+
+// Pull text from a spreadsheet (base64): every sheet → CSV, concatenated.
+// Recipes pasted into Excel are usually a column of ingredients + a column of
+// steps; CSV preserves enough for the AI step to structure it.
+function extractXlsx(base64: string): string {
+  const buffer = Buffer.from(base64, 'base64');
+  const wb = XLSX.read(buffer, { type: 'buffer' });
+  return wb.SheetNames
+    .map((name) => {
+      const csv = XLSX.utils.sheet_to_csv(wb.Sheets[name]);
+      return wb.SheetNames.length > 1 ? `# Sheet: ${name}\n${csv}` : csv;
+    })
+    .join('\n\n')
+    .trim();
+}
 
 const SYSTEM_PROMPT = `You are a recipe parsing system for Soupdog, a structured food execution platform.
 
@@ -101,19 +131,35 @@ export async function POST(req: NextRequest) {
   if (file && mediaType) {
     const isPdf   = mediaType === 'application/pdf';
     const isImage = mediaType.startsWith('image/');
-    if (!isPdf && !isImage) {
-      return NextResponse.json({ error: 'Unsupported file type. Use PDF or image.' }, { status: 400 });
+    const isDocx  = mediaType === DOCX_MIME;
+    const isXlsx  = mediaType === XLSX_MIME || mediaType === XLS_MIME;
+    if (!isPdf && !isImage && !isDocx && !isXlsx) {
+      return NextResponse.json({ error: 'Unsupported file type. Use PDF, image, Word, or Excel.' }, { status: 400 });
     }
     if (isPdf) {
       userContent = [
         { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: file } },
         { type: 'text', text: 'Parse the recipe from this document.' },
       ];
-    } else {
+    } else if (isImage) {
       userContent = [
         { type: 'image', source: { type: 'base64', media_type: mediaType, data: file } },
         { type: 'text', text: 'Parse the recipe from this image.' },
       ];
+    } else {
+      // Word / Excel: extract to text, then use the same text path as below.
+      let extracted = '';
+      try {
+        extracted = isDocx ? await extractDocx(file) : extractXlsx(file);
+      } catch (e: any) {
+        console.error('[import] extract failed:', e?.message);
+        return NextResponse.json({ error: 'Could not read that file. It may be corrupt or password-protected.' }, { status: 400 });
+      }
+      if (!extracted.trim()) {
+        return NextResponse.json({ error: 'No readable text found in that file.' }, { status: 400 });
+      }
+      if (extracted.length > 20000) extracted = extracted.slice(0, 20000);
+      userContent = `Parse this recipe:\n\n${extracted.trim()}`;
     }
   } else {
     if (text.length > 20000) {

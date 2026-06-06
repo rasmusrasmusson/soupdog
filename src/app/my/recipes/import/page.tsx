@@ -153,9 +153,14 @@ export default function ImportRecipePage() {
   }, [chatHistory, chatLoading, pending]);
 
   const handleFileSelect = (file: File) => {
-    const allowed = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'text/plain'];
+    const allowed = [
+      'application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'text/plain',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',        // .xlsx
+      'application/vnd.ms-excel',                                                  // .xls
+    ];
     if (!allowed.includes(file.type)) {
-      setError('Unsupported file type. Please use PDF, JPG, PNG, WebP, or TXT.');
+      setError('Unsupported file type. Please use PDF, JPG, PNG, WebP, TXT, Word, or Excel.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
@@ -381,7 +386,7 @@ export default function ImportRecipePage() {
                 transition: 'all 0.15s',
               }}>
               <input ref={fileInputRef} type="file"
-                accept=".pdf,.txt,image/jpeg,image/png,image/webp,image/gif"
+                accept=".pdf,.txt,.docx,.xlsx,.xls,image/jpeg,image/png,image/webp,image/gif"
                 style={{ display: 'none' }}
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
               <div style={{ fontSize: 20, flexShrink: 0 }}>
@@ -403,7 +408,7 @@ export default function ImportRecipePage() {
                       Upload a photo, screenshot, or PDF
                     </div>
                     <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', marginTop: 2 }}>
-                      Drag & drop or click · JPG, PNG, WebP, PDF, TXT · max 20MB
+                      Drag & drop or click · JPG, PNG, WebP, PDF, Word, Excel, TXT · max 20MB
                     </div>
                   </div>
                 )}
