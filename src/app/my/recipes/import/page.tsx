@@ -132,6 +132,7 @@ export default function ImportRecipePage() {
   const [text,       setText]       = useState('');
   const [manualTitle, setManualTitle] = useState('');
   const [uploadFile, setUploadFile] = useState<File|null>(null);
+  const lastImportRef = useRef<File|null>(null);
   const [dragOver,   setDragOver]   = useState(false);
   const [saving,     setSaving]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -181,6 +182,7 @@ export default function ImportRecipePage() {
   };
 
   const handleImportFile = async (file: File) => {
+    lastImportRef.current = file;
     setStatus('loading');
     setError(null);
     setPreview(null);
@@ -477,7 +479,18 @@ export default function ImportRecipePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
               border: '1px solid #b45309', background: '#fef3c7', fontFamily: MONO, fontSize: 11,
               color: '#92400e', marginBottom: 16 }}>
-              <AlertTriangle size={12} />{error}
+              <AlertTriangle size={12} />
+              <span style={{ flex: 1 }}>{error}</span>
+              {lastImportRef.current && (
+                <button
+                  type="button"
+                  onClick={() => { if (lastImportRef.current) handleImportFile(lastImportRef.current); }}
+                  style={{ fontFamily: MONO, fontSize: 11, color: '#92400e', background: 'transparent',
+                    border: '1px solid #b45309', borderRadius: 5, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Try again
+                </button>
+              )}
             </div>
           )}
         </>

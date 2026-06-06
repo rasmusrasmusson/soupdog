@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
       model:      'claude-sonnet-4-6',
       feature:    'import_parse',
       accountId:  user.id,
-      max_tokens: 6000,
+      max_tokens: 8000,
       system:     SYSTEM_PROMPT,
       messages:   [{ role: 'user', content: userContent }],
     });
@@ -185,14 +185,25 @@ export async function POST(req: NextRequest) {
 
     const data  = result.data;
     const raw   = data.content?.[0]?.text ?? '';
-    const clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    // Robust extraction: strip code fences, then take the outermost { ... } so a
+    // stray preamble/sentence from the model can't break JSON.parse.
+    let clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+    const firstBrace = clean.indexOf('{');
+    const lastBrace  = clean.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      clean = clean.slice(firstBrace, lastBrace + 1);
+    }
 
     let parsed: any;
     try {
       parsed = JSON.parse(clean);
     } catch {
-      console.error('[import] JSON parse failed:', clean.slice(0, 200));
-      return NextResponse.json({ error: 'Could not parse AI response as JSON' }, { status: 500 });
+      // Log enough to diagnose truncation vs. malformed vs. wrapped.
+      console.error('[import] JSON parse failed. rawLen=%d, tail=%j', raw.length, raw.slice(-200));
+      return NextResponse.json({
+        error: 'We had trouble reading that recipe. Please try again.',
+        retryable: true,
+      }, { status: 502 });
     }
 
     if (!parsed.title || !Array.isArray(parsed.ingredients) || !Array.isArray(parsed.groups)) {
