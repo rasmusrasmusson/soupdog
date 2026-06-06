@@ -997,3 +997,89 @@ the own-DB match path self-improves toward the actual user base.
 - Plan & End-Product rework (design settled v0.2: bridge + kind enum).
 - Demand Model Phase 2; meal-planning enforcement + Stripe; Sharing & Delegation
   Phase 0; Cook Mode (design note in docs/).
+
+
+# SESSION UPDATE — 2026-06-06 (cont. 2) — Mirror audit + recipe-model design
+
+Final stretch of a long session. After barcode search, this part was mostly
+INVESTIGATION + DESIGN, not shipping code. Pattern of the session: each "small"
+item bounced off an upstream dependency, and the chain terminated at the recipe
+model itself — which we then designed substantially.
+
+## SHIPPED — code (earlier in session, recap)
+Header units removed + language switcher discoverable; Word/Excel recipe import
+(+ hardened JSON parse + Try-again); save/unsave fix (resolve-any-id route + page
+passes true canonical); barcode search (own-DB match + OFF "Not in the system" +
+Add for logged-in, not-found message, auth via useAuth); create-recipe button →
+/my/recipes/import.
+
+## RESOLVED — `recipes` mirror-table audit (NO migration needed)
+**Outcome: there was no data bug.** Doc written: `docs/
+Soupdog_Recipes_Mirror_Table_Note_v0_1.md`.
+- `recipes` is a deliberate flat mirror, written in parallel with canonicals/
+  versions on create/edit. Its link to the canonical model works via
+  `recipe_version_id → recipe_versions.canonical_id` (all 40 rows resolve).
+- **`recipes.canonical_id` is a TRAP:** it's a self-FK (`REFERENCES recipes(id)`),
+  an abandoned intra-mirror idea, NULL on all rows, read by NO code. Its name
+  lured us (and the original save/unsave author) into assuming it held a
+  recipe_canonicals.id. The dry-run + constraint inspection caught that a backfill
+  would have FK-failed — do NOT backfill it.
+- **DOWNGRADE** the "recipes-mirror debt" item from near-term to "resolved — see
+  doc; optional rename/drop of canonical_id only, during a hygiene pass." The
+  save/unsave resolve-any-id fix already shipped is the correct handling.
+
+## DESIGN NOTES PRODUCED (no code)
+1. `docs/Soupdog_Add_Recipe_From_Ingredient_Design_v0_1.md` — "add recipe from an
+   ingredient" is TWO intents: (1) use ingredient AS INPUT ("I have pizza/potatoes
+   — cook with it"; really meal-plan/inventory-shaped; surfaces as `linkedRecipes`)
+   vs (2) make ingredient AS RESULT ("I want that mousse"; how people actually
+   shop for cooking; links via `ingredients.transformation_recipe_id`). Subtle
+   point: precise-ingredient model means a user's mousse recipe yields a VARIANT
+   ingredient, but we still link the clicked ingredient → new recipe (honor mental
+   model). "Can't make a banana" → depends on `recipe.kind`. So this feature is
+   downstream of kind + a two-intents UX decision; button left at blank import for
+   now.
+
+2. `docs/Soupdog_Recipe_Model_Concept_Fork_Design_v0_2.md` — **THE FOUNDATIONAL
+   ONE.** Resolves how recipes relate. Four levels:
+   - **Concept** — curated (humans now, AI later), GLOBAL, MANY-TO-MANY grouping of
+     ingredients perceived as "the same thing." Perception-variance across a global
+     audience handled by OVERLAPPING concepts referencing shared ingredients
+     (e-commerce multi-category pattern), NOT per-user concepts. Own m2m membership,
+     NOT the existing `parent_id` (which stays for product↔category).
+   - **Recipe (canonical)** = a sibling under a concept. siblings == variations
+     (settled; a tweak makes a new sibling).
+   - **Version** = replace-history within a recipe (exists).
+   - **Fork** = shared content + a divergence. Content reuse is PULL-BY-REFERENCE
+     declared by the CONSUMER (recipe references the ingredient's picture; fork
+     references another fork's steps) — NO inheritance. "One edit covers both"
+     works because referencers point at the shared source. Who may declare reuse =
+     ADMIN RIGHTS (rides on Sharing & Delegation access model, no new concept).
+   - Graduation: a fork can graduate to a full sibling (user choice; AI suggests
+     when divergence high). No technical fork limit — "too many forks" is a
+     modeling smell → graduate or parameterise.
+   - Three orthogonal axes the old model conflated: History (versions) / Catalog
+     (concept→siblings) / Execution-branching (forks → ties to Cook Mode).
+
+## OPEN (recipe model) — for a FRESH design+diagram pass
+- Fork representation: in-recipe branch (step with options) vs recipe referencing
+  another's components? (v0.2 leans the latter.)
+- Graduation lineage: how a fork re-homes as a sibling without losing forked-from
+  link.
+- Parameterised recipe (doneness param) vs discrete forks — when each.
+
+## NEXT (clear opening for next session)
+1. **Diagram the recipe model (v0.2) + settle the two open structural questions**
+   (fork representation, graduation lineage). Prose is at its limit; this wants
+   boxes + FK arrows. THEN the schema writes itself.
+2. **THEN `recipe.kind` enum** (composed/simple/acquire/delivery/none) — now
+   clearly DOWNSTREAM of the recipe-model levels. Likely on the canonical/recipe
+   level (intrinsic, stable). Gates the two-intents feature's "can't make it" and
+   feeds the Plan & End-Product bridge.
+3. Then Plan & End-Product rework proper; Demand Phase 2; enforcement + Stripe;
+   Sharing & Delegation Phase 0; Cook Mode.
+
+## Backlog carried (unchanged)
+Manual-add fallback when OFF returns nothing; pre-attach product to create-recipe
+(now folded into the two-intents design); npm audit for xlsx vulns; saved-recipe
+folders; household→groups rename; thread avatar_initials through PlanView.
