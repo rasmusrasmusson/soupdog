@@ -922,3 +922,78 @@ All SHIPPED & verified on live unless noted.
   sequence written; confirm meals stable first).
 - Demand Model Phase 2; Meal-planning enforcement + Stripe; Sharing & Delegation.
 - Cook Mode / Live Cooking Sessions (backlog design note in docs/).
+
+# SESSION UPDATE — 2026-06-06 (cont.) — Barcode search + create-recipe link
+
+Continuation of the same long session. After the small-items batch (header/i18n/
+Word-Excel import/save-unsave), this stretch built barcode search end-to-end and
+fixed a recipe-creation link. All SHIPPED & verified on live.
+
+## SHIPPED — code
+
+- **Barcode search (Slice 1)** — one file: `src/app/search/page.tsx`.
+  When the search query is 8–14 digits (`isBarcode` = `/^\d{8,14}$/`), it:
+  1. **Matches own products** by stored `ingredients.barcode` (is_product=true) →
+     shown at top, no headline, each with a single **"View product & recipes"**
+     button → `/ingredients/[slug]` (that page shows product info + recipes
+     inline; we deliberately kept ONE button, not two — Rasmus agreed, since the
+     page shows both anyway).
+  2. **Looks up Open Food Facts** via the existing `GET /api/products/lookup?
+     barcode=` (flat response: name/brand/net_weight_g/nutrition_per_100g/
+     image_url/off_id). Products found there but not in our DB are listed under a
+     **"Not in the system"** heading (dashed cards, image+name+brand), with:
+       - **"Add"** for logged-in users → `POST /api/my/products` (creates the
+         is_product ingredient; endpoint already enforces auth = the eligibility
+         gate) → on success promotes the item into the found results.
+       - **"Log in to add"** for logged-out users.
+  3. **Not-found message** when a barcode matches neither source: "No product
+     found for this barcode" + a plain-language line (sets up the future
+     manual-add path).
+  - Reused existing infra: `isBarcode`, `products/lookup` (OFF), `my/products`
+    POST. So this was mostly wiring + segmented UI, no new endpoints.
+  - **AUTH-GATE BUG fixed during testing:** first version checked login via a
+    direct browser `createClient().auth.getUser()`, which returned null even when
+    signed in (client session can race/empty) → showed "Log in to add" to a
+    logged-in user. Fixed by using the shared **`useAuth()` from
+    `@/lib/auth-context`** — the same source the header uses. Reliable now.
+
+- **Create-a-recipe link fixed** — one file: `src/app/ingredients/[slug]/page.tsx`.
+  The "Create a recipe using this product →" button (shown when a product has no
+  recipes yet) linked to `/my/recipes/new` (the ADVANCED structured editor).
+  Changed to `/my/recipes/import` (the friendly "Add recipe" upload/paste page).
+  NOTE: `/my/recipes/[id]` is the BASIC WYSIWYG editor but it's EDIT-ONLY (needs
+  an existing recipe id); there is no basic *create* route. `/my/recipes/import`
+  is the intended approachable entry point.
+
+## OFF COVERAGE — context for the barcode feature (researched this session)
+Open Food Facts is GLOBAL (4M+ products, 150 countries, contributor-built) but
+VERY uneven. Strong: France ~1.21M, US ~862K, Germany 389K, Spain 362K, Italy
+264K, UK 178K. Thin for our likely markets: Japan ~35K, Singapore ~9.6K, Thailand
+~10K, Malaysia ~5K, **China only ~1,554**. Implication: high hit-rate in EU/US,
+LOW in China (where Rasmus is), thin in SE Asia. So the "Not in the system / Add"
+path carries the feature locally, and each Add populates `ingredients.barcode` so
+the own-DB match path self-improves toward the actual user base.
+
+## BACKLOG — added this session
+- **Manual-add fallback:** when OFF returns nothing (frequent for China/SE-Asia),
+  let eligible users add a product BY HAND, not only when OFF has a match. The
+  not-found message is the natural hook for this.
+- **Pre-attach product to create-recipe flow:** the "Create a recipe using this
+  product" button currently opens the Add-recipe page BLANK — it doesn't carry
+  the product over. The wording implies it should. Nice "smooth UX" follow-up
+  (pre-seed the ingredient into the new recipe).
+- **Barcode feature later slices:** tier/quota gating (currently logged-in only),
+  camera/scanner input, pre-save editing of OFF data, smoother barcode→recipe UX.
+
+## ARCHITECTURE DEBT — NEAR-TERM (unchanged, restated: caused 3 bugs this session)
+- **The `recipes` flattened-mirror table.** All 40 rows have a dead/NULL
+  `canonical_id`; the recipe page reads this mirror and hands its id to features
+  FK'd to `recipe_canonicals`. Audit: authoritative or derived? why read it?
+  populate or drop `canonical_id`? should the page read canonicals directly?
+  Best done as a focused fresh session.
+
+## NEXT (large/design-led — pick fresh)
+- `recipes`-mirror audit (above) — highest-leverage cleanup.
+- Plan & End-Product rework (design settled v0.2: bridge + kind enum).
+- Demand Model Phase 2; meal-planning enforcement + Stripe; Sharing & Delegation
+  Phase 0; Cook Mode (design note in docs/).
