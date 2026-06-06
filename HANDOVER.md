@@ -838,3 +838,87 @@ What remains is all large/design-led, each its own focused session:
 - Demand Model Phase 2 (ask/habits + running balance) — turns the grey "Best
   guess" real and unlocks the deferred nutrition-fit signal.
 - Meal-planning enforcement + Stripe; Sharing & Delegation Phase 0.
+
+
+# SESSION UPDATE — 2026-06-06 (Small-items batch: header, i18n, Word/Excel import, save/unsave fix)
+
+A long session clearing genuinely-small backlog items. Several turned out to be
+deceptively deep — notably save/unsave, which excavated real architecture debt.
+All SHIPPED & verified on live unless noted.
+
+## SHIPPED — code (pushed, builds green, tested on live)
+
+- **Header: removed the units/metrics menu** entirely (was always-on, overkill;
+  units belong in profile / later a recipe-view control). Cleaned up its state.
+
+- **Header: language switcher made discoverable.** Was `hidden sm:flex` with a
+  "LANG" text label — invisible on mobile, and unreadable to someone who landed
+  in a language they don't speak. Now: always visible, led by a **globe icon**
+  (no text to misread), options shown as **endonyms** (English / Svenska / 中文 /
+  العربية — each in its own script), aria-labelled. So a lost user can always
+  find their way back. (Both header changes in one Header.tsx commit.)
+
+- **Recipe import now accepts Word (.docx) and Excel (.xlsx/.xls).** The model
+  can't read those natively (unlike PDF/image), so they're **extracted to text
+  server-side** (mammoth for Word, SheetJS `sheet_to_csv` for Excel) and fed
+  into the existing text-parse path — reuses the whole downstream pipeline.
+  Added deps: `mammoth`, `xlsx` (npm install committed via package.json/lock).
+  - **NPM AUDIT NOTE:** install flagged 3 vulns (2 moderate, 1 high), likely
+    transitive in xlsx/SheetJS. Did NOT run `npm audit fix --force` (breaks
+    builds). Backlog: review `npm audit` calmly, check if a patched xlsx exists.
+  - **Hardened parsing** (a long Swedish recipe initially failed with "Could not
+    parse AI response as JSON"): now extracts the outermost `{ … }` from the
+    model response (survives stray preamble), raised max_tokens 6000→8000,
+    logs rawLen+tail on failure. Returns `retryable: true`.
+  - **"Try again" button** on import errors (re-runs the last file) — these
+    failures are often transient.
+
+- **Save/unsave recipe — FIXED (was silently broken).** Root cause: the recipe
+  page passed the **`recipes`-mirror-table id** as `canonicalId`, but
+  `saved_recipes.canonical_id` FKs to `recipe_canonicals(id)`. The mirror's own
+  `canonical_id` column is **NULL for all 40 rows** (only `recipe_version_id` is
+  populated), so the insert failed the FK and nothing persisted (button flipped
+  optimistically, reverted on reload, never appeared in Saved). DB schema for
+  saved_recipes is fully correct (grants, RLS policy "Users manage own saves"
+  ALL, unique(user_id,canonical_id), FKs).
+  - **Fix (defense in depth):**
+    1. ROUTE (POST + DELETE): a `resolveCanonicalId()` resolves ANY id it
+       receives — canonical / recipe_version / recipes-mirror — to the true
+       recipe_canonicals.id before touching saved_recipes (chain:
+       recipes.recipe_version_id → recipe_versions.canonical_id →
+       recipe_canonicals.id; verified intact for all 40). POST now `.select()`s
+       the row back + logs failures (no more silent `{ok:true}`).
+    2. PAGE: hoisted the existing slug→canonical lookup out of the author-only
+       block so ALL viewers resolve it; threaded `canonicalId` through
+       RecipeView → BookmarkButton. So save/unsave/load-check all use the true
+       canonical (fixes the "reverts to Save on reload" display bug).
+  - Verified live: saves persist, show under My Recipes > Saved, survive reload.
+
+## ARCHITECTURE DEBT — elevate to NEAR-TERM (caused 3 issues this session)
+- **The `recipes` flattened-mirror table** (alongside recipe_canonicals/
+  recipe_versions). All 40 rows have a **dead/NULL `canonical_id`** column; the
+  recipe page READS from this mirror and hands its id to features that expect
+  canonicals. Caused: (a) the test-data FK teardown earlier, (b) the save/unsave
+  break, (c) the null-canonical data finding. The save fix makes the app
+  *resilient* to it (resolve-any-id) but does NOT resolve the debt.
+  **Audit needed:** is the mirror authoritative or derived? why does the page
+  read it? should `canonical_id` be populated or the column dropped? should the
+  page read recipe_canonicals directly? Until resolved, expect more bugs of
+  this shape (page hands a mirror id to something FK'd to canonicals).
+
+## BACKLOG (deferred from this session's note list)
+- **Saved-recipe folders / sub-folders / move** — its own feature (tree table +
+  move/reorder UI). Save/unsave itself is now done; this is the org layer.
+- **AI chat fills the make-recipe form** ("make me a croissant recipe" → fills
+  fields) — a real feature, paying-users only; gate behind the quota/enforcement
+  work (else it's an ungated cost center).
+- **household → groups rename** (internal label; users don't see it). Cosmetic
+  but wide-touching (many files/columns) — fold into the future Groups build
+  rather than churning standalone.
+- **npm audit** review for the xlsx transitive vulns (don't force-fix).
+
+## NEXT (all large/design-led — unchanged from prior entries)
+- Plan & End-Product rework (design settled v0.2: bridge + kind enum; build
+  sequence written; confirm meals stable first).
+- Demand Model Phase 2; Meal-planning enforcement + Stripe; Sharing & Delegation.
+- Cook Mode / Live Cooking Sessions (backlog design note in docs/).
