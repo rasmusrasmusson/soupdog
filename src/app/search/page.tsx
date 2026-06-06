@@ -4,6 +4,7 @@ import { Search } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth-context';
 import Link from 'next/link';
 
 const TYPES = ['All', 'Recipes', 'Ingredients', 'Techniques', 'Equipment'] as const;
@@ -52,14 +53,13 @@ export default function SearchPage() {
 
   // Barcode "not in the system" results (from Open Food Facts) + add state.
   const [addable,   setAddable]   = useState<AddableProduct[]>([]);
-  const [loggedIn,  setLoggedIn]  = useState(false);
   const [adding,    setAdding]    = useState<string | null>(null); // barcode being added
 
-  // Know whether the user may add products (logged-in gate for now).
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => setLoggedIn(!!data.user));
-  }, []);
+  // Eligibility to add products = logged in. Use the shared auth context (the
+  // same source the header uses) — a direct client getUser() can race/return
+  // null even when the user is signed in.
+  const { user } = useAuth();
+  const loggedIn = !!user;
 
   // Sync state from URL params on load — default 'All' not 'Recipes'
   useEffect(() => {
@@ -350,8 +350,17 @@ export default function SearchPage() {
       ) : (
         <div className="py-12 text-center">
           <p className="font-mono text-[12px] text-[var(--muted)] uppercase tracking-widest">
-            {query ? 'No results found' : 'Enter a search term or barcode'}
+            {!query
+              ? 'Enter a search term or barcode'
+              : isBarcode(query)
+                ? 'No product found for this barcode'
+                : 'No results found'}
           </p>
+          {query && isBarcode(query) && (
+            <p className="font-mono text-[10px] text-[var(--muted)] mt-2 normal-case tracking-normal">
+              It isn’t in the system yet and we couldn’t find it in the global product database.
+            </p>
+          )}
         </div>
       )}
     </div>
