@@ -435,7 +435,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 }
 
 
-function RecipeView({ recipe }: { recipe: Recipe }) {
+function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: string | null }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
   const toolChecks = useChecklist(recipe.equipment?.length ?? 0);
@@ -535,7 +535,7 @@ function RecipeView({ recipe }: { recipe: Recipe }) {
             </h1>
             <span className="flex items-center gap-3 flex-shrink-0 no-print">
               <PrintButton title={recipe.title} />
-              <BookmarkButton canonicalId={recipe.id} />
+              <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
             </span>
           </div>
           <div className="hidden md:grid border border-[var(--border)] text-[11px]"
@@ -943,7 +943,11 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           }
           if (user && data.author_id === user.id) {
             setIsAuthor(true);
-            // Look up the canonical ID via slug for publish/unpublish
+          }
+          // Look up the canonical ID via slug — needed for publish/unpublish AND
+          // for the bookmark/save button (so it saves under the true canonical,
+          // not the recipes-mirror row id). Done for all viewers, not just author.
+          {
             const { data: can } = await supabase
               .from('recipe_canonicals')
               .select('id')
@@ -1088,7 +1092,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           </button>
         </div>
       )}
-      <RecipeView recipe={recipe} />
+      <RecipeView recipe={recipe} canonicalId={canonicalId} />
     </>
   );
 }
