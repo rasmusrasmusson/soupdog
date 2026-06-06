@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, LogOut } from 'lucide-react';
+import { Search, LogOut, Globe } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -9,10 +9,7 @@ import { useLocale } from '@/lib/locale-context';
 import type { Locale } from '@/i18n/config';
 import { Avatar } from '@/components/people/Avatar';
 
-const unitOptions = ['metric', 'imperial', 'usCustomary'] as const;
-
 export function Header() {
-  const [unit, setUnit] = useState<typeof unitOptions[number]>('metric');
   const [searchQuery, setSearchQuery] = useState('');
   const { user, loading, signOut } = useAuth();
   const { locale, setLocale, t, messages } = useLocale();
@@ -92,19 +89,12 @@ export function Header() {
 
       {/* Right controls */}
       <div className="flex items-center gap-3 flex-shrink-0 ms-auto">
-        {/* Units — hidden on small screens */}
-        <div className="hidden lg:flex items-center gap-1.5">
-          <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--muted)]">{t('header.units')}</span>
-          <select value={unit} onChange={e => setUnit(e.target.value as typeof unit)}
-            className="text-[11px] font-mono border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--fg)] cursor-pointer outline-none hover:border-[var(--accent)] transition-colors">
-            {unitOptions.map(o => <option key={o} value={o}>{t(`units.${o}`)}</option>)}
-          </select>
-        </div>
-
-        {/* Language */}
-        <div className="hidden sm:flex items-center gap-1.5">
-          <span className="text-[9px] font-mono uppercase tracking-wider text-[var(--muted)]">{t('header.lang')}</span>
+        {/* Language — always visible + globe icon + endonyms, so a user who
+            landed in a language they can't read can still find and change it. */}
+        <div className="flex items-center gap-1.5">
+          <Globe size={13} strokeWidth={1.5} className="text-[var(--muted)]" aria-hidden="true" />
           <select value={locale} onChange={e => setLocale(e.target.value as Locale)}
+            aria-label="Select language"
             className="text-[11px] font-mono border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--fg)] cursor-pointer outline-none hover:border-[var(--accent)] transition-colors">
             {langOptions.map(([code, name]) => (
               <option key={code} value={code}>{name as string}</option>
