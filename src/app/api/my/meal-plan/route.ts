@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         recipe_versions!current_version_id ( title, cuisine, total_time_seconds, base_servings )
       ),
       meal_participant ( id, status, person_id,
-        person!person_id ( id, full_name, display_name, avatar_color )
+        person!person_id ( id, full_name, display_name, avatar_color, avatar_initials )
       )
     `)
     .eq('owner_person_id', personId)
@@ -62,6 +62,7 @@ export async function GET(req: NextRequest) {
         personId: p.person_id,
         name: per?.full_name || per?.display_name || 'Someone',
         avatarColor: per?.avatar_color ?? null,
+        avatarInitials: per?.avatar_initials ?? null,
       };
     });
     return {

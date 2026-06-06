@@ -153,8 +153,8 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['user_profiles']['Insert']>;
       };
 
-      // ── Household Members ──────────────────────
-      household_members: {
+      // ── Group Members ──────────────────────
+      group_members: {
         Row: {
           id: string;
           user_id: string;
@@ -164,8 +164,8 @@ export interface Database {
           restrictions: string[] | null;
           created_at: string;
         };
-        Insert: Omit<Database['public']['Tables']['household_members']['Row'], 'id' | 'created_at'> & { id?: string };
-        Update: Partial<Database['public']['Tables']['household_members']['Insert']>;
+        Insert: Omit<Database['public']['Tables']['group_members']['Row'], 'id' | 'created_at'> & { id?: string };
+        Update: Partial<Database['public']['Tables']['group_members']['Insert']>;
       };
 
       // ── Saved Recipes ──────────────────────────

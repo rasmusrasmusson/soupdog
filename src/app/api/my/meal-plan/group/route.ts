@@ -1,4 +1,4 @@
-// src/app/api/my/meal-plan/household/route.ts
+// src/app/api/my/meal-plan/group/route.ts
 // GET — the people the caller can add to meals (people they OWN: self + managed
 // household members). Used by the avatar "+" picker.
 
@@ -19,7 +19,7 @@ export async function GET() {
 
   const { data: people, error } = await db
     .from('person')
-    .select('id, full_name, display_name, avatar_color')
+    .select('id, full_name, display_name, avatar_color, avatar_initials')
     .in('id', ids);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -27,6 +27,7 @@ export async function GET() {
     id: p.id,
     name: p.full_name || p.display_name || 'Someone',
     avatarColor: p.avatar_color ?? null,
+    avatarInitials: p.avatar_initials ?? null,
   }));
 
   return NextResponse.json({ people: out });

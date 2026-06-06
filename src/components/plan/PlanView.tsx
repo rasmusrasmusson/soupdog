@@ -4,10 +4,10 @@
 // Menu view + wired interactions: cuisine/time on hero, Swap (pick alternative),
 // manage participants via avatars (add/remove people you own), Add a meal.
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
 
-type Participant = { id: string; status: string; personId: string; name: string; avatarColor: string | null };
+type Participant = { id: string; status: string; personId: string; name: string; avatarColor: string | null; avatarInitials: string | null };
 type Meal = {
   id: string; date: string; slot: string; source: string;
   scheduledTime: string | null;
@@ -15,7 +15,7 @@ type Meal = {
   recipeId: string | null; recipeSlug: string | null; note: string | null; participants: Participant[];
 };
 type Prefs = { personId: string; planActive: boolean; activeSlots: string[]; horizonDays: number };
-type Person = { id: string; name: string; avatarColor: string | null };
+type Person = { id: string; name: string; avatarColor: string | null; avatarInitials: string | null };
 type Option = { id: string; title: string; cuisine: string | null; totalTimeMinutes: number | null };
 
 const ACCENT = 'var(--accent)';
@@ -36,7 +36,9 @@ function colorFor(id: string, key: string | null): string {
   let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
   return PALETTE[PALETTE_KEYS[Math.abs(h) % PALETTE_KEYS.length]];
 }
-function monogram(name: string): string {
+function monogram(name: string, override?: string | null): string {
+  const o = override?.trim();
+  if (o) return o.slice(0, 3).toUpperCase();
   const parts = name.trim().split(/\s+/);
   return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
 }
@@ -82,7 +84,7 @@ export function PlanView() {
     setPrefs(p);
     if (p.planActive) {
       await reloadMeals();
-      const h = await fetch('/api/my/meal-plan/household').then(r => r.json());
+      const h = await fetch('/api/my/meal-plan/group').then(r => r.json());
       setHousehold(h.people ?? []);
     }
   }, [reloadMeals]);
@@ -344,30 +346,6 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
 }) {
   const [openAdd, setOpenAdd] = useState(false);
   const [openPerson, setOpenPerson] = useState<string | null>(null); // personId whose popover is open
-  const avatarsRef = useRef<HTMLDivElement>(null);
-
-  // Close the participant / add popovers on a click outside, or on Escape —
-  // standard dismiss behaviour. Only attaches a listener while one is open.
-  useEffect(() => {
-    if (!openPerson && !openAdd) return;
-    const close = () => { setOpenPerson(null); setOpenAdd(false); };
-    const onClick = (e: MouseEvent) => {
-      if (avatarsRef.current && !avatarsRef.current.contains(e.target as Node)) close();
-    };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
-    // `capture` so we see the click before other handlers stop it; defer the
-    // attach a tick so the opening click itself doesn't immediately close it.
-    const id = setTimeout(() => {
-      document.addEventListener('click', onClick, true);
-      document.addEventListener('keydown', onKey);
-    }, 0);
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener('click', onClick, true);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [openPerson, openAdd]);
-
   const inMeal = new Set(meal.participants.map(p => p.personId));
   const addable = household.filter(h => !inMeal.has(h.id));
   const meta = metaLine(meal);
@@ -383,13 +361,13 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
           )}
           {meta && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{meta}</div>}
         </div>
-        <div ref={avatarsRef} style={{ position: 'relative' }}>
+        <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {meal.participants.map((p, i) => (
               <span key={p.id} title={p.name}
                 onClick={() => { setOpenPerson(v => v === p.personId ? null : p.personId); setOpenAdd(false); }}
                 style={{ width: 30, height: 30, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '2px solid var(--bg)', marginLeft: i === 0 ? 0 : -6, cursor: 'pointer' }}>
-                {monogram(p.name)}
+                {monogram(p.name, p.avatarInitials)}
               </span>
             ))}
             {addable.length > 0 && (
@@ -405,7 +383,7 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
             return (
               <div style={popover}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 6px 10px' }}>
-                  <span style={{ width: 28, height: 28, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{monogram(p.name)}</span>
+                  <span style={{ width: 28, height: 28, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{monogram(p.name, p.avatarInitials)}</span>
                   <span style={{ fontSize: 13.5, color: 'var(--fg)' }}>{p.name}</span>
                 </div>
                 <div onClick={() => { onRemovePerson(meal.id, p.personId); setOpenPerson(null); }}
@@ -425,7 +403,7 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
                   style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px', cursor: 'pointer', fontSize: 13.5, borderRadius: 6 }}
                   onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
                   onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: colorFor(h.id, h.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>{monogram(h.name)}</span>
+                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: colorFor(h.id, h.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>{monogram(h.name, h.avatarInitials)}</span>
                   <span style={{ whiteSpace: 'nowrap' }}>{h.name}</span>
                 </div>
               ))}
@@ -457,7 +435,7 @@ function AvatarStack({ participants, small }: { participants: Participant[]; sma
   return (
     <div style={{ display: 'flex' }}>
       {participants.map((p, i) => (
-        <span key={p.id} title={p.name} style={{ width: size, height: size, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: small ? 10 : 12, border: '2px solid var(--bg)', marginLeft: i === 0 ? 0 : -6 }}>{monogram(p.name)}</span>
+        <span key={p.id} title={p.name} style={{ width: size, height: size, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: small ? 10 : 12, border: '2px solid var(--bg)', marginLeft: i === 0 ? 0 : -6 }}>{monogram(p.name, p.avatarInitials)}</span>
       ))}
     </div>
   );
