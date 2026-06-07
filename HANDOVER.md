@@ -1487,3 +1487,148 @@ Build the **guide layer**, per `docs/Soupdog_Decomposition_Guide_Layer_Design_v0
   visible. Capture + map + select + render are four separate steps.
 - (restated) `recipes` mirror links via `recipe_version_id`; delete mirror rows first
   in any teardown.
+
+# SESSION UPDATE — 2026-06-07 (cont.) — Guide layer SHIPPED; Techniques pages + curation; display fixes
+
+Continuation of the same day. The decomposition guide layer (designed v0.3 earlier) is
+now BUILT, SHIPPED & VALIDATED on prod, plus the public Techniques pages, a task curation
+admin view, two decomposition display fixes, and three design captures. All live unless
+marked. Read the design docs in docs/ for full theory; this is the build state.
+
+## SHIPPED & VALIDATED (prod, tested live)
+
+### Guide layer — the consistency fix (Phase A)
+The decompose route now matches against a VERIFIED task library instead of inventing.
+This structurally fixed the bugs prompt-tightening couldn't: cook-time landing on the
+wrong node, dropped "until crispy", inconsistent verbs.
+- **Schema** (`supabase/migrations/guide_00_task_schema.sql`, RAN LIVE): added to `tasks`
+  — `completion_type` enum (time/core_temp/surface_temp/color/volume/mass/texture/
+  structural/aroma/ph/subjective — EXTENSIBLE) + `completion_target text`; `heat_mechanism`
+  enum (conduction/convection/radiation/dielectric/combination/none) + `heat_medium`
+  (fat/water/steam/air/direct/none). `completion_measurable` bool now redundant
+  (derivable: type != subjective). Re-granted.
+- **Seed** (`guide_01_core_task_seed.sql`, RAN LIVE): blessed ~30 CORE tasks
+  (is_verified=true) with typed completion + heat mechanism/medium + durations + in/out
+  states + tools. Added "Bring to a boil" (structural/rolling boil, NO duration) distinct
+  from "Boil" (texture/al dente, has duration) — the boil-bug fix made structural.
+  Cleaned AI dupes: merged lowercase `fry`→Sauté, `combine`→Mix (repointed version_steps,
+  deleted); re-cased+blessed `melt`→Melt, `reserve`→Reserve, `crack`→Crack. ~66 other
+  tasks remain is_verified=false (the curation to-do list).
+- **Guide injection** (`src/app/api/recipes/decompose/route.ts`): before the AI call,
+  fetches all is_verified=true tasks, builds a compact "KNOWN TECHNIQUES" block (name,
+  description, in→out state, heat, completion expectation+target, tools) appended to the
+  SYSTEM prompt with matching discipline (use exact name; honour completion expectations;
+  most specific; invent lowercase + new_task:true only if none fits). Verified core is
+  small (~30) so all are included; verb-keyed narrowing can come later if it grows.
+- **VALIDATED via carbonara**: pasta cook-time on Boil (not Bring-to-a-boil), guanciale
+  Pan-fry kept "until crispy", consistent verbs, new_task=false for all 19 nodes,
+  convergences correct.
+
+### Two decomposition DISPLAY fixes (shipped)
+- **#1 Time column**: `naturalDurationToSeconds()` added to BOTH
+  `api/recipes/decompose-save/route.ts` and `lib/dag-to-recipe.ts` — parses "about 9
+  minutes" / "8-10 min" (midpoint) / "90 seconds" from completion OR notes as a fallback
+  after ISO PT. Boil now shows 9 min. VERIFIED.
+- **#2 grate/prep double-up (Model B)**: prompt rule 2b in the decompose route — a
+  transformation stated about an ingredient ("pecorino, finely grated") becomes its OWN
+  task (Grate; "finely"→param), NEVER also a prep-note. prep-notes reserved for
+  non-transformation qualifiers ("at room temperature", "ripe"). VERIFIED: cheeses now
+  raw ingredients + Grate tasks, no redundant prep text.
+
+### Techniques pages — the human face (Phase B, partial)
+The verified task data, now surfaced for users. "One spine, two faces" is literally true:
+same `tasks` rows feed the AI guide AND render as public pages.
+- `src/app/techniques/page.tsx` — list, grouped by category (human labels), verified-
+  first, with a search box AND category FILTER BUTTONS (derived from categories present in
+  the data, Ingredients-page style, self-update as you curate). Shows ALL tasks; drafts
+  badged. Doubles as a curation overview.
+- `src/app/techniques/[slug]/page.tsx` — detail: description + "Done when" (plain-language
+  gloss of the completion signal — appliance-grade doneness), Heat, Typical time,
+  Transforms (in→out state), Tools, Category, Tips, Common mistakes. Admin "Edit" button
+  (server-checked).
+- Sidebar "Techniques" link already wired. Tools page DEFERRED (equipment content
+  uncurated — 61 rows mostly empty; build after curation can fill it).
+
+### Task curation ADMIN VIEW (the edit face)
+Edit/bless tasks from the UI instead of SQL. Now load-bearing (the guide depends on good
+verified tasks).
+- `src/app/api/admin/check/route.ts` — GET {isAdmin} from the SERVER session (robust; no
+  client getUser() race).
+- `src/app/api/admin/tasks/[id]/route.ts` — admin-gated PATCH; whitelists editable fields,
+  validates enums, coerces numbers/arrays; `maybeSingle()` + clear "Update blocked by
+  permissions" message (not the cryptic coercion error).
+- `src/app/techniques/[slug]/edit/page.tsx` — full edit form; FIXED BOTTOM SAVE BAR
+  (recipe-editor pattern, right:0 since no chat sidebar).
+- **RLS** (`guide_02_admin_task_update.sql`, RAN LIVE): `tasks_admin_update` policy lets
+  the admin account UPDATE ANY task (the verified core has created_by=NULL — blessed as
+  postgres — so the existing "Update own tasks" policy couldn't touch them).
+
+## ⚠️ KEY LESSON — person id ≠ account id (cost ~30min)
+The admin gate was first keyed to Rasmus's PERSON id `b6a30271-...`. But `auth.uid()`
+returns the ACCOUNT id. Rasmus's two accounts: **bb02ae50-436c-4402-8c8c-447344e10151
+(rr@varm.io)** and **1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf (rr@le.works)** — BOTH are
+admins. The wrong id meant the Edit button never showed AND the RLS policy blocked saves
+(0-row update → "Cannot coerce result to single JSON object"). Fixed in all 3 places
+(check route, tasks route default, RLS policy) + env override `SOUPDOG_ADMIN_ACCOUNT_IDS`.
+Anywhere admin gating touches auth.uid(), use the ACCOUNT id, not the person id.
+
+## ANOTHER LESSON — doc versioning / the `docs--` prefix
+Reusing a filename across material edits bred FOUR copies of the same doc (v0_2..v0_5) and
+a "same name, didn't add it" loop. Also: the `docs--` delivery prefix is a PLACEMENT
+instruction (→ docs/ folder), NOT part of the filename — must be stripped on placement
+(files had landed as `docs/docs--*.md`). RULE: material change → new unique version number
++ filename; strip the `--` prefix when placing.
+
+## DESIGN DOCS (in docs/ — theory; this handover has build state)
+- **Soupdog_Culinary_Knowledge_Layer_Design_v0_5.md** — THE canonical knowledge-layer doc
+  (supersedes v0.1 guide-layer + all v0_2..v0_4 drafts; delete those). Contents: one
+  spine/two faces (AI guide ↔ Techniques/Tools pages); §2b machine-truth-vs-human-filter
+  + intermediate-visibility rule (graph keeps every intermediate; display surfaces one
+  ONLY if held & reused later, e.g. pasta water, else implied by the next task); §2c typed
+  completion signals (appliance-grade doneness); §2d heat-mechanism technique taxonomy
+  (fry = conduction+fat; sauté/sear/pan-fry siblings under a shared mechanism, distinct
+  methods — answers fry-vs-Sauté: siblings, not merge, not fake parent); §2e tasks that
+  prepare a TOOL not an ingredient (bain-marie, preheat oven — a 3rd node shape; apparatus-
+  prep family; tool-availability can insert make-the-tool steps; needs inventory model;
+  matters most for the machine/appliance view); §5b concept-first + intermediate-hiding +
+  role-gated browsing; §5c category-model evolution (free-text now → locked-vocabulary +
+  deliberate-creation-form later → maybe m2m, but mechanism/medium may already cover the
+  cross-cutting axis). Build sequence: Phase A (DONE) → B (Techniques pages DONE, Tools +
+  fuller curation pending) → C (ingredient affordances via roles + entity_relations
+  interactions) → D (instruction composition + intermediate visibility + admin per-step
+  inputs/outputs column).
+- **Soupdog_Variation_Generation_And_Content_Pipeline_Design_v0_1.md** — guidance at the
+  RECIPE level: A1 reference-exemplar decomposition (cook tenderloin "like" verified
+  ribeye; retrieval by food-family/role neighbour); A2 expected-variation-family
+  generation (doneness×thickness×count → populates existing `execution_variants`); the
+  flywheel (curated exemplars improve all related recipes). COST DISCIPLINE: variation
+  generation runs AFTER base settled (on publish / explicit action), cost-gated, NEVER in
+  the live edit loop. Content pipeline (Rasmus's 3 steps): tiered region-aware dish-family
+  backbone (HONEST CAVEAT: no authoritative global ranking exists — AI estimation refined
+  later by real usage signal) → derive minimal high-reuse exemplar set + their guide
+  dependencies → sequence by demand (only verify guide rows the prioritised exemplars
+  touch). Claude can draft the backbone/exemplars. NOT next.
+
+## NEXT SESSION — options (all build/curation, design largely settled)
+- **Curate the verified core + drafts** via the new admin view (fix Melt's category etc.;
+  bless the ~66 drafts). Now pleasant (UI, not SQL). Highest-leverage for guide quality.
+- **Phase D display layer**: instruction composition ("Add water to the pot", stop baking
+  "Add 3 l water"); intermediate visibility (pasta water as a surfaced ingredient) + an
+  ADMIN per-step inputs/outputs column (Rasmus's idea — concretises §2b machine truth).
+- **Tools page** (after equipment content curated) — same shape as Techniques over
+  `equipment`.
+- **Phase C**: ingredient affordances from roles; populate entity_relations (tool→task
+  'performs', ingredient→task 'typical_task').
+- **Re-import the ~34 existing recipes** through the new decompose path (only test
+  carbonaras have DAGs/edges so far). Then delete test carbonaras.
+- Variation generation + content pipeline (own doc; not next).
+- Larger pending (unchanged): meal-plan enforcement + Stripe; Demand Phase 2; Sharing &
+  Delegation Phase 0; Plan & End-Product bridge.
+
+## Loose ends this session
+- `supabase/migrations/decomposition_02_source_extraction.sql` showed as modified in git
+  status unexpectedly — glance at the diff before committing; `git restore` if it's a
+  stray edit.
+- Category vocabulary is free-text + drifting (e.g. "thermal state change") — fine for now
+  (filter buttons derive from data); lock later per §5c.
+- Apparatus-prep (§2e) and the tool-availability/inventory model are captured, NOT built.
