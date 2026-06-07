@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
     // ── canonical + version (mirrors /api/my/recipes POST) ──
     const { data: canonical, error: ce } = await db
       .from('recipe_canonicals')
-      .insert({ slug, author_id: user.id, is_published: false, source: 'ai_decomposed' })
+      .insert({ slug, author_id: user.id, is_published: false, source: 'ai_generated' })
       .select().single();
     if (ce) throw ce;
 
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
     // ── canonical execution variant + legacy mirror (match existing POST) ──
     await db.from('execution_variants').insert({
       version_id: version.id, servings, unit_system: 'si',
-      is_canonical_variant: true, author_id: user.id, source: 'ai_decomposed',
+      is_canonical_variant: true, author_id: user.id, source: 'ai_generated',
     });
 
     await db.from('recipes').insert({
