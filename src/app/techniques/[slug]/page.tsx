@@ -15,6 +15,9 @@ type Task = {
 };
 
 const prettify = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+// Solo-founder admin gate (mirror of the API route's default).
+const ADMIN_IDS = ['b6a30271-7992-406e-8578-da6e2ccf9f19'];
 function fmtDur(a: number | null, b: number | null): string {
   if (!a && !b) return '';
   const m = (s: number) => s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`;
@@ -57,6 +60,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function TechniqueDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [task, setTask] = useState<Task | null | 'missing'>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient() as any;
+    supabase.auth.getUser().then(({ data }: any) => {
+      if (data?.user && ADMIN_IDS.includes(data.user.id)) setIsAdmin(true);
+    });
+  }, []);
 
   useEffect(() => {
     const supabase = createClient() as any;
@@ -96,21 +107,31 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         ← Techniques
       </Link>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 600, margin: 0,
-          color: 'var(--fg)',
-        }}>
-          {task.name}
-        </h1>
-        {!task.is_verified && (
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
-            textTransform: 'uppercase', color: 'var(--muted)',
-            border: '1px solid var(--border)', borderRadius: 2, padding: '2px 6px',
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 600, margin: 0,
+            color: 'var(--fg)',
           }}>
-            draft — not yet verified
-          </span>
+            {task.name}
+          </h1>
+          {!task.is_verified && (
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--muted)',
+              border: '1px solid var(--border)', borderRadius: 2, padding: '2px 6px',
+            }}>
+              draft — not yet verified
+            </span>
+          )}
+        </div>
+        {isAdmin && (
+          <Link href={`/techniques/${slug}/edit`} style={{
+            fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)',
+            border: '1px solid var(--accent)', padding: '6px 14px', textDecoration: 'none',
+          }}>
+            Edit
+          </Link>
         )}
       </div>
 
