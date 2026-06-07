@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 // Solo-founder admin gate. Upgrade to an is_admin flag on the account later.
+// These are AUTH account ids (auth.uid()), NOT person ids.
 const ADMIN_IDS = (process.env.SOUPDOG_ADMIN_ACCOUNT_IDS
-  ?? 'b6a30271-7992-406e-8578-da6e2ccf9f19')
+  ?? 'bb02ae50-436c-4402-8c8c-447344e10151,1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf')
   .split(',').map(s => s.trim()).filter(Boolean);
 
 // Whitelist of editable curation fields (never let the client set arbitrary columns).

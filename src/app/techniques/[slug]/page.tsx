@@ -15,9 +15,6 @@ type Task = {
 };
 
 const prettify = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-// Solo-founder admin gate (mirror of the API route's default).
-const ADMIN_IDS = ['b6a30271-7992-406e-8578-da6e2ccf9f19'];
 function fmtDur(a: number | null, b: number | null): string {
   if (!a && !b) return '';
   const m = (s: number) => s % 3600 === 0 ? `${s / 3600}h` : s % 60 === 0 ? `${s / 60}m` : `${s}s`;
@@ -63,10 +60,10 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient() as any;
-    supabase.auth.getUser().then(({ data }: any) => {
-      if (data?.user && ADMIN_IDS.includes(data.user.id)) setIsAdmin(true);
-    });
+    fetch('/api/admin/check')
+      .then(r => r.ok ? r.json() : { isAdmin: false })
+      .then((d: any) => setIsAdmin(!!d.isAdmin))
+      .catch(() => setIsAdmin(false));
   }, []);
 
   useEffect(() => {
