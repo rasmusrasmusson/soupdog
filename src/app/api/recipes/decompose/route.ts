@@ -98,6 +98,65 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'extraction required' }, { status: 400 });
   }
 
+  // ── GUIDE LAYER ──────────────────────────────────────────────────────────
+  // Fetch the VERIFIED task library and build a compact "known techniques" block
+  // the model must MATCH to (instead of inventing). The expectation (completion
+  // type/target, typical duration, input/output state, tools) travels WITH each
+  // task — so e.g. Boil advertises it wants a doneness signal, and "Bring to a
+  // boil" advertises NO fixed duration, which stops the cook-time landing on the
+  // wrong node. The verified core is small (~30) so we include all of it; verb-
+  // keyed narrowing can come later if it grows large.
+  let guideBlock = '';
+  try {
+    const { data: guideTasks } = await (supabase as any)
+      .from('tasks')
+      .select('name, description, completion_type, completion_target, completion_criterion, min_duration_seconds, max_duration_seconds, typical_input_state, typical_output_state, heat_mechanism, heat_medium, suggested_tool_slugs')
+      .eq('is_verified', true)
+      .order('category', { ascending: true });
+
+    if (guideTasks && guideTasks.length > 0) {
+      const fmtDur = (a: number | null, b: number | null) => {
+        if (!a && !b) return '';
+        const m = (s: number) => s % 60 === 0 ? `${s / 60}m` : `${s}s`;
+        return a && b ? `${m(a)}-${m(b)}` : m((a || b)!);
+      };
+      const lines = guideTasks.map((t: any) => {
+        const parts: string[] = [`- ${t.name}`];
+        if (t.description) parts.push(`— ${t.description}`);
+        const meta: string[] = [];
+        if (t.typical_input_state || t.typical_output_state)
+          meta.push(`${t.typical_input_state ?? '?'}→${t.typical_output_state ?? '?'}`);
+        if (t.heat_mechanism && t.heat_mechanism !== 'none')
+          meta.push(`heat: ${t.heat_mechanism}${t.heat_medium && t.heat_medium !== 'none' ? '/' + t.heat_medium : ''}`);
+        // completion expectation — the key anti-bug signal
+        if (t.completion_type === 'subjective' || !t.completion_type) {
+          meta.push('completion: none expected');
+        } else if (t.completion_type === 'time') {
+          meta.push(`completion: a TIME${fmtDur(t.min_duration_seconds, t.max_duration_seconds) ? ` (typ ${fmtDur(t.min_duration_seconds, t.max_duration_seconds)})` : ''}`);
+        } else {
+          meta.push(`completion: ${t.completion_type}${t.completion_target ? ` ("${t.completion_target}")` : ''} — CAPTURE it if the source states one`);
+        }
+        const dur = fmtDur(t.min_duration_seconds, t.max_duration_seconds);
+        if (dur && t.completion_type !== 'time') meta.push(`typ ${dur}`);
+        if (Array.isArray(t.suggested_tool_slugs) && t.suggested_tool_slugs.length)
+          meta.push(`tools: ${t.suggested_tool_slugs.join('/')}`);
+        if (meta.length) parts.push(`[${meta.join('; ')}]`);
+        return parts.join(' ');
+      });
+      guideBlock =
+        '\n\nKNOWN TECHNIQUES (the verified task library). MATCH each step to one of these by ' +
+        'MEANING and use its EXACT name as the "task". These carry the expected completion ' +
+        'signal and tools — honour them: if a technique says it expects a completion and the ' +
+        'source gives one, you MUST capture it; if it says "none expected" (e.g. Bring to a ' +
+        'boil), do NOT attach a fixed time. Pick the most specific matching technique ' +
+        '(Sauté vs Sear vs Pan-fry are distinct). Only if NONE fits, invent a new lowercase ' +
+        'task and set "new_task": true on that node so it can be curated.\n' +
+        lines.join('\n');
+    }
+  } catch (e) {
+    console.error('[decompose] guide fetch failed (continuing without guide):', e);
+  }
+
   const userMsg =
     'Here is the bundled extraction of a recipe. Convert it to the atomic executable ' +
     'dependency graph per your instructions. Return ONLY the JSON object.\n\nEXTRACTION:\n<<<\n' +
@@ -110,7 +169,7 @@ export async function POST(req: NextRequest) {
       feature:    'import_parse',          // reuse existing feature label; decomposition is part of import
       accountId:  user.id,
       max_tokens: 8000,
-      system:     SYSTEM,
+      system:     SYSTEM + guideBlock,
       messages:   [{ role: 'user', content: userMsg }],
     });
 
