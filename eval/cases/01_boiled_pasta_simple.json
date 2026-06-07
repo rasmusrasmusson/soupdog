@@ -5,10 +5,26 @@
     "title": "Pasta with jarred sauce",
     "servings": 2,
     "ingredients": [
-      { "name": "water", "qty": 2, "unit": "l" },
-      { "name": "salt", "qty": 10, "unit": "g" },
-      { "name": "dried spaghetti", "qty": 200, "unit": "g" },
-      { "name": "tomato sauce", "qty": 300, "unit": "g" }
+      {
+        "name": "water",
+        "qty": 2,
+        "unit": "l"
+      },
+      {
+        "name": "salt",
+        "qty": 10,
+        "unit": "g"
+      },
+      {
+        "name": "dried spaghetti",
+        "qty": 200,
+        "unit": "g"
+      },
+      {
+        "name": "tomato sauce",
+        "qty": 300,
+        "unit": "g"
+      }
     ],
     "steps": [
       "Bring the salted water to a boil.",
@@ -19,14 +35,246 @@
   },
   "gold": {
     "nodes": [
-      { "id": "g1", "task": "boil", "ingredients": [{ "name": "water" }, { "name": "salt" }], "consumes": [], "produces": "boiling salted water" },
-      { "id": "g2", "task": "add", "ingredients": [{ "name": "dried spaghetti" }], "consumes": ["g1"] },
-      { "id": "g3", "task": "boil", "ingredients": [], "consumes": ["g2"], "produces": "cooked pasta" },
-      { "id": "g4", "task": "drain", "ingredients": [], "consumes": ["g3"] },
-      { "id": "g5", "task": "add", "ingredients": [{ "name": "tomato sauce" }], "consumes": ["g4"] },
-      { "id": "g6", "task": "stir", "ingredients": [], "consumes": ["g5"], "produces": "finished pasta" }
+      {
+        "id": "g1",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "water"
+          }
+        ],
+        "consumes": []
+      },
+      {
+        "id": "g2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "salt"
+          }
+        ],
+        "consumes": [
+          "g1"
+        ]
+      },
+      {
+        "id": "g3",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "g2"
+        ],
+        "produces": "boiling salted water"
+      },
+      {
+        "id": "g4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "dried spaghetti"
+          }
+        ],
+        "consumes": [
+          "g3"
+        ]
+      },
+      {
+        "id": "g5",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "g4"
+        ],
+        "produces": "cooked pasta"
+      },
+      {
+        "id": "g6",
+        "task": "drain",
+        "ingredients": [],
+        "consumes": [
+          "g5"
+        ],
+        "produces": "drained pasta"
+      },
+      {
+        "id": "g7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "tomato sauce"
+          }
+        ],
+        "consumes": [
+          "g6"
+        ]
+      },
+      {
+        "id": "g8",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "g7"
+        ],
+        "produces": "finished pasta"
+      }
     ],
-    "terminals": ["g6"]
+    "terminals": [
+      "g8"
+    ]
   },
-  "prediction": null
+  "prediction": {
+    "title": "Pasta with jarred sauce",
+    "servings": 2,
+    "nodes": [
+      {
+        "id": "n1",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "water",
+            "qty": 2,
+            "unit": "l",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "salt",
+            "qty": 10,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n1"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n3",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "n2"
+        ],
+        "produces": "salted boiling water",
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": true,
+        "completion": "rolling boil",
+        "notes": null
+      },
+      {
+        "id": "n4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "dried spaghetti",
+            "qty": 200,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n3"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n5",
+        "task": "cook",
+        "ingredients": [],
+        "consumes": [
+          "n4"
+        ],
+        "produces": "cooked spaghetti",
+        "group": null,
+        "tool": "large-pot",
+        "params": {
+          "style": "boil",
+          "doneness": "al dente"
+        },
+        "passive": true,
+        "completion": "PT9M",
+        "notes": null
+      },
+      {
+        "id": "n6",
+        "task": "drain",
+        "ingredients": [],
+        "consumes": [
+          "n5"
+        ],
+        "produces": "drained spaghetti",
+        "group": null,
+        "tool": "colander",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "tomato sauce",
+            "qty": 300,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n6"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n8",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "n7"
+        ],
+        "produces": "pasta with tomato sauce",
+        "group": null,
+        "tool": "wooden-spoon",
+        "params": {},
+        "passive": false,
+        "completion": "sauce evenly combined",
+        "notes": "serve immediately"
+      }
+    ]
+  }
 }

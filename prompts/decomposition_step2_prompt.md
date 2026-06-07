@@ -46,6 +46,12 @@ Return ONLY a single JSON object, no preamble, no markdown fences.
    - A transformation node (mix, simmer, whisk, combine, bake) that acts on already-
      introduced inputs has an EMPTY `ingredients` array; it only `consumes` prior
      nodes. Ingredients appear ONLY on their own single-ingredient introduction node.
+   - **Introduce each ingredient EXACTLY ONCE.** After an ingredient appears on its
+     introduction node, NEVER list it again on a later node — refer to it only via
+     `consumes`. "Chop the onion, then add the chopped onion to the pan" → ONE `chop`
+     node introducing onion, and the pan node simply `consumes` the chop node (empty
+     `ingredients`). Do NOT re-list "onion (chopped)" on the pan node. Re-introducing
+     a prepped ingredient is an error — the chop node IS the onion now.
 
 3. **Match on the transformation, parameters absorb the variant.** "sauté" / "fry
    gently" / "cook in a little oil" are the SAME `task` ("sauté") with different

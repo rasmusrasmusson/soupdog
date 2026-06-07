@@ -1,0 +1,482 @@
+{
+  "name": "06_nested_subrecipe",
+  "note": "Stresses RECURSION / nested intermediates: a roux -> béchamel chain produces a sauce intermediate, which is itself consumed by the main assembly alongside cooked pasta. Tests that the model produces a sub-graph that yields a named intermediate ('béchamel') consumed downstream — the meal=recipe pattern at small scale. The béchamel chain and the pasta chain are independent until they meet.",
+  "extraction": {
+    "title": "Quick pasta bake",
+    "servings": 4,
+    "ingredients": [
+      {
+        "name": "butter",
+        "qty": 40,
+        "unit": "g"
+      },
+      {
+        "name": "flour",
+        "qty": 40,
+        "unit": "g"
+      },
+      {
+        "name": "milk",
+        "qty": 500,
+        "unit": "ml"
+      },
+      {
+        "name": "cheese",
+        "qty": 100,
+        "unit": "g"
+      },
+      {
+        "name": "dried macaroni",
+        "qty": 300,
+        "unit": "g"
+      },
+      {
+        "name": "water",
+        "qty": 2,
+        "unit": "l"
+      }
+    ],
+    "steps": [
+      "For the sauce: melt the butter, stir in the flour to make a roux, then gradually whisk in the milk and cook until thickened. Stir in the cheese to make a cheese sauce.",
+      "Boil the macaroni in the water until just tender, then drain.",
+      "Combine the drained macaroni with the cheese sauce.",
+      "Bake until bubbling and golden."
+    ]
+  },
+  "gold": {
+    "nodes": [
+      {
+        "id": "g1",
+        "task": "melt",
+        "ingredients": [
+          {
+            "name": "butter"
+          }
+        ],
+        "consumes": [],
+        "group": "sauce"
+      },
+      {
+        "id": "g2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "flour"
+          }
+        ],
+        "consumes": [
+          "g1"
+        ],
+        "group": "sauce"
+      },
+      {
+        "id": "g3",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "g2"
+        ],
+        "produces": "roux",
+        "group": "sauce"
+      },
+      {
+        "id": "g4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "milk"
+          }
+        ],
+        "consumes": [
+          "g3"
+        ],
+        "group": "sauce"
+      },
+      {
+        "id": "g5",
+        "task": "whisk",
+        "ingredients": [],
+        "consumes": [
+          "g4"
+        ],
+        "group": "sauce"
+      },
+      {
+        "id": "g6",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "g5"
+        ],
+        "group": "sauce"
+      },
+      {
+        "id": "g7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "cheese"
+          }
+        ],
+        "consumes": [
+          "g6"
+        ],
+        "group": "sauce"
+      },
+      {
+        "id": "g8",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "g7"
+        ],
+        "produces": "cheese sauce",
+        "group": "sauce"
+      },
+      {
+        "id": "g9",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "water"
+          }
+        ],
+        "consumes": []
+      },
+      {
+        "id": "g10",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "g9"
+        ]
+      },
+      {
+        "id": "g11",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "dried macaroni"
+          }
+        ],
+        "consumes": [
+          "g10"
+        ]
+      },
+      {
+        "id": "g12",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "g11"
+        ],
+        "produces": "cooked macaroni"
+      },
+      {
+        "id": "g13",
+        "task": "drain",
+        "ingredients": [],
+        "consumes": [
+          "g12"
+        ],
+        "produces": "drained macaroni"
+      },
+      {
+        "id": "g14",
+        "task": "combine",
+        "ingredients": [],
+        "consumes": [
+          "g13",
+          "g8"
+        ],
+        "produces": "assembled bake"
+      },
+      {
+        "id": "g15",
+        "task": "bake",
+        "ingredients": [],
+        "consumes": [
+          "g14"
+        ],
+        "produces": "pasta bake"
+      }
+    ],
+    "terminals": [
+      "g15"
+    ]
+  },
+  "prediction": {
+    "title": "Quick pasta bake",
+    "servings": 4,
+    "nodes": [
+      {
+        "id": "n1",
+        "task": "melt",
+        "ingredients": [
+          {
+            "name": "butter",
+            "qty": 40,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "sauce",
+        "tool": "saucepan",
+        "params": {
+          "heat": "medium-low"
+        },
+        "passive": false,
+        "completion": "fully melted",
+        "notes": null
+      },
+      {
+        "id": "n2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "flour",
+            "qty": 40,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n1"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "saucepan",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n3",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "n2"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "wooden-spoon",
+        "params": {},
+        "passive": false,
+        "completion": "roux formed and smooth",
+        "notes": null
+      },
+      {
+        "id": "n4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "milk",
+            "qty": 500,
+            "unit": "ml",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n3"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "saucepan",
+        "params": {
+          "method": "gradually"
+        },
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n5",
+        "task": "whisk",
+        "ingredients": [],
+        "consumes": [
+          "n4"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "whisk",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n6",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "n5"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "saucepan",
+        "params": {},
+        "passive": true,
+        "completion": "thickened",
+        "notes": null
+      },
+      {
+        "id": "n7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "cheese",
+            "qty": 100,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n6"
+        ],
+        "produces": null,
+        "group": "sauce",
+        "tool": "saucepan",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n8",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "n7"
+        ],
+        "produces": "cheese sauce",
+        "group": "sauce",
+        "tool": "wooden-spoon",
+        "params": {},
+        "passive": false,
+        "completion": "cheese fully melted and incorporated",
+        "notes": null
+      },
+      {
+        "id": "n9",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "water",
+            "qty": 2,
+            "unit": "l",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n10",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "n9"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": true,
+        "completion": "water at rolling boil",
+        "notes": null
+      },
+      {
+        "id": "n11",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "dried macaroni",
+            "qty": 300,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n10"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n12",
+        "task": "boil",
+        "ingredients": [],
+        "consumes": [
+          "n11"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "large-pot",
+        "params": {},
+        "passive": true,
+        "completion": "just tender (al dente)",
+        "notes": null
+      },
+      {
+        "id": "n13",
+        "task": "drain",
+        "ingredients": [],
+        "consumes": [
+          "n12"
+        ],
+        "produces": "drained macaroni",
+        "group": null,
+        "tool": "colander",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n14",
+        "task": "combine",
+        "ingredients": [],
+        "consumes": [
+          "n13",
+          "n8"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "baking-dish",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n15",
+        "task": "bake",
+        "ingredients": [],
+        "consumes": [
+          "n14"
+        ],
+        "produces": "quick pasta bake",
+        "group": null,
+        "tool": "oven",
+        "params": {},
+        "passive": true,
+        "completion": "bubbling and golden",
+        "notes": null
+      }
+    ]
+  }
+}

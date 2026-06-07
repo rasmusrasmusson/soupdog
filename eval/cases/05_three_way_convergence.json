@@ -1,0 +1,373 @@
+{
+  "name": "05_three_way_convergence",
+  "note": "Stresses 3+ independent chains converging at ONE assembly node. Tests the model does NOT collapse three parallel preps (spiced beef / pico de gallo / warmed tortillas) into a sequence just because there are more than two. The assembly node must consume all three component intermediates. fanout=n/a here; the risk is the model serialising independent chains.",
+  "extraction": {
+    "title": "Beef tacos",
+    "servings": 4,
+    "ingredients": [
+      {
+        "name": "ground beef",
+        "qty": 400,
+        "unit": "g"
+      },
+      {
+        "name": "taco seasoning",
+        "qty": 30,
+        "unit": "g"
+      },
+      {
+        "name": "tomato",
+        "qty": 200,
+        "unit": "g"
+      },
+      {
+        "name": "white onion",
+        "qty": 80,
+        "unit": "g"
+      },
+      {
+        "name": "coriander",
+        "qty": 10,
+        "unit": "g"
+      },
+      {
+        "name": "lime",
+        "qty": 1,
+        "unit": null
+      },
+      {
+        "name": "corn tortillas",
+        "qty": 8,
+        "unit": null
+      }
+    ],
+    "steps": [
+      "Brown the ground beef, then stir in the taco seasoning and simmer to a thick filling.",
+      "For the pico de gallo: dice the tomato and white onion, chop the coriander, and mix with a squeeze of lime.",
+      "Warm the corn tortillas in a dry pan.",
+      "Assemble: fill each warmed tortilla with the spiced beef and top with pico de gallo."
+    ]
+  },
+  "gold": {
+    "nodes": [
+      {
+        "id": "g1",
+        "task": "brown",
+        "ingredients": [
+          {
+            "name": "ground beef"
+          }
+        ],
+        "consumes": [],
+        "produces": "browned beef"
+      },
+      {
+        "id": "g2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "taco seasoning"
+          }
+        ],
+        "consumes": [
+          "g1"
+        ]
+      },
+      {
+        "id": "g3",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "g2"
+        ],
+        "produces": "spiced beef filling"
+      },
+      {
+        "id": "g4",
+        "task": "dice",
+        "ingredients": [
+          {
+            "name": "tomato"
+          }
+        ],
+        "consumes": [],
+        "group": "pico de gallo"
+      },
+      {
+        "id": "g5",
+        "task": "dice",
+        "ingredients": [
+          {
+            "name": "white onion"
+          }
+        ],
+        "consumes": [],
+        "group": "pico de gallo"
+      },
+      {
+        "id": "g6",
+        "task": "chop",
+        "ingredients": [
+          {
+            "name": "coriander"
+          }
+        ],
+        "consumes": [],
+        "group": "pico de gallo"
+      },
+      {
+        "id": "g7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "lime"
+          }
+        ],
+        "consumes": [
+          "g4",
+          "g5",
+          "g6"
+        ],
+        "group": "pico de gallo"
+      },
+      {
+        "id": "g8",
+        "task": "mix",
+        "ingredients": [],
+        "consumes": [
+          "g7"
+        ],
+        "produces": "pico de gallo",
+        "group": "pico de gallo"
+      },
+      {
+        "id": "g9",
+        "task": "warm",
+        "ingredients": [
+          {
+            "name": "corn tortillas"
+          }
+        ],
+        "consumes": [],
+        "produces": "warmed tortillas"
+      },
+      {
+        "id": "g10",
+        "task": "assemble",
+        "ingredients": [],
+        "consumes": [
+          "g3",
+          "g8",
+          "g9"
+        ],
+        "produces": "beef tacos"
+      }
+    ],
+    "terminals": [
+      "g10"
+    ]
+  },
+  "prediction": {
+    "title": "Beef tacos",
+    "servings": 4,
+    "nodes": [
+      {
+        "id": "n1",
+        "task": "brown",
+        "ingredients": [
+          {
+            "name": "ground beef",
+            "qty": 400,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": null,
+        "tool": "skillet",
+        "params": {},
+        "passive": false,
+        "completion": "until no pink remains",
+        "notes": null
+      },
+      {
+        "id": "n2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "taco seasoning",
+            "qty": 30,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n1"
+        ],
+        "produces": null,
+        "group": null,
+        "tool": "skillet",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n3",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "n2"
+        ],
+        "produces": "spiced beef filling",
+        "group": null,
+        "tool": "skillet",
+        "params": {
+          "consistency": "thick"
+        },
+        "passive": true,
+        "completion": "until filling is thick",
+        "notes": null
+      },
+      {
+        "id": "n4",
+        "task": "dice",
+        "ingredients": [
+          {
+            "name": "tomato",
+            "qty": 200,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "pico de gallo",
+        "tool": "chefs-knife",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n5",
+        "task": "dice",
+        "ingredients": [
+          {
+            "name": "white onion",
+            "qty": 80,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "pico de gallo",
+        "tool": "chefs-knife",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n6",
+        "task": "chop",
+        "ingredients": [
+          {
+            "name": "coriander",
+            "qty": 10,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "pico de gallo",
+        "tool": "chefs-knife",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "lime",
+            "qty": 1,
+            "unit": null,
+            "prep": "squeezed"
+          }
+        ],
+        "consumes": [
+          "n4",
+          "n5",
+          "n6"
+        ],
+        "produces": null,
+        "group": "pico de gallo",
+        "tool": "mixing-bowl",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n8",
+        "task": "mix",
+        "ingredients": [],
+        "consumes": [
+          "n7"
+        ],
+        "produces": "pico de gallo",
+        "group": "pico de gallo",
+        "tool": "mixing-bowl",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n9",
+        "task": "warm",
+        "ingredients": [
+          {
+            "name": "corn tortillas",
+            "qty": 8,
+            "unit": null,
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": "warmed tortillas",
+        "group": null,
+        "tool": "dry-skillet",
+        "params": {
+          "medium": "dry pan"
+        },
+        "passive": false,
+        "completion": "until pliable and lightly toasted",
+        "notes": null
+      },
+      {
+        "id": "n10",
+        "task": "assemble",
+        "ingredients": [],
+        "consumes": [
+          "n3",
+          "n8",
+          "n9"
+        ],
+        "produces": "beef tacos",
+        "group": null,
+        "tool": "hands",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": "Fill each tortilla with spiced beef filling, then top with pico de gallo"
+      }
+    ]
+  }
+}

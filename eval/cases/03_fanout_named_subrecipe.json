@@ -216,7 +216,7 @@
         },
         "passive": false,
         "completion": null,
-        "notes": "Half (100g) goes to masala base, half (100g) goes to raita"
+        "notes": "Half (100g) for masala base, half (100g) for raita"
       },
       {
         "id": "n2",
@@ -232,9 +232,9 @@
         "consumes": [],
         "produces": null,
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {
-          "level": "medium-high"
+          "level": "medium"
         },
         "passive": false,
         "completion": "until shimmering",
@@ -250,14 +250,13 @@
         ],
         "produces": null,
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {
-          "qty_from_n1": "100g",
-          "style": "sauté"
+          "qty_note": "100g of chopped onion"
         },
         "passive": false,
-        "completion": "until softened and lightly golden",
-        "notes": "Use half (100g) of chopped onion from n1"
+        "completion": "until softened and golden",
+        "notes": "Use half the chopped onion (100g)"
       },
       {
         "id": "n4",
@@ -275,7 +274,7 @@
         ],
         "produces": null,
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {},
         "passive": false,
         "completion": null,
@@ -297,7 +296,7 @@
         ],
         "produces": null,
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {},
         "passive": false,
         "completion": null,
@@ -312,7 +311,7 @@
         ],
         "produces": "masala base",
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {},
         "passive": true,
         "completion": "until thick sauce forms",
@@ -334,7 +333,7 @@
         ],
         "produces": null,
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {},
         "passive": false,
         "completion": null,
@@ -349,7 +348,7 @@
         ],
         "produces": "chicken masala",
         "group": "masala base",
-        "tool": "saucepan",
+        "tool": "frying-pan",
         "params": {},
         "passive": true,
         "completion": "until chicken cooked through, internal temp 74C",
@@ -357,6 +356,26 @@
       },
       {
         "id": "n9",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "yogurt",
+            "qty": 150,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "raita",
+        "tool": "mixing-bowl",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n10",
         "task": "chop",
         "ingredients": [
           {
@@ -371,23 +390,16 @@
         "group": "raita",
         "tool": "chefs-knife",
         "params": {
-          "cut": "fine dice"
+          "cut": "fine"
         },
         "passive": false,
         "completion": null,
         "notes": null
       },
       {
-        "id": "n10",
-        "task": "combine",
-        "ingredients": [
-          {
-            "name": "yogurt",
-            "qty": 150,
-            "unit": "g",
-            "prep": null
-          }
-        ],
+        "id": "n11",
+        "task": "add",
+        "ingredients": [],
         "consumes": [
           "n1",
           "n9"
@@ -395,37 +407,38 @@
         "produces": null,
         "group": "raita",
         "tool": "mixing-bowl",
-        "params": {},
+        "params": {
+          "qty_note": "100g of chopped onion"
+        },
         "passive": false,
         "completion": null,
-        "notes": "Use remaining half (100g) of chopped onion from n1"
+        "notes": "Add remaining half of chopped onion (100g) to yogurt"
       },
       {
-        "id": "n11",
+        "id": "n12",
         "task": "stir",
         "ingredients": [],
         "consumes": [
-          "n10"
+          "n10",
+          "n11"
         ],
         "produces": "raita",
         "group": "raita",
         "tool": "mixing-bowl",
-        "params": {
-          "vigour": "gentle"
-        },
+        "params": {},
         "passive": false,
-        "completion": "until evenly combined",
+        "completion": "until combined",
         "notes": null
       },
       {
-        "id": "n12",
+        "id": "n13",
         "task": "plate",
         "ingredients": [],
         "consumes": [
           "n8",
-          "n11"
+          "n12"
         ],
-        "produces": "chicken masala with raita",
+        "produces": "Quick masala with raita",
         "group": null,
         "tool": "serving-dish",
         "params": {},

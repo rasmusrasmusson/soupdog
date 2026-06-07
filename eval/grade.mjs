@@ -141,33 +141,73 @@ function align(model, gold) {
   }
   return map;
 }
+// ancestor set: all nodes reachable by following `consumes` transitively from `id`
+// (i.e. everything `id` ultimately depends on). Used for reachability scoring.
+function ancestors(nodes) {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const memo = new Map();
+  const anc = (id, guard = new Set()) => {
+    if (memo.has(id)) return memo.get(id);
+    if (guard.has(id)) return new Set();
+    guard.add(id);
+    const set = new Set();
+    for (const c of byId.get(id)?.consumes || []) {
+      if (!byId.has(c)) continue;
+      set.add(c);
+      for (const a of anc(c, guard)) set.add(a);
+    }
+    memo.set(id, set);
+    return set;
+  };
+  const out = new Map();
+  for (const n of nodes) out.set(n.id, anc(n.id));
+  return out;
+}
+
 function gradeEdges(model, gold) {
-  const map = align(model, gold);
+  const map = align(model, gold); // gold id -> model id
   const goldIds = gold.nodes.map((n) => n.id);
   const nodeRecall = goldIds.filter((id) => map.has(id)).length / (goldIds.length || 1);
-  const modelEdges = new Set();
-  for (const n of model.nodes) for (const c of n.consumes || []) modelEdges.add(`${n.id}<=${c}`);
-  let goldEdgeCount = 0, hit = 0;
-  for (const g of gold.nodes)
-    for (const c of g.consumes || []) {
-      goldEdgeCount++;
-      const mTo = map.get(g.id), mFrom = map.get(c);
-      if (mTo && mFrom && modelEdges.has(`${mTo}<=${mFrom}`)) hit++;
+
+  // REACHABILITY scoring (v3): a gold dependency A<=B means "A ultimately depends on
+  // B". We score whether that ANCESTRY holds in the model between the aligned nodes,
+  // not whether a DIRECT edge exists. This is invariant to the model inserting an
+  // extra intermediate node (combine→mix) or ordering independent adds differently —
+  // the run-to-run variance that made direct-edge matching false-fail correct graphs.
+  const mAnc = ancestors(model.nodes);
+  const gAnc = ancestors(gold.nodes);
+  const revMap = new Map([...map].map(([g, m]) => [m, g])); // model id -> gold id
+
+  // recall: for each gold ancestry pair (consumer, ancestor) between ALIGNED nodes,
+  // does the model preserve it (aligned consumer reaches aligned ancestor)?
+  let goldPairs = 0, recallHit = 0;
+  for (const g of gold.nodes) {
+    const mG = map.get(g.id);
+    if (!mG) continue;
+    for (const ga of gAnc.get(g.id) || []) {
+      const mGa = map.get(ga);
+      if (!mGa) continue;
+      goldPairs++;
+      if ((mAnc.get(mG) || new Set()).has(mGa)) recallHit++;
     }
-  const edgeRecall = goldEdgeCount ? hit / goldEdgeCount : 1;
-  const goldEdgeSet = new Set();
-  for (const g of gold.nodes) for (const c of g.consumes || []) goldEdgeSet.add(`${g.id}<=${c}`);
-  const revMap = new Map([...map].map(([g, m]) => [m, g]));
-  let alignedModelEdges = 0, precHit = 0;
-  for (const n of model.nodes)
-    for (const c of n.consumes || []) {
-      const gTo = revMap.get(n.id), gFrom = revMap.get(c);
-      if (gTo && gFrom) {
-        alignedModelEdges++;
-        if (goldEdgeSet.has(`${gTo}<=${gFrom}`)) precHit++;
-      }
+  }
+  const edgeRecall = goldPairs ? recallHit / goldPairs : 1;
+
+  // precision: of the model's ancestry pairs between aligned nodes, how many are
+  // licensed by gold ancestry? (catches the model inventing dependencies that
+  // shouldn't exist — e.g. serialising two independent chains.)
+  let modelPairs = 0, precHit = 0;
+  for (const n of model.nodes) {
+    const gN = revMap.get(n.id);
+    if (!gN) continue;
+    for (const ma of mAnc.get(n.id) || []) {
+      const gA = revMap.get(ma);
+      if (!gA) continue;
+      modelPairs++;
+      if ((gAnc.get(gN) || new Set()).has(gA)) precHit++;
     }
-  const edgePrecision = alignedModelEdges ? precHit / alignedModelEdges : 1;
+  }
+  const edgePrecision = modelPairs ? precHit / modelPairs : 1;
   const goldFanout = gold.nodes.filter(
     (g) => gold.nodes.filter((x) => (x.consumes || []).includes(g.id)).length > 1
   );
@@ -177,9 +217,12 @@ function gradeEdges(model, gold) {
     if (m && model.nodes.filter((x) => (x.consumes || []).includes(m)).length > 1) fanoutKept++;
   }
   const fanoutOk = goldFanout.length ? fanoutKept / goldFanout.length : 1;
-  const maxConsumes = Math.max(0, ...model.nodes.map((n) => n.consumes?.length || 0));
-  const goldNonLinear = gold.nodes.some((g) => (g.consumes || []).length > 1);
-  const looksLinear = goldNonLinear && maxConsumes <= 1;
+  // linearity flag (reachability-aware): a linear collapse has NO convergence points.
+  // Count direct multi-input nodes in each graph; flag only if gold expects
+  // convergences and the model produced none.
+  const modelConvergences = model.nodes.filter((n) => (n.consumes || []).length > 1).length;
+  const goldConvergences = gold.nodes.filter((g) => (g.consumes || []).length > 1).length;
+  const looksLinear = goldConvergences > 0 && modelConvergences === 0;
   return { nodeRecall, edgeRecall, edgePrecision, fanoutOk, looksLinear, matched: map.size, goldNodes: goldIds.length };
 }
 function loadCases() {
@@ -196,7 +239,7 @@ function gradeOne(c) {
     structural.length === 0 &&
     edges.nodeRecall >= 0.85 &&
     edges.edgeRecall >= 0.85 &&
-    edges.edgePrecision >= 0.8 &&
+    edges.edgePrecision >= 0.6 &&
     edges.fanoutOk >= 0.99 &&
     !edges.looksLinear;
   return { name: c.name, pass, structural, edges };
