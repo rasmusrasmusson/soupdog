@@ -2,13 +2,13 @@
 'use client';
 import React, { useState, useEffect, use } from 'react';
 import { formatDuration } from '@/lib/utils';
-import { Bookmark, BookmarkCheck, Zap } from 'lucide-react';
+import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { PrintButton } from '@/components/recipe/PrintRecipe';
 import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
-import type { RecipeStep, RecipeIngredientRef, Recipe, ApplianceStepSettings } from '@/types';
-import { APPLIANCES } from '@/lib/appliances';
+import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
+import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -17,46 +17,6 @@ function useChecklist(count: number) {
 }
 
 // ── Appliance settings badge ──────────────────────────────────
-function ApplianceBadge({ settings }: { settings: ApplianceStepSettings }) {
-  const appliance = APPLIANCES.find(a => a.id === settings.applianceId);
-  const mode      = appliance?.modes.find(m => m.id === settings.applianceModeId);
-  if (!appliance || !mode) return null;
-
-  const parts: string[] = [];
-  for (const control of mode.controls) {
-    const val = settings.settings[control.id];
-    if (val == null) continue;
-    if (control.type === 'toggle') {
-      if (val) parts.push(control.label);
-    } else {
-      parts.push(`${val}${control.unit ?? ''}`);
-    }
-  }
-
-  return (
-    <div
-      style={{
-        display: 'inline-flex', flexDirection: 'column', gap: 2,
-        padding: '4px 8px', border: '1px solid var(--accent)',
-        background: 'var(--accent-subtle)', marginTop: 4,
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-        <Zap size={9} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', fontWeight: 600 }}>
-          {appliance.model}
-        </span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)' }}>·</span>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--fg)' }}>{mode.label}</span>
-      </div>
-      {parts.length > 0 && (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg)', paddingLeft: 13 }}>
-          {parts.join(' · ')}
-        </span>
-      )}
-    </div>
-  );
-}
 
 // ── Bookmark button ───────────────────────────────────────────
 function BookmarkButton({ canonicalId }: { canonicalId: string }) {
@@ -111,87 +71,8 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
 }
 
 // ── Tool/equipment cell ───────────────────────────────────────
-function ToolCell({ settings }: { settings: any }) {
-  if (!settings) return <span style={{ color: 'var(--muted)' }}>—</span>;
-
-  if (settings.applianceId) {
-    const appliance = APPLIANCES.find((a: any) => a.id === settings.applianceId);
-    const mode = appliance?.modes.find((m: any) => m.id === settings.applianceModeId);
-    if (appliance && mode) {
-      const parts: string[] = [];
-      for (const ctrl of mode.controls) {
-        const val = settings.settings?.[ctrl.id];
-        if (val == null) continue;
-        if (ctrl.type === 'toggle') { if (val) parts.push(ctrl.label); }
-        else parts.push(`${val}${ctrl.unit ?? ''}`);
-      }
-      return (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 1 }}>
-            <Zap size={8} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', fontWeight: 600 }}>{appliance.model}</span>
-          </div>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg)', display: 'block' }}>{mode.label}</span>
-          {parts.length > 0 && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>{parts.join(' · ')}</span>}
-        </div>
-      );
-    }
-  }
-
-  if (Array.isArray(settings.stepTools) && settings.stepTools.length > 0) {
-    const tool = settings.stepTools[0];
-    const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
-    return (
-      <div>
-        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{tool.name}</span>
-        {hasSettings && tool.applianceModeId && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-            {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
-          </span>
-        )}
-        {settings.stepTools.length > 1 && (
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-            +{settings.stepTools.length - 1} more
-          </span>
-        )}
-      </div>
-    );
-  }
-
-  return <span style={{ color: 'var(--muted)' }}>—</span>;
-}
 
 // ── Appliance cell (compact) ──────────────────────────────────
-function ApplianceCell({ settings }: { settings: ApplianceStepSettings }) {
-  const appliance = APPLIANCES.find(a => a.id === settings.applianceId);
-  const mode      = appliance?.modes.find(m => m.id === settings.applianceModeId);
-  if (!appliance || !mode) return <span>—</span>;
-
-  const parts: string[] = [];
-  for (const control of mode.controls) {
-    const val = settings.settings[control.id];
-    if (val == null) continue;
-    if (control.type === 'toggle') { if (val) parts.push(control.label); }
-    else parts.push(`${val}${control.unit ?? ''}`);
-  }
-
-  return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginBottom: 1 }}>
-        <Zap size={8} style={{ color: 'var(--accent)', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--accent)', fontWeight: 600 }}>
-          {appliance.model}
-        </span>
-      </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--fg)', display: 'block' }}>{mode.label}</span>
-      {parts.length > 0 && (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', display: 'block' }}>
-          {parts.join(' · ')}
-        </span>
-      )}
-    </div>
-  );
-}
 
 
 // ── Map new-schema DB row to Recipe type ──────────────────────
@@ -387,60 +268,8 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
   const changeServings = (delta: number) => setServings(prev => Math.max(1, prev + delta));
 
 
-  // Build step → ingredients map
-  const stepIngMap = React.useMemo(() => {
-    const map: Record<string, RecipeIngredientRef[]> = {};
-    for (const ing of recipe.ingredients) {
-      if (!ing.stepId) continue;
-      if (!map[ing.stepId]) map[ing.stepId] = [];
-      map[ing.stepId].push(ing);
-    }
-    return map;
-  }, [recipe.ingredients]);
-
-  const seenIds = new Set<string>();
-  const displayIngredients = recipe.ingredients.filter(ing => {
-    const key = ing.ingredientId || ing.name;
-    if (seenIds.has(key)) return false;
-    seenIds.add(key);
-    return true;
-  });
-
-  // Recipe-level tool list. Tools usually live per-step in applianceSettings
-  // (applianceId → APPLIANCES name, and/or stepTools[].name), NOT in the top-level
-  // recipe.equipment array — so derive a deduped list across all steps for a
-  // mise-en-place "Tools" section. Falls back to recipe.equipment names too.
-  const derivedTools: string[] = (() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    const add = (t?: string) => {
-      const name = (t ?? '').trim();
-      if (!name) return;
-      const key = name.toLowerCase();
-      if (seen.has(key)) return;
-      seen.add(key); out.push(name);
-    };
-    (recipe.equipment ?? []).forEach(e => add(e.name));
-    recipe.steps.forEach(s => {
-      const set = s.applianceSettings as { applianceId?: string; stepTools?: { name?: string }[] } | undefined;
-      if (set?.applianceId) {
-        const appliance = APPLIANCES.find(a => a.id === set.applianceId);
-        add(appliance?.name ?? appliance?.model);
-      }
-      (set?.stepTools ?? []).forEach(t => add(t?.name));
-      (s.tools ?? []).forEach(add);
-    });
-    return out;
-  })();
-
-  const groups: { label: string; steps: (RecipeStep & { globalIndex: number })[] }[] = [];
-  recipe.steps.forEach((step, i) => {
-    const label = step.group?.trim() || '';
-    let g = groups.find(g => g.label === label);
-    if (!g) { g = { label, steps: [] }; groups.push(g); }
-    g.steps.push({ ...step, globalIndex: i });
-  });
-
+  // Presentation (ingredients/tools/steps) lives in the shared <RecipeDisplay>.
+  // The shell keeps only what it needs for the meta grid + sidebar.
   const timing = calculateRecipeTiming(recipe.steps);
   const displayTotalSeconds = recipe.totalTimeSeconds > 0
     ? recipe.totalTimeSeconds
@@ -449,9 +278,6 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
   const B    = '1px solid var(--border)';
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
-  const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
-  const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
-  const td: React.CSSProperties    = { padding: '9px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
 
   const metaItems: [string, string][] = [
     ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
@@ -505,243 +331,13 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
           )}
         </div>
 
-        <div className="px-4 md:px-8 py-6 space-y-8">
+        <RecipeDisplay
+          recipe={recipe}
+          linkIngredients
+          interactive={{ ingChecks, stepChecks, servings }}
+        />
 
-
-          {/* Ingredients */}
-          <section>
-            <SectionHeader title="Ingredients" meta={`${displayIngredients.length} items · ${servings} servings`} />
-            <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
-              {displayIngredients.map((ing, i) => (
-                <div key={ing.ingredientId + i} className="flex items-center gap-3 px-3 py-2.5"
-                  style={{ opacity: ingChecks.checked[i] ? 0.4 : 1, background: ingChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
-                  <Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} />
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-                  <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
-                  <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{ing.quantity.value}<span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{ing.quantity.unit}</span></span>
-                  {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.prep}</span>}
-                </div>
-              ))}
-            </div>
-            <div className="hidden md:block overflow-x-auto">
-              <table style={{ ...tbl, minWidth: 480 }}>
-                <thead>
-                  <tr style={thead}>
-                    <Th w={36} /><Th w={32}>#</Th><Th>Product</Th>
-                    <Th w={90} right>Qty</Th><Th w={70}>Unit</Th>
-                    <Th>Prep / Notes</Th><Th w={80} center>State</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayIngredients.map((ing, i) => (
-                    <tr key={ing.ingredientId + i} style={{ borderTop: B, opacity: ingChecks.checked[i] ? 0.4 : 1, background: ingChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
-                      <td style={{ ...td, borderRight: B, textAlign: 'center' }}><Checkbox checked={ingChecks.checked[i]} onChange={() => ingChecks.toggle(i)} /></td>
-                      <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
-                      <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
-                        <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                        {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
-                      </td>
-                      <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                        {ing.quantity.value}
-                      </td>
-                      <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>
-                        {ing.quantity.unit}
-                      </td>
-                      <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
-                      <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Equipment / Tools */}
-          {recipe.equipment && recipe.equipment.length > 0 ? (
-            <section>
-              <SectionHeader title="Equipment" />
-              <div className="overflow-x-auto">
-                <table style={{ ...tbl, minWidth: 300 }}>
-                  <thead><tr style={thead}><Th w={44} center>Have</Th><Th>Tool</Th><Th w={90} center>Required</Th><Th>Alternatives</Th></tr></thead>
-                  <tbody>
-                    {recipe.equipment.map((eq, i) => (
-                      <tr key={eq.equipmentId} style={{ borderTop: B, opacity: toolChecks.checked[i] ? 0.4 : 1, background: toolChecks.checked[i] ? 'var(--surface-hover)' : undefined }}>
-                        <td style={{ ...td, borderRight: B, textAlign: 'center' }}><Checkbox checked={toolChecks.checked[i]} onChange={() => toolChecks.toggle(i)} /></td>
-                        <td style={{ ...td, borderRight: B, fontWeight: 500 }}>{eq.name}</td>
-                        <td style={{ ...td, borderRight: B, textAlign: 'center', fontFamily: MONO, fontSize: 10, color: MUT }}>{eq.required ? '✓' : '—'}</td>
-                        <td style={{ ...td, color: MUT }}>{eq.alternatives?.join(', ') ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : derivedTools.length > 0 ? (
-            <section>
-              <SectionHeader title="Tools" meta={`${derivedTools.length} items`} />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginTop: 4 }}>
-                {derivedTools.map((t) => (
-                  <span key={t} style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)' }}>
-                    {t}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {/* Procedure */}
-          <section>
-            <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
-
-            {/* Mobile */}
-            <div className="md:hidden border border-[var(--border)] divide-y divide-[var(--border)]">
-              {groups.map((group, gi) => (
-                <React.Fragment key={group.label}>
-                  {(group.label || groups.length > 1) && (
-                    <div style={{ padding: '6px 12px', background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600, borderTop: gi > 0 ? `2px solid var(--border)` : undefined, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>{group.label || `Group ${gi + 1}`}</span>
-                      {timing.groupSeconds[group.label] > 0 && (
-                        <span style={{ fontWeight: 400, color: MUT }}>
-                          {formatDuration(timing.groupSeconds[group.label])}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  {group.steps.map(step => {
-                    const gIdx = step.globalIndex;
-                    const done = stepChecks.checked[gIdx];
-                    const stepIngs = stepIngMap[step.id] ?? [];
-                    return (
-                      <div key={step.id} style={{ padding: '10px 12px', opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined }}>
-                        <div className="flex items-start gap-3">
-                          <Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}>{step.instruction}</p>
-                            {stepIngs.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mt-2">
-                                {stepIngs.map((ing: RecipeIngredientRef) => {
-                                  const key = `${step.id}-${ing.ingredientId}`;
-                                  const added = addedIngs[key];
-                                  return (
-                                    <button key={key} onClick={() => toggleAddedIng(key)}
-                                      style={{ fontFamily: MONO, fontSize: 10, padding: '2px 8px', borderRadius: 3, border: `1px solid ${added ? 'var(--accent)' : 'var(--border)'}`, background: added ? 'var(--accent-subtle)' : 'var(--surface)', color: added ? 'var(--accent-text)' : 'var(--fg)', cursor: 'pointer', transition: 'all 0.15s', textDecoration: added ? 'line-through' : 'none' }}>
-                                      {ing.name} · {ing.quantity.value}{ing.quantity.unit}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {step.applianceSettings && (
-                              <div className="mt-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-                                <ToolCell settings={step.applianceSettings} />
-                              </div>
-                            )}
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {step.durationSeconds && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>⏱ {formatDuration(step.durationSeconds)}</span>}
-                              {step.temperature && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>{step.temperature.value}°{step.temperature.unit === 'celsius' ? 'C' : 'F'}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
-              <div style={{ padding: '8px 12px', background: 'var(--surface-hover)', display: 'flex', justifyContent: 'space-between', borderTop: '2px solid var(--border)' }}>
-                <span style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</span>
-                <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, color: 'var(--fg)' }}>{displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'}</span>
-              </div>
-            </div>
-
-            {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table style={{ ...tbl, minWidth: 640 }}>
-                <thead>
-                  <tr style={thead}>
-                    <Th w={36} /><Th>Product</Th><Th w={80} right>Qty</Th>
-                    <Th w={50}>Unit</Th><Th w={160}>Tool / Setting</Th>
-                    <Th w={70} right>Time</Th><Th>Instruction</Th>
-                  </tr>
-                </thead>
-                {groups.map((group, gi) => (
-                  <React.Fragment key={group.label}>
-                    <tbody>
-                      {(group.label || groups.length > 1) && (
-                      <tr>
-                        <td colSpan={7} style={{ padding: '7px 14px', background: 'var(--surface-hover)', borderTop: gi === 0 ? B : `2px solid var(--border)`, borderBottom: B, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--fg)', fontWeight: 600 }}>
-                          <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>{group.label || `Group ${gi + 1}`}</span>
-                            {timing.groupSeconds[group.label] > 0 && (
-                              <span style={{ fontWeight: 400, color: MUT, textTransform: 'none', letterSpacing: 0 }}>
-                                {formatDuration(timing.groupSeconds[group.label])}
-                              </span>
-                            )}
-                          </span>
-                        </td>
-                      </tr>
-                    )}
-                      {group.steps.map(step => {
-                        const gIdx = step.globalIndex;
-                        const done = stepChecks.checked[gIdx];
-                        const stepIngs = stepIngMap[step.id] ?? [];
-                        const rowCount = Math.max(1, stepIngs.length);
-
-                        return stepIngs.length === 0 ? (
-                          <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'top' }}>
-                            <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} /></td>
-                            <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
-                            <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
-                            <td style={{ ...td, borderRight: B, fontSize: 11 }}>
-                              <ToolCell settings={step.applianceSettings} />
-                            </td>
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>
-                              {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
-                            </td>
-                            <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
-                          </tr>
-                        ) : (
-                          stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => {
-                            return (
-                              <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: rowIdx === 0 ? 'top' : 'middle' }}>
-                                {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => stepChecks.toggle(gIdx)} /></td>}
-                                <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
-                                  <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                                </td>
-                                <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                                  {ing.quantity.value}
-                                </td>
-                                <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
-                                {rowIdx === 0 && (
-                                  <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}>
-                                    <ToolCell settings={step.applianceSettings} />
-                                  </td>
-                                )}
-                                {rowIdx === 0 && (
-                                  <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>
-                                    {step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}
-                                  </td>
-                                )}
-                                {rowIdx === 0 && (
-                                  <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}>{step.instruction}</td>
-                                )}
-                              </tr>
-                            );
-                          })
-                        );
-                      })}
-                    </tbody>
-                  </React.Fragment>
-                ))}
-                <tfoot>
-                  <tr style={{ borderTop: `2px solid var(--border)`, background: 'var(--surface-hover)' }}>
-                    <td colSpan={6} style={{ ...td, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>Total Time</td>
-                    <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontWeight: 600, color: 'var(--fg)' }}>{displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </section>
+        <div className="px-4 md:px-8 pb-6">
 
           {/* Nutrition */}
           <RecipeNutritionSection
@@ -1023,29 +619,8 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
 
 // ── Helper components ─────────────────────────────────────────
 
-function Th({ children, w, right, center }: { children?: React.ReactNode; w?: number; right?: boolean; center?: boolean }) {
-  return <th style={{ padding: '8px 14px', fontFamily: 'var(--font-mono)', fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', borderRight: '1px solid var(--border)', textAlign: right ? 'right' : center ? 'center' : 'left', width: w, whiteSpace: 'nowrap' }} className="last:border-r-0">{children}</th>;
-}
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button onClick={onChange} role="checkbox" aria-checked={checked}
-      className="w-4 h-4 border border-[var(--border)] flex items-center justify-center hover:border-[var(--accent)] transition-colors flex-shrink-0"
-      style={{ background: checked ? 'var(--accent)' : 'var(--surface)' }}>
-      {checked && <span style={{ color: '#fff', fontSize: 9, lineHeight: 1, fontFamily: 'var(--font-mono)' }}>✓</span>}
-    </button>
-  );
-}
 
-function SectionHeader({ title, meta }: { title: string; meta?: string }) {
-  return (
-    <div className="flex items-center gap-3 mb-2">
-      <span className="font-mono text-[9px] uppercase tracking-[0.22em] text-[var(--muted)]">{title}</span>
-      <div className="flex-1 h-px bg-[var(--border)]" />
-      {meta && <span className="font-mono text-[9px] text-[var(--muted)]">{meta}</span>}
-    </div>
-  );
-}
 
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (

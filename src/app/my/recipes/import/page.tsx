@@ -4,7 +4,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
-import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
+import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
+import { dagToRecipe } from '@/lib/dag-to-recipe';
 import Link from 'next/link';
 
 const MONO = 'var(--font-mono)';
@@ -361,32 +362,11 @@ export default function ImportRecipePage() {
   const stepCount = dagNodes.length;
 
   // Ingredients are introduced on nodes (one per node, by atomicity). Derive the flat
-  // list for the ingredients table from the DAG.
+  // list for the summary count from the DAG. (Presentation is handled by RecipeDisplay.)
   const dagIngredients: any[] = dagNodes
     .map((n: any) => (n.ingredients ?? [])[0])
     .filter(Boolean)
     .map((ing: any) => ({ name: ing.name, quantityValue: ing.qty ?? 0, quantityUnit: ing.unit ?? '', prepNote: ing.prep ?? '' }));
-
-  // Group nodes by their `group` label for sectioned display, preserving node order.
-  // Nodes with no group fall under a default section. The display layer shows each
-  // atomic step; consumes/produces are surfaced as small dependency hints.
-  const nodeGroups: { label: string | null; nodes: any[] }[] = (() => {
-    const order: string[] = [];
-    const map = new Map<string, any[]>();
-    for (const n of dagNodes) {
-      const key = (n.group?.trim() || '__default__');
-      if (!map.has(key)) { map.set(key, []); order.push(key); }
-      map.get(key)!.push(n);
-    }
-    return order.map(k => ({ label: k === '__default__' ? null : k, nodes: map.get(k)! }));
-  })();
-
-  // Build a quick id→short-label map so "consumes" can show what each step needs.
-  const nodeLabel = new Map<string, string>();
-  for (const n of dagNodes) {
-    const ing = (n.ingredients ?? [])[0]?.name;
-    nodeLabel.set(n.id, n.produces?.trim() || ing || n.task || n.id);
-  }
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px 100px' }}>
@@ -640,65 +620,19 @@ export default function ImportRecipePage() {
                 </div>
               </div>
 
-              <div style={{ padding: '14px 20px', borderBottom: B }}>
-                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 10 }}>
-                  Ingredients ({dagIngredients.length})
-                </div>
-                <table style={{ borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 }}>
-                  <tbody>
-                    {dagIngredients.map((ing: any, i: number) => (
-                      <tr key={i} style={{ borderTop: i > 0 ? B : 'none' }}>
-                        <td style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--muted)', borderRight: B, whiteSpace: 'nowrap' as const }}>
-                          {ing.quantityValue} {ing.quantityUnit}
-                        </td>
-                        <td style={{ padding: '6px 12px', fontWeight: 500 }}>{ing.name}</td>
-                        <td style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>{ing.prepNote ?? ''}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div style={{ padding: '14px 20px' }}>
-                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 10 }}>
-                  Steps ({stepCount})
-                </div>
-                {nodeGroups.map((grp, gi) => (
-                  <div key={gi} style={{ marginBottom: gi < (nodeGroups.length - 1) ? 16 : 0 }}>
-                    {grp.label && (
-                      <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                        letterSpacing: '0.15em', color: 'var(--fg)', marginBottom: 8, paddingBottom: 4, borderBottom: B }}>
-                        {grp.label}
-                      </div>
-                    )}
-                    {grp.nodes.map((n: any, si: number) => {
-                      const ing = (n.ingredients ?? [])[0];
-                      const instruction = ing?.name
-                        ? `${n.task[0]?.toUpperCase()}${n.task.slice(1)} ${ing.qty != null ? `${ing.qty}${ing.unit ? ' ' + ing.unit : ''} ` : ''}${ing.name}${ing.prep ? `, ${ing.prep}` : ''}`
-                        : `${n.task[0]?.toUpperCase()}${n.task.slice(1)}`;
-                      const needs = (n.consumes ?? []).map((c: string) => nodeLabel.get(c)).filter(Boolean);
-                      return (
-                        <div key={n.id} style={{ display: 'flex', gap: 12, marginBottom: 8, paddingBottom: 8,
-                          borderBottom: si < grp.nodes.length - 1 ? `1px dashed var(--border)` : 'none' }}>
-                          <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', flexShrink: 0,
-                            width: 20, textAlign: 'right' as const, paddingTop: 2 }}>{n.id}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 12, lineHeight: 1.6, margin: '0 0 4px', color: 'var(--fg)' }}>{instruction}</p>
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                              <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{n.task}</span>
-                              {n.passive && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>⏱ passive</span>}
-                              {n.completion && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>{n.completion}</span>}
-                              {n.tool && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', border: '1px solid var(--border)', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><SoupdogIcon name="tools" size={9} /> {n.tool}</span>}
-                              {needs.length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>← needs {needs.join(' + ')}</span>}
-                              {n.produces && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)' }}>→ {n.produces}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
+              {/* Ingredients + Procedure — rendered by the SHARED component, so the
+                  preview looks EXACTLY like the saved recipe page. Non-interactive
+                  (no cooking checkboxes); the user adjusts via the meta fields above
+                  and (later) the chat panel. */}
+              <RecipeDisplay recipe={dagToRecipe(preview.dag, {
+                title:       preview.title,
+                description: preview.description,
+                cuisine:     preview.cuisine,
+                tags:        Array.isArray(preview.tags) ? preview.tags : [],
+                servings:    preview.servings,
+                difficulty:  preview.difficulty,
+                totalTimeMinutes: preview.totalTimeMinutes,
+              })} />
             </div>
           </div>
 
