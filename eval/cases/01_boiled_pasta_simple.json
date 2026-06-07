@@ -1,0 +1,32 @@
+{
+  "name": "01_boiled_pasta_simple",
+  "note": "Genuinely near-linear: boil water -> add pasta -> drain -> add sauce. Baseline that SHOULD be mostly linear; the grader must NOT flag legitimate linearity as wrong. looksLinear only fails when gold itself is non-linear.",
+  "extraction": {
+    "title": "Pasta with jarred sauce",
+    "servings": 2,
+    "ingredients": [
+      { "name": "water", "qty": 2, "unit": "l" },
+      { "name": "salt", "qty": 10, "unit": "g" },
+      { "name": "dried spaghetti", "qty": 200, "unit": "g" },
+      { "name": "tomato sauce", "qty": 300, "unit": "g" }
+    ],
+    "steps": [
+      "Bring the salted water to a boil.",
+      "Add the spaghetti and cook 9 minutes until al dente.",
+      "Drain the pasta.",
+      "Stir through the tomato sauce and serve."
+    ]
+  },
+  "gold": {
+    "nodes": [
+      { "id": "g1", "task": "boil", "ingredients": [{ "name": "water" }, { "name": "salt" }], "consumes": [], "produces": "boiling salted water" },
+      { "id": "g2", "task": "add", "ingredients": [{ "name": "dried spaghetti" }], "consumes": ["g1"] },
+      { "id": "g3", "task": "boil", "ingredients": [], "consumes": ["g2"], "produces": "cooked pasta" },
+      { "id": "g4", "task": "drain", "ingredients": [], "consumes": ["g3"] },
+      { "id": "g5", "task": "add", "ingredients": [{ "name": "tomato sauce" }], "consumes": ["g4"] },
+      { "id": "g6", "task": "stir", "ingredients": [], "consumes": ["g5"], "produces": "finished pasta" }
+    ],
+    "terminals": ["g6"]
+  },
+  "prediction": null
+}

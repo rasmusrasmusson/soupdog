@@ -1,0 +1,45 @@
+{
+  "name": "03_fanout_named_subrecipe",
+  "note": "Tests FAN-OUT (one chopped-onion node feeds two consumers with a split) and an EXPLICIT named section ('Masala base') that must override derivation and become a sub-recipe boundary. The producing node carries `produces`/`group`. No prediction captured yet — wire a real model output to grade.",
+  "extraction": {
+    "title": "Quick masala with raita",
+    "servings": 4,
+    "ingredients": [
+      { "name": "onion", "qty": 200, "unit": "g" },
+      { "name": "oil", "qty": 30, "unit": "ml" },
+      { "name": "tomato", "qty": 200, "unit": "g" },
+      { "name": "garam masala", "qty": 8, "unit": "g" },
+      { "name": "chicken", "qty": 500, "unit": "g" },
+      { "name": "yogurt", "qty": 150, "unit": "g" },
+      { "name": "cucumber", "qty": 100, "unit": "g" }
+    ],
+    "steps": [
+      "Chop all 200g of the onion. Use half for the curry and half for the raita.",
+      "For the masala base: heat the oil, fry half the chopped onion, add the tomato and garam masala, and simmer to a thick sauce.",
+      "Add the chicken to the masala base and cook through.",
+      "For the raita: stir the remaining chopped onion and the cucumber into the yogurt.",
+      "Serve the chicken masala with the raita."
+    ]
+  },
+  "gold": {
+    "nodes": [
+      { "id": "g1", "task": "chop", "ingredients": [{ "name": "onion" }], "consumes": [], "produces": "chopped onion" },
+
+      { "id": "g2", "task": "add", "ingredients": [{ "name": "oil" }], "consumes": [], "group": "Masala base" },
+      { "id": "g3", "task": "sauté", "ingredients": [], "consumes": ["g1", "g2"], "group": "Masala base", "notes": "half the chopped onion" },
+      { "id": "g4", "task": "add", "ingredients": [{ "name": "tomato" }], "consumes": ["g3"], "group": "Masala base" },
+      { "id": "g5", "task": "add", "ingredients": [{ "name": "garam masala" }], "consumes": ["g4"], "group": "Masala base" },
+      { "id": "g6", "task": "simmer", "ingredients": [], "consumes": ["g5"], "group": "Masala base", "produces": "masala base" },
+      { "id": "g7", "task": "add", "ingredients": [{ "name": "chicken" }], "consumes": ["g6"] },
+      { "id": "g8", "task": "simmer", "ingredients": [], "consumes": ["g7"], "produces": "chicken masala" },
+
+      { "id": "g9", "task": "add", "ingredients": [{ "name": "cucumber" }], "consumes": [], "group": "Raita" },
+      { "id": "g10", "task": "add", "ingredients": [{ "name": "yogurt" }], "consumes": ["g9"], "group": "Raita" },
+      { "id": "g11", "task": "stir", "ingredients": [], "consumes": ["g1", "g10"], "group": "Raita", "produces": "raita", "notes": "remaining half of chopped onion" },
+
+      { "id": "g12", "task": "plate", "ingredients": [], "consumes": ["g8", "g11"], "produces": "served dish" }
+    ],
+    "terminals": ["g12"]
+  },
+  "prediction": null
+}

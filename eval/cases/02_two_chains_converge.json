@@ -1,0 +1,47 @@
+{
+  "name": "02_two_chains_converge",
+  "note": "THE core test. Two INDEPENDENT prep chains (chop onion+garlic -> soften; whisk eggs+cream) that only meet at a final combine. A correct DAG keeps them edge-independent until convergence. The `prediction` below is a DELIBERATELY-LINEAR wrong answer (each node chained to the previous), to PROVE the grader flags it: it should FAIL on edgeRecall + looksLinear. Replace `prediction` with a real captured model output to grade the model.",
+  "extraction": {
+    "title": "Simple savoury custard",
+    "servings": 4,
+    "ingredients": [
+      { "name": "onion", "qty": 100, "unit": "g" },
+      { "name": "garlic", "qty": 10, "unit": "g" },
+      { "name": "butter", "qty": 20, "unit": "g" },
+      { "name": "eggs", "qty": 3, "unit": null },
+      { "name": "cream", "qty": 200, "unit": "ml" }
+    ],
+    "steps": [
+      "Chop the onion and garlic. Soften them in the butter until translucent.",
+      "Separately, whisk the eggs with the cream.",
+      "Combine the softened onions with the egg mixture and bake until set."
+    ]
+  },
+  "gold": {
+    "nodes": [
+      { "id": "g1", "task": "chop", "ingredients": [{ "name": "onion" }], "consumes": [] },
+      { "id": "g2", "task": "chop", "ingredients": [{ "name": "garlic" }], "consumes": [] },
+      { "id": "g3", "task": "add", "ingredients": [{ "name": "butter" }], "consumes": [] },
+      { "id": "g4", "task": "sauté", "ingredients": [], "consumes": ["g1", "g2", "g3"], "produces": "softened onions" },
+      { "id": "g5", "task": "add", "ingredients": [{ "name": "eggs" }], "consumes": [] },
+      { "id": "g6", "task": "add", "ingredients": [{ "name": "cream" }], "consumes": ["g5"] },
+      { "id": "g7", "task": "whisk", "ingredients": [], "consumes": ["g6"], "produces": "egg mixture" },
+      { "id": "g8", "task": "bake", "ingredients": [], "consumes": ["g4", "g7"], "produces": "savoury custard" }
+    ],
+    "terminals": ["g8"]
+  },
+  "prediction": {
+    "title": "Simple savoury custard",
+    "servings": 4,
+    "nodes": [
+      { "id": "n1", "task": "chop", "ingredients": [{ "name": "onion" }], "consumes": [] },
+      { "id": "n2", "task": "chop", "ingredients": [{ "name": "garlic" }], "consumes": ["n1"] },
+      { "id": "n3", "task": "add", "ingredients": [{ "name": "butter" }], "consumes": ["n2"] },
+      { "id": "n4", "task": "sauté", "ingredients": [], "consumes": ["n3"] },
+      { "id": "n5", "task": "add", "ingredients": [{ "name": "eggs" }], "consumes": ["n4"] },
+      { "id": "n6", "task": "add", "ingredients": [{ "name": "cream" }], "consumes": ["n5"] },
+      { "id": "n7", "task": "whisk", "ingredients": [], "consumes": ["n6"] },
+      { "id": "n8", "task": "bake", "ingredients": [], "consumes": ["n7"] }
+    ]
+  }
+}
