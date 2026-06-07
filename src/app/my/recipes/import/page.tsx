@@ -136,9 +136,11 @@ export default function ImportRecipePage() {
   const [dragOver,   setDragOver]   = useState(false);
   const [saving,     setSaving]     = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [status,  setStatus]  = useState<'idle'|'loading'|'done'|'error'>('idle');
+  const [status,  setStatus]  = useState<'idle'|'loading'|'decomposing'|'done'|'error'>('idle');
   const [error,   setError]   = useState<string|null>(null);
   const [preview, setPreview] = useState<any>(null);
+  // Hidden faithful parse — sent to decompose-save as source_extraction (revert source).
+  const [sourceExtraction, setSourceExtraction] = useState<any>(null);
 
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
   const [chatInput,   setChatInput]   = useState('');
@@ -206,7 +208,31 @@ export default function ImportRecipePage() {
       const res  = await fetch('/api/recipes/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Import failed');
-      setPreview(manualTitle.trim() ? { ...data.recipe, title: manualTitle.trim() } : data.recipe);
+
+      // The faithful parse — kept hidden as the revert / re-decompose source.
+      const parse = manualTitle.trim() ? { ...data.recipe, title: manualTitle.trim() } : data.recipe;
+      setSourceExtraction(parse);
+
+      // Step 2: decompose the parse into the atomic executable DAG (what the user sees).
+      setStatus('decomposing');
+      const dres = await fetch('/api/recipes/decompose', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extraction: parse }),
+      });
+      const ddata = await dres.json();
+      if (!dres.ok || !ddata.dag) throw new Error(ddata.error ?? 'We had trouble structuring that recipe. Please try again.');
+
+      // preview holds the editable meta (seeded from the parse) + the DAG nodes.
+      setPreview({
+        title:       parse.title ?? '',
+        description: parse.description ?? '',
+        cuisine:     parse.cuisine ?? '',
+        tags:        Array.isArray(parse.tags) ? parse.tags : (parse.tags ? String(parse.tags).split(',').map((t: string) => t.trim()).filter(Boolean) : []),
+        servings:    ddata.dag.servings ?? parse.servings ?? 4,
+        difficulty:  parse.difficulty ?? 'medium',
+        totalTimeMinutes: parse.totalTimeMinutes ?? 0,
+        dag:         ddata.dag,
+      });
       setStatus('done');
     } catch (err: any) {
       setError(err.message ?? 'Import failed');
@@ -215,21 +241,27 @@ export default function ImportRecipePage() {
   };
 
   const handleSave = async () => {
-    if (!preview) return;
+    if (!preview?.dag) return;
     setSaving(true);
     try {
-      const payload = importToRecipePayload(preview);
-      const res = await fetch('/api/my/recipes', {
+      const meta = {
+        title:       preview.title,
+        description: preview.description,
+        cuisine:     preview.cuisine,
+        tags:        Array.isArray(preview.tags) ? preview.tags : [],
+        servings:    preview.servings,
+        difficulty:  preview.difficulty,
+        totalTimeSeconds: (preview.totalTimeMinutes ?? 0) * 60,
+      };
+      const res = await fetch('/api/recipes/decompose-save', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(payload),
+        body:    JSON.stringify({ meta, dag: preview.dag, sourceExtraction }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Save failed');
-      // Redirect to My Recipes with success — recipe view requires published state
-      // TODO: once RLS allows author to view own drafts, redirect to /recipes/[data.slug]
-      router.push('/my/recipes');
       sessionStorage.setItem('soupdog_saved', preview.title ?? 'Recipe');
+      router.push('/my/recipes');
     } catch (err: any) {
       setError(err.message ?? 'Save failed');
     } finally {
@@ -325,13 +357,36 @@ export default function ImportRecipePage() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); }
   };
 
-  const handleOpenInEditor = () => {
-    if (!preview) return;
-    sessionStorage.setItem('soupdog_import', JSON.stringify(preview));
-    router.push('/my/recipes/new?import=1');
-  };
+  const dagNodes: any[] = preview?.dag?.nodes ?? [];
+  const stepCount = dagNodes.length;
 
-  const stepCount = (preview?.groups ?? []).reduce((n: number, g: any) => n + (g.steps?.length ?? 0), 0);
+  // Ingredients are introduced on nodes (one per node, by atomicity). Derive the flat
+  // list for the ingredients table from the DAG.
+  const dagIngredients: any[] = dagNodes
+    .map((n: any) => (n.ingredients ?? [])[0])
+    .filter(Boolean)
+    .map((ing: any) => ({ name: ing.name, quantityValue: ing.qty ?? 0, quantityUnit: ing.unit ?? '', prepNote: ing.prep ?? '' }));
+
+  // Group nodes by their `group` label for sectioned display, preserving node order.
+  // Nodes with no group fall under a default section. The display layer shows each
+  // atomic step; consumes/produces are surfaced as small dependency hints.
+  const nodeGroups: { label: string | null; nodes: any[] }[] = (() => {
+    const order: string[] = [];
+    const map = new Map<string, any[]>();
+    for (const n of dagNodes) {
+      const key = (n.group?.trim() || '__default__');
+      if (!map.has(key)) { map.set(key, []); order.push(key); }
+      map.get(key)!.push(n);
+    }
+    return order.map(k => ({ label: k === '__default__' ? null : k, nodes: map.get(k)! }));
+  })();
+
+  // Build a quick id→short-label map so "consumes" can show what each step needs.
+  const nodeLabel = new Map<string, string>();
+  for (const n of dagNodes) {
+    const ing = (n.ingredients ?? [])[0]?.name;
+    nodeLabel.set(n.id, n.produces?.trim() || ing || n.task || n.id);
+  }
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px 100px' }}>
@@ -497,14 +552,14 @@ export default function ImportRecipePage() {
       )}
 
       {status === 'done' && preview && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 24, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 24, alignItems: 'start' }}>
 
-          {/* Recipe preview */}
+          {/* Recipe preview (DAG) */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px',
               border: B, background: 'var(--surface-hover)', fontFamily: MONO, fontSize: 11,
               color: 'var(--muted)', marginBottom: 20 }}>
-              {stepCount} steps · {preview.ingredients?.length ?? 0} ingredients
+              {stepCount} steps · {dagIngredients.length} ingredients
               {chatHistory.filter(t => t.type === 'modification').length > 0 && (
                 <span style={{ marginLeft: 8, color: 'var(--accent)' }}>
                   · {chatHistory.filter(t => t.type === 'modification').length} edit{chatHistory.filter(t => t.type === 'modification').length !== 1 ? 's' : ''}
@@ -587,11 +642,11 @@ export default function ImportRecipePage() {
 
               <div style={{ padding: '14px 20px', borderBottom: B }}>
                 <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 10 }}>
-                  Ingredients ({preview.ingredients?.length ?? 0})
+                  Ingredients ({dagIngredients.length})
                 </div>
                 <table style={{ borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 }}>
                   <tbody>
-                    {(preview.ingredients ?? []).map((ing: any, i: number) => (
+                    {dagIngredients.map((ing: any, i: number) => (
                       <tr key={i} style={{ borderTop: i > 0 ? B : 'none' }}>
                         <td style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 11, color: 'var(--muted)', borderRight: B, whiteSpace: 'nowrap' as const }}>
                           {ing.quantityValue} {ing.quantityUnit}
@@ -608,37 +663,47 @@ export default function ImportRecipePage() {
                 <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 10 }}>
                   Steps ({stepCount})
                 </div>
-                {(preview.groups ?? []).map((group: any, gi: number) => (
-                  <div key={gi} style={{ marginBottom: gi < (preview.groups.length - 1) ? 16 : 0 }}>
-                    {group.outputName && (
+                {nodeGroups.map((grp, gi) => (
+                  <div key={gi} style={{ marginBottom: gi < (nodeGroups.length - 1) ? 16 : 0 }}>
+                    {grp.label && (
                       <div style={{ fontFamily: MONO, fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
                         letterSpacing: '0.15em', color: 'var(--fg)', marginBottom: 8, paddingBottom: 4, borderBottom: B }}>
-                        {group.outputName}
+                        {grp.label}
                       </div>
                     )}
-                    {(group.steps ?? []).map((step: any, si: number) => (
-                      <div key={si} style={{ display: 'flex', gap: 12, marginBottom: 8, paddingBottom: 8,
-                        borderBottom: si < group.steps.length - 1 ? `1px dashed var(--border)` : 'none' }}>
-                        <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', flexShrink: 0,
-                          width: 20, textAlign: 'right' as const, paddingTop: 2 }}>{si + 1}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 12, lineHeight: 1.6, margin: '0 0 4px', color: 'var(--fg)' }}>{step.instruction}</p>
-                          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                            {step.durationMinutes > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>⏱ {step.durationMinutes} min</span>}
-                            {step.taskFamily && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{step.taskFamily}</span>}
-                            {(step.stepIngredients ?? []).length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>{step.stepIngredients.join(', ')}</span>}
-                            {(step.stepTools ?? []).length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', border: '1px solid var(--border)', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><SoupdogIcon name="tools" size={9} /> {step.stepTools.join(', ')}</span>}
+                    {grp.nodes.map((n: any, si: number) => {
+                      const ing = (n.ingredients ?? [])[0];
+                      const instruction = ing?.name
+                        ? `${n.task[0]?.toUpperCase()}${n.task.slice(1)} ${ing.qty != null ? `${ing.qty}${ing.unit ? ' ' + ing.unit : ''} ` : ''}${ing.name}${ing.prep ? `, ${ing.prep}` : ''}`
+                        : `${n.task[0]?.toUpperCase()}${n.task.slice(1)}`;
+                      const needs = (n.consumes ?? []).map((c: string) => nodeLabel.get(c)).filter(Boolean);
+                      return (
+                        <div key={n.id} style={{ display: 'flex', gap: 12, marginBottom: 8, paddingBottom: 8,
+                          borderBottom: si < grp.nodes.length - 1 ? `1px dashed var(--border)` : 'none' }}>
+                          <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', flexShrink: 0,
+                            width: 20, textAlign: 'right' as const, paddingTop: 2 }}>{n.id}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 12, lineHeight: 1.6, margin: '0 0 4px', color: 'var(--fg)' }}>{instruction}</p>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{n.task}</span>
+                              {n.passive && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>⏱ passive</span>}
+                              {n.completion && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>{n.completion}</span>}
+                              {n.tool && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', border: '1px solid var(--border)', padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 4 }}><SoupdogIcon name="tools" size={9} /> {n.tool}</span>}
+                              {needs.length > 0 && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)' }}>← needs {needs.join(' + ')}</span>}
+                              {n.produces && <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--accent)' }}>→ {n.produces}</span>}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Chat panel */}
+          {/* Chat panel — gated off on the DAG path; returns DAG-native in a later increment */}
+          {false && (
           <div style={{ position: 'sticky', top: 24 }}>
             <div style={{ border: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', maxHeight: '80vh' }}>
 
@@ -768,26 +833,20 @@ export default function ImportRecipePage() {
               </div>
             </div>
           </div>
+          )}
         </div>
       )}
 
       {status === 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {chatHistory.filter(t => t.type === 'modification').length > 0
-              ? `${chatHistory.filter(t => t.type === 'modification').length} edit${chatHistory.filter(t => t.type === 'modification').length !== 1 ? 's' : ''} — save or open in advanced editor`
-              : 'Review your recipe then save, or open in advanced editor'}
+            Review the steps, then save
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setStatus('idle'); setPreview(null); setChatHistory([]); setPending(null); setUploadFile(null); }}
+            <button onClick={() => { setStatus('idle'); setPreview(null); setSourceExtraction(null); setChatHistory([]); setPending(null); setUploadFile(null); }}
               style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
               ← Start over
-            </button>
-            <button onClick={handleOpenInEditor}
-              style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
-                fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--fg)' }}>
-              Advanced editor
             </button>
             <button onClick={handleSave} disabled={saving}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', border: 'none',
@@ -802,7 +861,9 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…') : 'Upload a file or paste a recipe'}
+            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…')
+              : status === 'decomposing' ? 'Breaking into steps…'
+              : 'Upload a file or paste a recipe'}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => router.back()}
@@ -810,13 +871,15 @@ export default function ImportRecipePage() {
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
               Cancel
             </button>
-            <button onClick={handleImport} disabled={status === 'loading' || (!text.trim() && !uploadFile)}
+            <button onClick={handleImport} disabled={status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile)}
               style={{ padding: '8px 20px', border: 'none', background: 'var(--accent)', color: '#fff',
                 fontFamily: MONO, fontSize: 11,
-                cursor: status === 'loading' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
+                cursor: status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 7,
-                opacity: status === 'loading' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
-              {status === 'loading' ? <><Loader2 size={12} className="animate-spin" /> {uploadFile ? 'Reading…' : 'Reading…'}</> : 'Add recipe'}
+                opacity: status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
+              {status === 'loading' || status === 'decomposing'
+                ? <><Loader2 size={12} className="animate-spin" /> {status === 'decomposing' ? 'Structuring…' : 'Reading…'}</>
+                : 'Add recipe'}
             </button>
           </div>
         </div>

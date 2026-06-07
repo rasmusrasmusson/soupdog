@@ -157,6 +157,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const dag  = body?.dag;
   const meta = body?.meta ?? {};
+  // The hidden step-1 parse (faithful rough extraction) this DAG was decomposed from.
+  // Stored on the version for revert / cheap re-decompose (no re-parse). Optional —
+  // direct API callers may omit it; the import flow always sends it.
+  const sourceExtraction = body?.sourceExtraction ?? null;
 
   if (!dag || !Array.isArray(dag.nodes) || dag.nodes.length === 0) {
     return NextResponse.json({ error: 'dag with nodes required' }, { status: 400 });
@@ -204,6 +208,7 @@ export async function POST(req: NextRequest) {
         difficulty:          meta.difficulty ?? 'medium',
         total_time_seconds:  meta.totalTimeSeconds ?? 0,
         is_canonical_version: true,
+        source_extraction:   sourceExtraction,
       })
       .select().single();
     if (ve) throw ve;
