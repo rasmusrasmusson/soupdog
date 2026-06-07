@@ -142,13 +142,32 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
         <span style={{ fontSize: 14, color: 'var(--fg)' }}>Verified (part of the guide / shown without a draft badge)</span>
       </label>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <button onClick={save} disabled={saving}
-          style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '10px 22px', fontSize: 14, cursor: saving ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: saving ? 0.6 : 1 }}>
-          {saving ? 'Saving…' : 'Save technique'}
-        </button>
-        <Link href={`/techniques/${slug}`} style={{ color: 'var(--muted)', fontSize: 14, textDecoration: 'none' }}>Cancel</Link>
-        {msg && <span style={{ fontSize: 13, color: msg.startsWith('Error') ? '#b4413c' : 'var(--accent)' }}>{msg}</span>}
+      {/* Fixed bottom save bar (matches the recipe editor pattern; no chat sidebar here so right:0) */}
+      <div style={{
+        position: 'fixed', bottom: 0, left: 0, right: 0,
+        borderTop: '1px solid var(--border)', background: 'var(--surface)',
+        padding: '10px 32px', display: 'flex', alignItems: 'center',
+        justifyContent: 'space-between', zIndex: 50,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--muted)' }}>
+            Editing technique
+          </span>
+          {msg && (
+            <span style={{ fontSize: 13, color: msg.startsWith('Error') ? '#b4413c' : 'var(--accent)' }}>
+              {msg}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Link href={`/techniques/${slug}`} style={{ color: 'var(--muted)', fontSize: 14, textDecoration: 'none' }}>
+            Cancel
+          </Link>
+          <button onClick={save} disabled={saving}
+            style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '10px 22px', fontSize: 14, cursor: saving ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Saving…' : 'Save technique'}
+          </button>
+        </div>
       </div>
     </div>
   );

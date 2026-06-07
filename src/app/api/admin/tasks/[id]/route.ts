@@ -85,11 +85,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   patch.updated_at = new Date().toISOString();
 
   const { data, error } = await (supabase as any)
-    .from('tasks').update(patch).eq('id', id).select().single();
+    .from('tasks').update(patch).eq('id', id).select().maybeSingle();
 
   if (error) {
     console.error('[admin/tasks PATCH]', error);
     return NextResponse.json({ error: error.message }, { status: 502 });
+  }
+  if (!data) {
+    // Update matched no row under RLS — almost always the admin UPDATE policy isn't in
+    // place / is keyed to the wrong id. Re-run guide_02_admin_task_update.sql.
+    return NextResponse.json(
+      { error: 'Update blocked by permissions (no row changed). Check the admin update policy.' },
+      { status: 403 },
+    );
   }
   return NextResponse.json({ ok: true, task: data });
 }
