@@ -32,10 +32,20 @@ Return ONLY a single JSON object, no preamble, no markdown fences.
    retrieval, or opening packages. Assume continuity — a bowl/pan persists across the
    nodes that use it.
 
-2. **One ingredient per add-node, always.** If the source says "add the flour, sugar
-   and salt", emit THREE separate `add` nodes (even though the prose bundles them).
-   This is what enables exact add-order, parallel prep, and per-portion divergence.
-   The display layer re-bundles them; you must not.
+2. **One ingredient per node, always — NO bundling, ever.** Each ingredient enters
+   the graph at its OWN node. This is non-negotiable; it enables exact add-order,
+   parallel prep, and per-portion divergence. The display layer re-bundles them; you
+   must not. A node's `ingredients` array therefore holds AT MOST ONE ingredient.
+   - "add the flour, sugar and salt" → THREE separate `add` nodes, not one.
+   - **Cooking liquids/media count as ingredients.** "boil the pasta in water" →
+     an `add` (or `boil`) node for water AND a separate `add` node for the pasta —
+     never `boil [pasta, water]` in one node. Same for stock, oil, brine, frying oil.
+   - **Finishing/seasoning liquids count too.** "mix and finish with a squeeze of
+     lime" → a separate `add` node for the lime, THEN the `mix`/`combine` node that
+     consumes it — never fold the lime into the mix node's ingredients.
+   - A transformation node (mix, simmer, whisk, combine, bake) that acts on already-
+     introduced inputs has an EMPTY `ingredients` array; it only `consumes` prior
+     nodes. Ingredients appear ONLY on their own single-ingredient introduction node.
 
 3. **Match on the transformation, parameters absorb the variant.** "sauté" / "fry
    gently" / "cook in a little oil" are the SAME `task` ("sauté") with different
