@@ -149,6 +149,31 @@ function durationToSeconds(completion: string | null | undefined): number | null
   return secs > 0 ? secs : null;
 }
 
+// Extract a duration in seconds from NATURAL-LANGUAGE text ("about 9 minutes",
+// "8-10 min", "for 1 hour 30 minutes", "90 seconds"). Used so a time stated in the
+// completion/notes still populates the Time column even when it isn't ISO PT format.
+// For a range, takes the midpoint. Returns null if no time phrase is found.
+function naturalDurationToSeconds(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  let total = 0; let found = false;
+  // hours
+  const h = /(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/.exec(t);
+  if (h) { total += parseFloat(h[1]) * 3600; found = true; }
+  // minutes — handle ranges "8-10 min" / "8 to 10 minutes" (midpoint)
+  const minRange = /(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min|m)\b/.exec(t);
+  const minSingle = /(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min|m)\b/.exec(t);
+  if (minRange) { total += ((parseFloat(minRange[1]) + parseFloat(minRange[2])) / 2) * 60; found = true; }
+  else if (minSingle) { total += parseFloat(minSingle[1]) * 60; found = true; }
+  // seconds
+  const secRange = /(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:seconds?|secs?|s)\b/.exec(t);
+  const secSingle = /(\d+)\s*(?:seconds?|secs?|s)\b/.exec(t);
+  if (secRange) { total += (parseInt(secRange[1]) + parseInt(secRange[2])) / 2; found = true; }
+  else if (secSingle && !minSingle) { total += parseInt(secSingle[1]); found = true; }
+  const secs = Math.round(total);
+  return found && secs > 0 ? secs : null;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -225,9 +250,14 @@ export async function POST(req: NextRequest) {
       const n = dag.nodes[i];
 
       const taskId = await findOrCreateTask(db, n.task, taskCache, createdTasks);
-      const durationSeconds = durationToSeconds(n.completion);
+      // Duration for the Time column: ISO PT in completion first, else parse a natural-
+      // language time from the completion or notes ("about 9 minutes", "8-10 min").
+      const durationSeconds =
+        durationToSeconds(n.completion)
+        ?? naturalDurationToSeconds(n.completion)
+        ?? naturalDurationToSeconds(n.notes);
       // Non-duration completion text (e.g. "until golden") is preserved in notes.
-      const completionNote = (n.completion && durationSeconds == null) ? n.completion : null;
+      const completionNote = (n.completion && durationToSeconds(n.completion) == null) ? n.completion : null;
       const noteParts = [completionNote, n.notes].filter(Boolean);
 
       const { data: step, error: se } = await db

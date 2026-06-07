@@ -49,6 +49,26 @@ function durationToSeconds(completion?: string | null): number | undefined {
   return secs > 0 ? secs : undefined;
 }
 
+// Natural-language duration ("about 9 minutes", "8-10 min", "90 seconds"); range→midpoint.
+// Mirrors decompose-save so the preview Time column matches the saved view.
+function naturalDurationToSeconds(text?: string | null): number | undefined {
+  if (!text) return undefined;
+  const t = text.toLowerCase();
+  let total = 0; let found = false;
+  const h = /(\d+(?:\.\d+)?)\s*(?:hours?|hrs?|h)\b/.exec(t);
+  if (h) { total += parseFloat(h[1]) * 3600; found = true; }
+  const minRange = /(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min|m)\b/.exec(t);
+  const minSingle = /(\d+(?:\.\d+)?)\s*(?:minutes?|mins?|min|m)\b/.exec(t);
+  if (minRange) { total += ((parseFloat(minRange[1]) + parseFloat(minRange[2])) / 2) * 60; found = true; }
+  else if (minSingle) { total += parseFloat(minSingle[1]) * 60; found = true; }
+  const secRange = /(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:seconds?|secs?|s)\b/.exec(t);
+  const secSingle = /(\d+)\s*(?:seconds?|secs?|s)\b/.exec(t);
+  if (secRange) { total += (parseInt(secRange[1]) + parseInt(secRange[2])) / 2; found = true; }
+  else if (secSingle && !minSingle) { total += parseInt(secSingle[1]); found = true; }
+  const secs = Math.round(total);
+  return found && secs > 0 ? secs : undefined;
+}
+
 function buildInstruction(n: DagNode): string {
   const verb = (n.task || '').trim();
   const ing  = (n.ingredients ?? [])[0];
@@ -65,9 +85,12 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
 
   (dag.nodes ?? []).forEach((n, i) => {
     const stepId = n.id; // node id doubles as the step id for preview-time stepIngMap
-    const durationSeconds = durationToSeconds(n.completion);
+    const durationSeconds =
+      durationToSeconds(n.completion)
+      ?? naturalDurationToSeconds(n.completion)
+      ?? naturalDurationToSeconds(n.notes);
     // completion text that isn't a duration (e.g. "until golden") → notes
-    const completionNote = (n.completion && durationSeconds == null) ? n.completion : null;
+    const completionNote = (n.completion && durationToSeconds(n.completion) == null) ? n.completion : null;
     const noteParts = [completionNote, n.notes].filter(Boolean) as string[];
 
     steps.push({
