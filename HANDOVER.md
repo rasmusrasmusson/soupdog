@@ -1083,3 +1083,111 @@ Soupdog_Recipes_Mirror_Table_Note_v0_1.md`.
 Manual-add fallback when OFF returns nothing; pre-attach product to create-recipe
 (now folded into the two-intents design); npm audit for xlsx vulns; saved-recipe
 folders; household→groups rename; thread avatar_initials through PlanView.
+
+
+# SESSION CLOSE — 2026-06-06 — Features shipped + recipe-model design/reconciliation
+
+A long session. Two halves: (1) a batch of shipped fixes/features, (2) an extended
+recipe-model design that — at the very end — turned out to largely RE-DERIVE a
+schema that ALREADY EXISTS. Read the reconciliation section; it's the headline.
+
+## SHIPPED & VERIFIED (code, pushed, live)
+- Header: removed units/metrics menu; language switcher made discoverable (globe +
+  endonyms, always visible).
+- Recipe import: Word (.docx via mammoth) + Excel (.xlsx via SheetJS) → text →
+  existing parse path. Hardened JSON extraction (outermost {…}, max_tokens 8000),
+  "Try again" on error. .txt confirmed working (no real bug). NPM AUDIT: 3 vulns
+  (xlsx, "no fix available" — it's the unmaintained npm dist). Do NOT `--force`.
+  Backlog: migrate to SheetJS CDN dist.
+- Save/unsave: FIXED. Was passing the `recipes`-mirror id where saved_recipes.canonical_id
+  FKs to recipe_canonicals. Fix = resolve-any-id in route (POST+DELETE) + page passes
+  true canonical. Verified persists + shows in My Recipes>Saved.
+- Barcode search: 8–14 digit detection → match own ingredients.barcode (shown, no
+  headline, "View product & recipes") + Open Food Facts lookup → "Not in the system"
+  + Add (logged-in, via /api/my/products) / "Log in to add". Not-found message added.
+  Auth gate uses useAuth() (a direct client getUser() raced → false negative; fixed).
+- Create-recipe button (ingredient page) → /my/recipes/import (was /new advanced).
+- PlanView reads avatar_initials override (threaded through both meal-plan routes +
+  monogram()).
+- household → group rename: DB table `household_members`→`group_members` (empty, no
+  deps — safe), policy renamed, route `/meal-plan/household`→`/group`, types updated,
+  PlanView fetch updated. Old household route folder deleted.
+- Logotype + favicon: pushed (had been left unstaged on a prior commit).
+
+## RESOLVED (not deferred)
+- `recipes` flat-mirror table: AUDITED — no data bug. `recipes.canonical_id` is an
+  inert self-FK (REFERENCES recipes(id)), NULL on all rows, read by no code; the
+  real mirror→canonical link is via recipe_version_id. Doc:
+  Soupdog_Recipes_Mirror_Table_Note_v0_1.md. DOWNGRADED from "near-term debt" to
+  "resolved; optional rename/drop of canonical_id only."
+
+## DESIGN DOCS PRODUCED (in docs/)
+- Soupdog_Add_Recipe_From_Ingredient_Design_v0_1.md — two intents (use-as-input vs
+  make-as-result); downstream of kind + a UX decision.
+- Soupdog_Recipe_Model_Concept_Fork_Design_v0_1 … v0_6.md — the recipe model,
+  reasoned end to end: concept (curated, global, m2m) / recipe-as-sibling / version /
+  fork-by-reference / graduation-as-naming / author guardrails+fork-vs-new keystone /
+  fork-as-interactive-choice / portion-aware Cook Mode / per-participant defaulting /
+  demand front door (free→queue, paid→AI-gen-contributes) / composition schema
+  (recipes reference atomic ingredient/tool/task entities) / final ERD.
+  Guiding principle: system MEASURES & SUGGESTS, human NAMES & DECIDES.
+
+## *** HEADLINE FINDING — read this first next session ***
+The recipe model designed in v0.1–v0.6 LARGELY ALREADY EXISTS in the live DB, often
+MORE mature than the design. Discovered via a schema audit run one query BEFORE
+writing DDL (which would have created a massive duplicate — `recipes`-mirror mistake
+at scale). Full mapping in: **Soupdog_Recipe_Model_Reconciliation_v0_1.md**.
+
+Key mappings (design → reality):
+- fork → `execution_variants` (43 rows; has `derived_from_variant_id`, `is_user_fork`,
+  **`divergence_score`** = our "unity", `variant_axes`, `method_changes`). Divergence
+  expressed via `variant_step_overrides` / `variant_ingredient_scaling` /
+  `variant_equipment_overrides` — i.e. reference-with-override (our copy-on-write),
+  already built.
+- atomic task → `tasks` (91 rows; `parameter_schema`, `is_passive`, `is_parallelisable`,
+  in/out states, `completion_criterion`, `task_family`/`category` taxonomy started,
+  `is_verified`/`content_reviewed`). The v0.5 "tasks first-class" insight = already done.
+- composition (recipe_element) → `version_steps` (755 rows; `task_id`→tasks,
+  `task_parameters`, parallel/blocking flags). Steps already reference catalogued tasks.
+- tool → `equipment` (61 rows, richer). ingredient link → version_step_ingredients /
+  version_ingredients (typed FK — the "minimal hybrid" is already reality).
+- concept → `food_families` + `food_family_members` (m2m) but only 3/2 rows — underused.
+- `recipe_canonicals.composition_level` is almost certainly the intended `kind` enum.
+- `entity_relations` (0 rows) — a designed generic relation table, sitting empty.
+
+DO NOT build v0.6's 8 tables. The design notes are now the THEORY of the existing
+system, not a build spec.
+
+## PROCESS LESSON (recorded)
+Audit the live schema BEFORE designing. Tonight's design happened in a vacuum because
+the handover/context presented the schema as "recipe_canonicals→recipe_versions + 40
+recipes" when in fact ~70 tables exist implementing much of it. Future sessions: start
+from the schema.
+
+## GENUINE GAPS (the REAL, small build backlog — things that don't exist yet)
+- Demand-capture front door: a "requested-but-not-made recipe" entity + free→queue /
+  paid→AI-generate routing. NEW.
+- Curation-gate workflow for recipe additions going live (flags exist on tasks/
+  equipment; no recipe-level queue/state machine). Partial.
+- Author modification guardrails (permitted-variation envelope). NEW.
+- Concept layer activation: decide if `food_families` IS the concept layer (likely
+  repurpose) and populate it.
+
+## NEXT SESSION — recommended opening (small, grounded, NOT "build the model")
+1. Read how a recipe is ASSEMBLED in code (which tables the read path joins) — confirm
+   the reconciliation mapping against actual usage.
+2. Confirm `composition_level` = intended `kind`; do NOT add a duplicate enum.
+3. Decide `food_families` vs a new concept layer.
+4. Scope the 4 genuine gaps above as the build backlog.
+
+## OTHER BACKLOG (carried)
+- Header avatar stale-until-hard-refresh (profile save doesn't refresh auth/profile
+  context). Minor, pre-existing.
+- Manual-add fallback when OFF returns nothing (China/SE-Asia coverage thin: China
+  ~1,554 products; OFF is global but uneven).
+- Pre-attach product to create-recipe flow (folded into two-intents design).
+- npm audit → migrate xlsx to SheetJS CDN dist (don't --force).
+- saved-recipe folders; technique-section browsing taxonomy (tasks have
+  family/category started).
+- Plan & End-Product bridge; Demand Phase 2; enforcement + Stripe; Sharing &
+  Delegation; Cook Mode (much already scaffolded in tasks/execution_variants).
