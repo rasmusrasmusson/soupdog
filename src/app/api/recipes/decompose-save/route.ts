@@ -111,7 +111,7 @@ async function findOrCreateTask(
   // category left null (curation/merge assigns it). is_verified false + source
   // ai_generated so the curation gate can find and bless these.
   const slug = slugify(raw) + '-' + Date.now().toString(36).slice(-4);
-  const { data: newTask } = await db
+  const { data: newTask, error: te } = await db
     .from('tasks')
     .insert({
       slug,
@@ -124,6 +124,12 @@ async function findOrCreateTask(
       content_reviewed: false,
     })
     .select('id').single();
+  if (te) {
+    // Don't fail the whole save for one task — but surface it loudly so a blocked
+    // insert (RLS/grant) isn't swallowed silently. Step still writes with null task_id.
+    console.error('[decompose-save] task insert failed for "%s": %s', raw, te.message);
+    return null;
+  }
   if (newTask?.id) {
     cache.set(key, newTask.id);
     createdOut.push(raw);
