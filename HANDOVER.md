@@ -1191,3 +1191,126 @@ from the schema.
   family/category started).
 - Plan & End-Product bridge; Demand Phase 2; enforcement + Stripe; Sharing &
   Delegation; Cook Mode (much already scaffolded in tasks/execution_variants).
+
+# Soupdog — Session Handover · 2026-06-07
+
+Read this first, then HANDOVER.md (the big standing doc) for full project context.
+This records only what changed THIS session and what to do next.
+
+## Standing context (unchanged — see HANDOVER.md for detail)
+Solo founder Rasmus; soup.dog; Next.js 16 / Supabase (project npvajzgciuykugqxedmm) /
+Vercel (auto-deploy on push) / TypeScript. Works from China via Clash Verge TUN VPN.
+No real users yet (safe to change/delete live data). File delivery: Claude zips/creates
+whole files with `--` path separators; Rasmus places manually. SQL run manually in
+Supabase SQL editor. Rasmus person id b6a30271-7992-406e-8578-da6e2ccf9f19.
+
+## SHIPPED + VERIFIED LIVE this session
+- **Legacy recipe read-path REMOVED** from src/app/recipes/[slug]/page.tsx. The page
+  used to dual-read (rich `recipe_canonicals→recipe_versions→version_steps/...` AND
+  legacy `recipe_steps/recipe_ingredients/recipe_equipment` via `mapLegacyRecipe`,
+  choosing via a `hasNewData` ternary). Investigation proved ALL 41 recipes have rich
+  data — the legacy branch served nothing live. Removed the 3 legacy joins, the
+  `hasNewData` ternary (now always `mapNewSchemaRecipe`), the `mapLegacyRecipe`
+  function, and fixed a resulting trailing-comma. Verified live: chicken-tikka-masala
+  renders fully (11 ings, 4 tools, 8 grouped steps, PDF export + QR work).
+- **Logotype + favicons** updated (new dog wordmark showing in header).
+- Both pushed.
+
+## DATA CLEANUP — DONE (committed)
+Deleted 7 test/draft recipes (verified canon_left=0; keepers intact). Deleted:
+Meal 2: tiger and Tagine · Roasted almonds and walnuts · Fried almonds · Indian curry
+· Hazelnut Cream · Salad · Oatmeal (the unpublished 3/3 one — kept the published one).
+All real recipes intact (Carbonara, Tagine, Dhal, Mango Lassi, Tomato soup, croissant,
+crème brûlée, chocolate bavarois, apple pie, etc.). recipe_canonicals now ~34.
+
+### ⚠️ KEY LESSON — Supabase SQL editor & transactions
+A bare `begin; ... <deletes> ...` with NO `commit;` in the same execution gets ROLLED
+BACK by the editor — the dry-run-then-commit pattern does NOT persist unless `commit;`
+is in the SAME run/batch. Two patterns that DO work:
+  (a) autocommit: no BEGIN, no temp tables (temp tables need a txn), inline the target
+      IDs in every statement — each delete auto-commits. (This is what finally worked;
+      file: delete_test_recipes_autocommit.sql.)
+  (b) transactional: include `commit;` as the final line of the SAME execution.
+Also re-confirmed (recurring trap): the `recipes` mirror links via **recipe_version_id**
+(the REAL link), NOT canonical_id (an inert self-FK). Delete mirror rows by
+recipe_version_id BEFORE deleting recipe_versions, or you hit
+`recipes_recipe_version_id_fkey`.
+
+## DOCS produced this session (all in docs/ — confirm pushed)
+- **Soupdog_Recipe_Architecture_AS_BUILT_v0_1.md** — CORRECTED: the 2 ex-"seeds"
+  (Chicken Tikka Masala, Sourdough Loaf) always had rich data; legacy branch marked
+  REMOVED; canonical_id-tidy dead-end recorded; cleanup marked DONE.
+- **Soupdog_Atomic_Recipe_Decomposition_Design_v0_1 → v0_2 → v0_3.md** — the big design
+  arc this session (see below).
+- **Soupdog_Intermediate_Catalogue_Commercial_v0_1.md** — strategic forward-pointer.
+- (Local one-off SQL not needed in repo: diag_*.sql, delete_test_recipes*.sql.)
+
+## MAJOR DESIGN: Atomic recipe decomposition (editorial → executable graph)
+Fully designed this session (v0.3 is current). Soupdog recipes are EXECUTABLE (a
+structured graph for the IoT age), vs old EDITORIAL prose. An AI decomposition pass
+converts editorial→executable. FOUR decisions locked:
+1. **Maximally atomic** — one ingredient per add-step, always. Stop at the culinary
+   verb (no micro-motions). Verbosity absorbed by display layer.
+2. **Task matching = match on the underlying TRANSFORMATION**; parameters absorb
+   intensity/duration/medium (stir/stir-gently = one task + param; sauté≠sear≠boil).
+   Bias to reuse, NEVER collapse distinct transformations. New tasks enter
+   unverified/AI-sourced; curation blesses; periodic merge.
+3. **When it runs = INLINE**, two internal steps (parse→decompose) in one import call.
+   User sees ONLY the atomic result. PERSIST the bundled step-1 extraction hidden as
+   the re-decomposition source; if wrong, re-run ONLY step 2 (no re-import). [NOTE:
+   import is ALWAYS an AI/cost path — there is no AI-free import. Membership free/paid
+   tiering belongs to the DEMAND feature, not decomposition.]
+4. **Structure = FULL DEPENDENCY DAG** (the big reframe). A recipe is a directed
+   acyclic graph: nodes=atomic steps, edges=dependencies. GROUPS = intermediate-
+   producing SUB-GRAPHS = sub-recipes (backed by `version_sub_recipes`); a group
+   yields a result-ingredient (`ingredients.transformation_recipe_id`). Intermediates
+   FAN OUT (chop 200g onion → Sauce uses 100g + Salad uses 100g). Parallelism /
+   division-of-labour read off the graph. Derive groups bottom-up from the final
+   product (convergence points incl. plating = group boundaries); explicit labels
+   override. Recursion: Meal = ONE recipe → ONE end product, composed of dish
+   sub-recipes → group sub-recipes → atomic steps (same pattern every level).
+   Display: section by group, collapse contiguous same-task+same-tool steps into one
+   readable line. Store atomic, display grouped.
+
+**v0.3 additions:** find-or-create applies at ALL THREE levels — ingredient / task /
+sub-recipe-intermediate. AI searches for matching sub-recipes/intermediates before
+writing new (much prep is shared, esp. Indian: ginger-garlic paste, birista, tarka).
+Compounds quality/saturation over time. Sub-recipe matching is fuzzier → dedup-by-
+parameterisation discipline matters more.
+
+**Commercial forward-pointer (capture, not build):** once intermediates are
+catalogued + usage-counted, three things fall out free — (1) consumer upsell ("you chop
+a lot of onion → buy pre-chopped", respecting no-injected-ads), (2) B2B prepared-food
+DEMAND SIGNAL (which intermediates are most made-from-scratch = product-dev
+opportunities for food-company customers), (3) catalogue compounding.
+
+**Recurring theme:** the schema ALREADY supports all of this (version_steps.task_id,
+task_parameters, tasks.completion_criterion/suggested_tool_slugs/is_verified,
+version_sub_recipes, meal_component, parallel_group_id). Decomposition POPULATES
+existing structure; it is not new schema. (This echoes the earlier-session finding that
+the recipe model was already built — audit schema BEFORE designing.)
+
+## NEXT SESSION — recommended starting point
+The decomposition feature is now fully DESIGNED (v0.3) and ready to BUILD. The build is
+meaty and best started fresh. Remaining work (all build / prompt-engineering, none
+designed yet):
+- The DAG-emitting decomposition prompt (emit nodes + dependency edges + intermediates
+  + group/sub-recipe boundaries; find-or-create task matching; tool inference anchored
+  to suggested_tool_slugs; map "until X" → completion_criterion).
+- **Dependency-inference quality + an eval set** — the HARD part; needs examples.
+- Mapping sub-recipe boundaries → version_sub_recipes rows at insert time.
+- The display collapse rule (section from DAG; merge contiguous same-task steps).
+- Storage of the persisted step-1 bundled extraction (column vs small table).
+Before any `kind`/enum work: confirm `recipe_canonicals.composition_level` is the
+intended kind enum; decide whether food_families is the concept layer.
+
+## Loose ends / backlog (unchanged or minor)
+- Confirm the docs/ commits above are pushed (git status; git add docs/; commit; push).
+- Optional future tidy: DROP now-unread legacy TABLES (recipe_steps/recipe_ingredients/
+  recipe_equipment) + stale recipes.canonical_id self-FK column. Not urgent.
+- Header avatar stale-until-hard-refresh (pre-existing, minor).
+- Manual-add fallback when barcode OFF returns nothing (China/SE-Asia thin coverage).
+- npm: xlsx vulns "no fix available" — migrate to SheetJS CDN dist (don't --force).
+- Saved-recipe folders.
+- Genuine unbuilt gaps: demand front door, curation-gate workflow, surfacing forks in
+  the read path (execution_variants exist but 0 user forks, not rendered).
