@@ -118,6 +118,19 @@ function ToolCell({ settings }: { settings: any }) {
   return <span style={{ color: MUT }}>—</span>;
 }
 
+// Renders a step's instruction with any end-state / human-timing note appended as a
+// muted suffix ("Fry — until crispy"). `notes` carries observable completion phrases
+// ("until crispy") and human time ranges ("about 8-10 minutes") that don't fit the
+// numeric Time column. Duration (PT#M) lives in the Time column, not here.
+function StepLine({ instruction, notes }: { instruction: string; notes?: string }) {
+  return (
+    <>
+      {instruction}
+      {notes && <span style={{ color: MUT, fontFamily: MONO, fontSize: 10 }}> — {notes}</span>}
+    </>
+  );
+}
+
 export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: RecipeDisplayProps) {
   const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
@@ -277,7 +290,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: 
                     <div className="flex items-start gap-3">
                       {isOn && <Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}>{step.instruction}</p>
+                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine instruction={step.instruction} notes={step.notes} /></p>
                         {stepIngs.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {stepIngs.map((ing: RecipeIngredientRef) => (
@@ -351,7 +364,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: 
                           <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} /></td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>
-                          <td style={{ ...td, lineHeight: 1.55 }}>{step.instruction}</td>
+                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine instruction={step.instruction} notes={step.notes} /></td>
                         </tr>
                       ) : (
                         stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
@@ -366,7 +379,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: 
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}>{step.instruction}</td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine instruction={step.instruction} notes={step.notes} /></td>}
                           </tr>
                         ))
                       );

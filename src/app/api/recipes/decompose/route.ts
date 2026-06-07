@@ -34,7 +34,15 @@ Core rules:
 4. Edges = real dependencies, NOT sequence. "consumes" lists the node ids whose OUTPUT this node needs before it can start. A node depends on another ONLY if it uses that node's product or the same vessel's accumulated contents. Two prep chains that never meet until a later combine MUST NOT depend on each other — that independence is the parallelism the graph exists to capture. Do not chain every node to the previous one. The first node(s) touching only raw ingredients have empty consumes.
 5. Intermediates & convergence. A node that consumes TWO OR MORE prior outputs is a convergence point (a combine, a plating). The chain of nodes feeding one input of a convergence is a sub-graph that produces an intermediate — give it a short "produces" name on the LAST node of that chain. If the source explicitly names a section ("For the marinade:", "Masala sauce:"), use that exact name and set "group" on those nodes. Explicit names always win over your own derivation.
 6. Fan-out. One prep can feed several consumers. Emit ONE node; multiple later nodes list it in consumes. Put per-consumer quantities on the consuming node's notes if the source specifies a split.
-7. Tools & timing. Suggest a "tool" per node. For waits, set "passive": true and put the duration/criterion in "completion": a fixed time ("PT12M") OR an observable end-state ("until golden", "internal temp 74C"). Map "until X" to an observable completion, not a guess at minutes.
+7. Tools & timing. Suggest a "tool" per node. CAPTURE COMPLETION CRITERIA: if the source gives ANY duration or end-condition for a step — "about 8-10 minutes", "until crispy", "until al dente", "until golden", "until combined", "until thickened", "until the sauce coats the back of a spoon" — you MUST put it in that node's "completion". This applies to ACTIVE steps (fry, boil, whisk, simmer, saute, reduce), not only passive waits. Do NOT drop it. Rules for the value:
+   - A clear fixed time -> ISO-8601 duration: "10 minutes" -> "PT10M", "1.5 hours" -> "PT1H30M".
+   - A RANGE ("8-10 minutes") -> take the midpoint as the duration AND keep the human phrasing in "notes": completion "PT9M", notes "about 8-10 minutes".
+   - An observable end-state with no time ("until crispy", "until al dente") -> put the phrase verbatim in "completion": "until crispy".
+   - Both a time and a state ("fry 8 min until crispy") -> completion "PT8M", notes "until crispy".
+   - Set "passive": true ONLY for unattended waits (rest, prove, chill, marinate, simmer-unattended). Attended active cooking is passive:false but STILL gets a completion if the source states one.
+   If the source genuinely gives no time or condition for a step, completion is null — never invent a number.
+8. FAITHFULNESS — do not invent steps. Every node must correspond to an action that is actually in the source recipe. Do NOT add steps the source doesn't describe (no invented "ladle", "rest", "garnish", "serve" unless the source says so). Decomposing one source action into its atomic introduce-then-transform nodes is REQUIRED and expected (that is not invention); fabricating a NEW culinary action that the source never mentions is FORBIDDEN. When the source says "reserve 200ml pasta water before draining", model exactly that — a reserve action and a drain action — not an unrelated "ladle" step.
+9. The "task" is the TRANSFORMATION VERB, never a tool. Never use a tool/vessel name (ladle, colander, pan, pot, whisk, spoon, bowl) as the value of "task". The tool goes in the "tool" field; the verb describes what is DONE. "drain into a colander" -> task "drain", tool "colander" (NOT task "colander"). "transfer with tongs" -> task "transfer", tool "tongs". "whisk" is a verb AND a tool name — when whisking, task "whisk" is correct, but the implement is still the tool. If you cannot name a transformation verb for a step, the step probably should not exist (see rule 8).
 
 Output JSON contract:
 {
@@ -53,6 +61,19 @@ Output JSON contract:
       "passive": false,
       "completion": null,
       "notes": null
+    },
+    {
+      "id": "n2",
+      "task": "saute",
+      "ingredients": [],
+      "consumes": ["n1"],
+      "produces": "softened onion",
+      "group": null,
+      "tool": "frying-pan",
+      "params": { "heat": "medium" },
+      "passive": false,
+      "completion": "PT7M",
+      "notes": "about 6-8 minutes, until soft and translucent"
     }
   ]
 }
@@ -62,7 +83,9 @@ Hard constraints:
 - Every ingredient from the extraction appears in exactly one node's ingredients (introduced once, then referenced via consumes, never re-listed).
 - At least one terminal node (nothing consumes it) — the finished dish / plating.
 - Independent prep chains share NO edges until they converge.
-- "add" is a valid task for introducing an ingredient into an existing vessel.`;
+- "add" is a valid task for introducing an ingredient into an existing vessel.
+- Never use a tool name as a "task" value (rule 9). Never invent a step absent from the source (rule 8).
+- If the source states a time or end-condition for a step, that step's "completion" MUST be populated (rule 7).`;
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
