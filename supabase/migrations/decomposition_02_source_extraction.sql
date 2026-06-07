@@ -1,26 +1,16 @@
--- decomposition_02_source_extraction.sql
--- Run in Supabase SQL editor (project npvajzgciuykugqxedmm).
---
--- Adds the hidden step-1 parse to recipe_versions. When a recipe is imported, the
--- faithful rough extraction (the import route's output) is stored here, and the
--- ATOMIC DAG is what the user reviews/saves. Keeping the parse means:
---   - revert / re-decompose costs NO new parse call (the expensive read already ran);
---     the AI re-decomposes from this stored extraction.
---   - an admin debug view can later show "what was extracted before decomposition".
---
--- It belongs on the version (each version was decomposed from one extraction), so a
--- column is the right home — no new table.
+-- guide_02_admin_task_update.sql  (CORRECTED — real auth.users ids, both accounts)
+-- The earlier version was keyed to the PERSON id (b6a30271-...), not the ACCOUNT id.
+-- auth.uid() returns the AUTH account id. Rasmus's two accounts:
+--   bb02ae50-436c-4402-8c8c-447344e10151  (rr@varm.io)
+--   1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf  (rr@le.works)
+-- Lets either admin account UPDATE any task (curation). Autocommit (no BEGIN).
 
-alter table recipe_versions
-  add column if not exists source_extraction jsonb;
-
-comment on column recipe_versions.source_extraction is
-  'Hidden step-1 parse (faithful rough extraction) this version was decomposed from. Revert/re-decompose source. Not user-facing (admin debug only).';
-
--- column-level grants caveat (the recurring lesson): a plain grant is ignored unless
--- every column is granted, so re-grant ALL after adding a column.
-grant all on recipe_versions to anon, authenticated;
+drop policy if exists tasks_admin_update on tasks;
+create policy tasks_admin_update on tasks
+  for update to public
+  using      (auth.uid() in ('bb02ae50-436c-4402-8c8c-447344e10151','1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf'))
+  with check (auth.uid() in ('bb02ae50-436c-4402-8c8c-447344e10151','1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf'));
 
 -- VERIFY:
---   select column_name from information_schema.columns
---   where table_name='recipe_versions' and column_name='source_extraction';
+-- select policyname, cmd, qual from pg_policies
+--   where tablename='tasks' and policyname='tasks_admin_update';

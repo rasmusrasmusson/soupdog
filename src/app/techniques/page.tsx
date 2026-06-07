@@ -44,6 +44,7 @@ const slugFor = (t: Task) => t.slug || t.name.toLowerCase().replace(/\s+/g, '-')
 export default function TechniquesPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [query, setQuery] = useState('');
+  const [activeCat, setActiveCat] = useState<string>('all'); // 'all' or a category label
 
   useEffect(() => {
     const supabase = createClient() as any;
@@ -55,11 +56,21 @@ export default function TechniquesPage() {
       .then(({ data }: { data: Task[] | null }) => setTasks(data ?? []));
   }, []);
 
-  const filtered = (tasks ?? []).filter(t =>
-    !query.trim() ||
-    t.name.toLowerCase().includes(query.toLowerCase()) ||
-    (t.description ?? '').toLowerCase().includes(query.toLowerCase())
-  );
+  // distinct category labels present in the data, with counts (for the filter buttons)
+  const catCounts = new Map<string, number>();
+  for (const t of (tasks ?? [])) {
+    const k = categoryLabel(t.category);
+    catCounts.set(k, (catCounts.get(k) ?? 0) + 1);
+  }
+  const catButtons = [...catCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+  const filtered = (tasks ?? []).filter(t => {
+    const matchesCat = activeCat === 'all' || categoryLabel(t.category) === activeCat;
+    const matchesQuery = !query.trim()
+      || t.name.toLowerCase().includes(query.toLowerCase())
+      || (t.description ?? '').toLowerCase().includes(query.toLowerCase());
+    return matchesCat && matchesQuery;
+  });
 
   // group by category, then sort groups by label
   const groups = new Map<string, Task[]>();
@@ -103,11 +114,40 @@ export default function TechniquesPage() {
         onChange={e => setQuery(e.target.value)}
         placeholder="Filter techniques…"
         style={{
-          width: '100%', padding: '10px 14px', fontSize: 14, marginBottom: 28,
+          width: '100%', padding: '10px 14px', fontSize: 14, marginBottom: 16,
           border: '1px solid var(--border)', background: 'var(--surface)',
           color: 'var(--fg)', fontFamily: 'var(--font-mono)',
         }}
       />
+
+      {/* Category filter buttons — derived from categories present in the data.
+          (Free-text categories for now; will become a fixed set once the vocabulary
+          is locked — see the knowledge-layer design's category-model note.) */}
+      {tasks && catButtons.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 28 }}>
+          {([['all', `All`]] as [string, string][])
+            .concat(catButtons.map(([label]) => [label, label]))
+            .map(([key, label]) => {
+              const active = activeCat === key;
+              const count = key === 'all' ? (tasks?.length ?? 0) : catCounts.get(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveCat(key)}
+                  style={{
+                    fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+                    textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    background: active ? 'var(--accent-subtle)' : 'transparent',
+                    color: active ? 'var(--accent)' : 'var(--fg)',
+                  }}
+                >
+                  {label}{count != null ? ` ${count}` : ''}
+                </button>
+              );
+            })}
+        </div>
+      )}
 
       {!tasks && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {tasks && filtered.length === 0 && (

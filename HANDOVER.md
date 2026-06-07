@@ -1314,3 +1314,176 @@ intended kind enum; decide whether food_families is the concept layer.
 - Saved-recipe folders.
 - Genuine unbuilt gaps: demand front door, curation-gate workflow, surfacing forks in
   the read path (execution_variants exist but 0 user forks, not rendered).
+
+# SESSION UPDATE — 2026-06-07 (cont.) — Decomposition wired into import · Shared RecipeDisplay · Guide-layer designed
+
+Continuation of the 2026-06-07 session. The atomic-decomposition backend (built &
+validated earlier same day: `/api/recipes/decompose`, `/api/recipes/decompose-save`,
+`version_step_dependencies`, eval 6/6, live Carbonara 19 steps/19 edges) is now
+USER-FACING, the preview/saved-view divergence is GONE, and the next quality problem
+(consistency) is designed. All SHIPPED & verified live unless marked.
+
+## SHIPPED — code (pushed, builds green, tested live)
+
+### Decomposition wired into the import flow (Increments 2 + 3)
+The Add-recipe page (`src/app/my/recipes/import/page.tsx`) now runs the full pipeline:
+- **handleImportFile**: parse (`/api/recipes/import`) → keep the parse HIDDEN as
+  `sourceExtraction` (revert / cheap re-decompose source) → decompose
+  (`/api/recipes/decompose`) → preview shows the ATOMIC result. New `'decomposing'`
+  status ("Breaking into steps…" / "Structuring…").
+- **handleSave** → POSTs `{ meta, dag, sourceExtraction }` to
+  `/api/recipes/decompose-save` (NOT the old `/api/my/recipes`). Old
+  `importToRecipePayload` path retired (function left in file, unused).
+- Chat-modify panel + "Advanced editor" GATED OFF on the DAG path (`{false && …}`;
+  code intact) — they return DAG-native in a LATER increment. The user edits via the
+  meta fields now; chat-to-refine-DAG is a pending build.
+- **Migration RAN LIVE:** `recipe_versions.source_extraction jsonb`
+  (`decomposition_02_source_extraction.sql`) + `grant all on recipe_versions`.
+  GOTCHA HIT: it had NOT been run when first delivered (Increment 1) → the
+  decompose-save insert failed with `column source_extraction does not exist` until
+  the migration was applied. (Lesson restated: run the migration before testing the
+  save.) decompose-save now reads `body.sourceExtraction` and writes it into the
+  version insert.
+- VERIFIED live: Spaghetti Carbonara created through the UI →
+  `has_extraction=true`, 19 steps, 19 edges.
+
+### Shared `RecipeDisplay` component — preview and saved view now render identically
+**The headline of this arc.** Rasmus flagged the preview looked different from the
+saved recipe page — two renderers, two looks, for the same recipe. Root cause:
+`RecipeView` (saved page) reads `version_steps` sorted by order_index and renders the
+cookbook layout; the Increment-2 preview rendered a technical DAG (n1 / ← needs /
+→ produces). Fix = ONE shared presentation component used by BOTH (Rasmus chose the
+full consolidation, "Option B", since no users = safe to refactor the live page).
+
+- **NEW `src/components/recipe/RecipeDisplay.tsx`** — the single source of truth for
+  how a recipe LOOKS (title-less central column: Ingredients table, Tools chips,
+  Procedure table; mobile + desktop variants; faithful copy of the old RecipeView
+  presentation). Interactivity is OPTIONAL via an `interactive` prop
+  ({ ingChecks, stepChecks, servings }): present on the saved page (cooking
+  checkboxes), absent in the preview. `linkIngredients` prop (on for public view, off
+  in preview). Helpers `Th/Checkbox/SectionHeader/ToolCell` MOVED here from the view
+  page.
+- **NEW `src/lib/dag-to-recipe.ts`** — `dagToRecipe(dag, meta)` maps an in-memory
+  decomposition DAG into the `Recipe` shape RecipeDisplay renders (mirrors how
+  decompose-save persists: node→step, single ingredient→stepId link, tool→
+  appliance_settings.stepTools). This is the bridge that lets the PREVIEW feed the
+  same component the saved page uses.
+- **`src/app/recipes/[slug]/page.tsx` REFACTORED:** `RecipeView` shrank to a shell
+  (bookmark, print, right sidebar, mobile sticky bar, nutrition, owns checklist/
+  servings state) and delegates its central column to
+  `<RecipeDisplay recipe linkIngredients interactive={{ingChecks,stepChecks,servings}}/>`.
+  Removed now-dead local computations (stepIngMap, displayIngredients, derivedTools,
+  groups) and dead helpers (Th/Checkbox/SectionHeader/ToolCell/ApplianceBadge/
+  ApplianceCell) + their now-unused imports (Zap, APPLIANCES, ApplianceStepSettings).
+- **Import page** preview now renders `<RecipeDisplay recipe={dagToRecipe(...)} />`
+  (non-interactive) with the editable meta fields above it; removed the technical
+  nodeGroups/nodeLabel render and the SoupdogIcon import.
+- VERIFIED live: existing Carbonara + its preview both render through RecipeDisplay;
+  cooking checkboxes / servings still work on the saved page (regression-checked).
+- KNOWN COSMETIC: the right-sidebar "Tools" progress bar reads `toolChecks` but
+  RecipeDisplay shows tools as plain chips (no checkboxes) → that bar sits at 0/N.
+  Minor; address later.
+
+### Decomposition prompt hardened — completion capture + faithfulness (partial win)
+Rasmus flagged lost timings/criteria + a bogus step. Strengthened
+`/api/recipes/decompose` SYSTEM prompt:
+- **Rule 7 rewritten:** completion criteria MANDATORY when the source states them, on
+  ACTIVE steps too (not just passive). Range "8-10 min" → completion "PT9M" + notes
+  "about 8-10 minutes"; observable "until crispy" → completion verbatim; never invent
+  a number.
+- **Rule 8 (faithfulness):** never invent steps absent from the source (targets the
+  bogus "ladle"). **Rule 9:** the `task` is the VERB, never a tool name
+  ("drain into a colander" → task `drain`, tool `colander`).
+- **RecipeDisplay now renders step `notes`** (the "until crispy" / human time text) as
+  a muted suffix on the instruction; `mapNewSchemaRecipe` now MAPS `version_steps.notes`
+  and both `version_steps` selects now FETCH the `notes` column (were omitted).
+- RESULT (Carbonara re-test): PARTIAL. It now captures "8 min" and renders notes —
+  but inconsistently: the 8-min landed on the bring-water-to-boil node instead of the
+  pasta-cook node; the pasta step came out as a second bare "Cook"; "fry until crispy"
+  still dropped on that run. → This plateau is WHY the guide layer (below) is the real
+  fix. More prompt-tightening = diminishing returns.
+
+## DESIGN — Guide Layer (Retrieval-Augmented Decomposition) — the next big build
+**Doc:** `docs/Soupdog_Decomposition_Guide_Layer_Design_v0_1.md` (written this arc).
+Rasmus's insight: stop letting the AI decompose from scratch each time (inconsistent —
+see the boil/cook misplacement). Instead, show the AI the relevant slice of the
+VERIFIED task library — each task with its expected parameters + completion behaviour —
+DURING decomposition, so it MATCHES rather than invents. This moves find-or-create
+UPSTREAM (today it runs only downstream, code-side, in decompose-save).
+- Fixes the exact bugs: the expectation travels WITH the task (a `boil`/cook task that
+  "expects a duration/until-al-dente" makes the time land on the right node; a `fry`
+  task that "expects an observable end-state" stops "until crispy" being dropped) —
+  not just in a weak global prompt rule.
+- Bones already exist on `tasks` (parameter_schema, completion_criterion,
+  suggested_tool_slugs, is_verified). Mostly POPULATE + CURATE + feed a subset into the
+  prompt. Small additions at most: `expects_completion` enum, task synonyms (retrieval).
+- **Curation is the other half:** all ~91 tasks are `is_verified=false` today → guide
+  is empty until a verified CORE (~20-30 common transformations) is seeded/blessed.
+  Guide layer ⇄ curation are two sides of one thing.
+- Likely cheaper/faster too (match a candidate set vs derive the whole ontology) —
+  measure against the eval set.
+- §8 has 8 open decisions (retrieval strategy [lean verb-keyed + always-on core];
+  completion representation; synonyms storage; curation-surface scope; verified-core
+  seed list; explicit new_task signalling; token budget; cost measurement). §9 has the
+  build sequence. SETTLE §8 before building.
+
+## DEFERRED (designed/noted, not built) — feed off the guide layer's canonical names
+- **Instruction composition:** stop baking ingredient+qty into stored
+  `version_steps.instruction` ("Add 3 l water"); compose the readable line at DISPLAY
+  time from task verb + structured columns + (sometimes) the tool. Makes task content
+  truly reusable (translations/images/video attach to the bare task, not a baked
+  sentence). Open: use `task.name` directly vs a `display_template` ("Add {ingredient}");
+  the tool-inclusion rule (when "to the pan" disambiguates). The clunky
+  Transfer/Toss/Add/Plate lines are this problem.
+- **Concept tier for TOOLS (and tasks):** "large-pan" should resolve to a tool CONCEPT
+  "Pan" (a family). Discussed for ingredients in the recipe-model docs, NOT for tools/
+  tasks, and not implemented. Likely mirrors the ingredient concept design (overlapping
+  m2m, not per-user). Plugs into the guide layer (match the concept, instance is a
+  param). Own design doc.
+
+## BACKLOG — now load-bearing / carried
+- **Curation admin view** (bless/edit/merge AI-created tasks) — was a low-priority
+  backlog item; the guide layer makes it LOAD-BEARING (no verified tasks = no guide).
+  AI-created unverified tasks keep accumulating (combine, toss, transfer, reserve,
+  crack, melt, ladle, … all `is_verified=false`, `source=ai_generated`). The bogus
+  `ladle` task created in earlier testing sits unverified — harmless, the hardened
+  prompt won't reuse it for Carbonara; curation can delete/merge it later.
+- Chat-modify + advanced-editor go DAG-native (gated off on the import DAG path now).
+- Chat-to-GENERATE a recipe ("give me a croissant recipe") — the 3rd import entry path
+  Rasmus described; still pending (NEW generation prompt, distinct from parse + modify).
+- Option B sub-recipe materialization (groups → child canonicals + version_sub_recipes).
+- Re-import the existing ~34 recipes through the new decompose path to convert them to
+  executable DAGs (today only the test Carbonara has edges).
+- Delete the 2nd test Carbonara + any leftover decompose-test recipes (FK order:
+  recipes mirror by recipe_version_id → version_step_dependencies → version_ingredients
+  → version_steps → execution_variants → null current_version_id → recipe_versions →
+  recipe_canonicals).
+- (carried) npm xlsx vulns "no fix available"; saved-recipe folders; header avatar
+  stale-until-refresh; manual-add when OFF barcode returns nothing.
+
+## NEXT SESSION — recommended opening
+Build the **guide layer**, per `docs/Soupdog_Decomposition_Guide_Layer_Design_v0_1.md`:
+1. Confirm live `tasks` columns; settle §8 opens (retrieval strategy, completion
+   representation, verified-core list).
+2. Seed + verify a small CORE task set with guide metadata.
+3. Retrieve verb-keyed candidates + always-on core → inject a "known tasks" guide block
+   into the decompose prompt with matching discipline.
+4. Re-run eval + Carbonara: pasta cook-time on the RIGHT node, fry keeps "until crispy",
+   consistent verbs, fewer invented tasks; measure tokens.
+5. Minimal curation admin view to grow the guide.
+6. THEN instruction composition + tool concept tier (own docs).
+
+## KEY LESSONS THIS ARC
+- **More prompt-tightening hits a ceiling** — free-form decomposition is inherently
+  inconsistent; the structural fix is anchoring to a curated task library (guide layer),
+  not more rules.
+- **Run the migration before testing the save** — `source_extraction` missing column
+  blocked decompose-save until applied (recurring trap).
+- **One shared display component** beats two renderers — when a preview and a final view
+  show the same data, they must be the same code, or they drift. Extract the pure
+  presentation; keep page-specific interactivity in the page wrapping it.
+- **Data captured but not rendered looks like a bug** — the prompt captured `notes` but
+  RecipeDisplay/mapNewSchemaRecipe/the SELECT all had to surface it before it was
+  visible. Capture + map + select + render are four separate steps.
+- (restated) `recipes` mirror links via `recipe_version_id`; delete mirror rows first
+  in any teardown.
