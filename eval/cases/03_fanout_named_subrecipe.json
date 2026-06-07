@@ -5,13 +5,41 @@
     "title": "Quick masala with raita",
     "servings": 4,
     "ingredients": [
-      { "name": "onion", "qty": 200, "unit": "g" },
-      { "name": "oil", "qty": 30, "unit": "ml" },
-      { "name": "tomato", "qty": 200, "unit": "g" },
-      { "name": "garam masala", "qty": 8, "unit": "g" },
-      { "name": "chicken", "qty": 500, "unit": "g" },
-      { "name": "yogurt", "qty": 150, "unit": "g" },
-      { "name": "cucumber", "qty": 100, "unit": "g" }
+      {
+        "name": "onion",
+        "qty": 200,
+        "unit": "g"
+      },
+      {
+        "name": "oil",
+        "qty": 30,
+        "unit": "ml"
+      },
+      {
+        "name": "tomato",
+        "qty": 200,
+        "unit": "g"
+      },
+      {
+        "name": "garam masala",
+        "qty": 8,
+        "unit": "g"
+      },
+      {
+        "name": "chicken",
+        "qty": 500,
+        "unit": "g"
+      },
+      {
+        "name": "yogurt",
+        "qty": 150,
+        "unit": "g"
+      },
+      {
+        "name": "cucumber",
+        "qty": 100,
+        "unit": "g"
+      }
     ],
     "steps": [
       "Chop all 200g of the onion. Use half for the curry and half for the raita.",
@@ -23,23 +51,388 @@
   },
   "gold": {
     "nodes": [
-      { "id": "g1", "task": "chop", "ingredients": [{ "name": "onion" }], "consumes": [], "produces": "chopped onion" },
-
-      { "id": "g2", "task": "add", "ingredients": [{ "name": "oil" }], "consumes": [], "group": "Masala base" },
-      { "id": "g3", "task": "sauté", "ingredients": [], "consumes": ["g1", "g2"], "group": "Masala base", "notes": "half the chopped onion" },
-      { "id": "g4", "task": "add", "ingredients": [{ "name": "tomato" }], "consumes": ["g3"], "group": "Masala base" },
-      { "id": "g5", "task": "add", "ingredients": [{ "name": "garam masala" }], "consumes": ["g4"], "group": "Masala base" },
-      { "id": "g6", "task": "simmer", "ingredients": [], "consumes": ["g5"], "group": "Masala base", "produces": "masala base" },
-      { "id": "g7", "task": "add", "ingredients": [{ "name": "chicken" }], "consumes": ["g6"] },
-      { "id": "g8", "task": "simmer", "ingredients": [], "consumes": ["g7"], "produces": "chicken masala" },
-
-      { "id": "g9", "task": "add", "ingredients": [{ "name": "cucumber" }], "consumes": [], "group": "Raita" },
-      { "id": "g10", "task": "add", "ingredients": [{ "name": "yogurt" }], "consumes": ["g9"], "group": "Raita" },
-      { "id": "g11", "task": "stir", "ingredients": [], "consumes": ["g1", "g10"], "group": "Raita", "produces": "raita", "notes": "remaining half of chopped onion" },
-
-      { "id": "g12", "task": "plate", "ingredients": [], "consumes": ["g8", "g11"], "produces": "served dish" }
+      {
+        "id": "g1",
+        "task": "chop",
+        "ingredients": [
+          {
+            "name": "onion"
+          }
+        ],
+        "consumes": [],
+        "produces": "chopped onion"
+      },
+      {
+        "id": "g2",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "oil"
+          }
+        ],
+        "consumes": [],
+        "group": "Masala base"
+      },
+      {
+        "id": "g3",
+        "task": "sauté",
+        "ingredients": [],
+        "consumes": [
+          "g1",
+          "g2"
+        ],
+        "group": "Masala base",
+        "notes": "half the chopped onion"
+      },
+      {
+        "id": "g4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "tomato"
+          }
+        ],
+        "consumes": [
+          "g3"
+        ],
+        "group": "Masala base"
+      },
+      {
+        "id": "g5",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "garam masala"
+          }
+        ],
+        "consumes": [
+          "g4"
+        ],
+        "group": "Masala base"
+      },
+      {
+        "id": "g6",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "g5"
+        ],
+        "group": "Masala base",
+        "produces": "masala base"
+      },
+      {
+        "id": "g7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "chicken"
+          }
+        ],
+        "consumes": [
+          "g6"
+        ]
+      },
+      {
+        "id": "g8",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "g7"
+        ],
+        "produces": "chicken masala"
+      },
+      {
+        "id": "g9",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "cucumber"
+          }
+        ],
+        "consumes": [],
+        "group": "Raita"
+      },
+      {
+        "id": "g10",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "yogurt"
+          }
+        ],
+        "consumes": [
+          "g9"
+        ],
+        "group": "Raita"
+      },
+      {
+        "id": "g11",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "g1",
+          "g10"
+        ],
+        "group": "Raita",
+        "produces": "raita",
+        "notes": "remaining half of chopped onion"
+      },
+      {
+        "id": "g12",
+        "task": "plate",
+        "ingredients": [],
+        "consumes": [
+          "g8",
+          "g11"
+        ],
+        "produces": "served dish"
+      }
     ],
-    "terminals": ["g12"]
+    "terminals": [
+      "g12"
+    ]
   },
-  "prediction": null
+  "prediction": {
+    "title": "Quick masala with raita",
+    "servings": 4,
+    "nodes": [
+      {
+        "id": "n1",
+        "task": "chop",
+        "ingredients": [
+          {
+            "name": "onion",
+            "qty": 200,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": "chopped onion",
+        "group": null,
+        "tool": "chefs-knife",
+        "params": {
+          "cut": "fine"
+        },
+        "passive": false,
+        "completion": null,
+        "notes": "Half (100g) goes to masala base, half (100g) goes to raita"
+      },
+      {
+        "id": "n2",
+        "task": "heat",
+        "ingredients": [
+          {
+            "name": "oil",
+            "qty": 30,
+            "unit": "ml",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {
+          "level": "medium-high"
+        },
+        "passive": false,
+        "completion": "until shimmering",
+        "notes": null
+      },
+      {
+        "id": "n3",
+        "task": "fry",
+        "ingredients": [],
+        "consumes": [
+          "n1",
+          "n2"
+        ],
+        "produces": null,
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {
+          "qty_from_n1": "100g",
+          "style": "sauté"
+        },
+        "passive": false,
+        "completion": "until softened and lightly golden",
+        "notes": "Use half (100g) of chopped onion from n1"
+      },
+      {
+        "id": "n4",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "tomato",
+            "qty": 200,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n3"
+        ],
+        "produces": null,
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n5",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "garam masala",
+            "qty": 8,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n4"
+        ],
+        "produces": null,
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n6",
+        "task": "simmer",
+        "ingredients": [],
+        "consumes": [
+          "n5"
+        ],
+        "produces": "masala base",
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {},
+        "passive": true,
+        "completion": "until thick sauce forms",
+        "notes": null
+      },
+      {
+        "id": "n7",
+        "task": "add",
+        "ingredients": [
+          {
+            "name": "chicken",
+            "qty": 500,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n6"
+        ],
+        "produces": null,
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n8",
+        "task": "cook",
+        "ingredients": [],
+        "consumes": [
+          "n7"
+        ],
+        "produces": "chicken masala",
+        "group": "masala base",
+        "tool": "saucepan",
+        "params": {},
+        "passive": true,
+        "completion": "until chicken cooked through, internal temp 74C",
+        "notes": null
+      },
+      {
+        "id": "n9",
+        "task": "chop",
+        "ingredients": [
+          {
+            "name": "cucumber",
+            "qty": 100,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [],
+        "produces": null,
+        "group": "raita",
+        "tool": "chefs-knife",
+        "params": {
+          "cut": "fine dice"
+        },
+        "passive": false,
+        "completion": null,
+        "notes": null
+      },
+      {
+        "id": "n10",
+        "task": "combine",
+        "ingredients": [
+          {
+            "name": "yogurt",
+            "qty": 150,
+            "unit": "g",
+            "prep": null
+          }
+        ],
+        "consumes": [
+          "n1",
+          "n9"
+        ],
+        "produces": null,
+        "group": "raita",
+        "tool": "mixing-bowl",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": "Use remaining half (100g) of chopped onion from n1"
+      },
+      {
+        "id": "n11",
+        "task": "stir",
+        "ingredients": [],
+        "consumes": [
+          "n10"
+        ],
+        "produces": "raita",
+        "group": "raita",
+        "tool": "mixing-bowl",
+        "params": {
+          "vigour": "gentle"
+        },
+        "passive": false,
+        "completion": "until evenly combined",
+        "notes": null
+      },
+      {
+        "id": "n12",
+        "task": "plate",
+        "ingredients": [],
+        "consumes": [
+          "n8",
+          "n11"
+        ],
+        "produces": "chicken masala with raita",
+        "group": null,
+        "tool": "serving-dish",
+        "params": {},
+        "passive": false,
+        "completion": null,
+        "notes": "Serve chicken masala alongside raita"
+      }
+    ]
+  }
 }
