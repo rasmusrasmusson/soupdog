@@ -133,6 +133,14 @@ export default function ToolsPage() {
   const [loading, setLoading]   = useState(true);
   const [query, setQuery]       = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [isAdmin, setIsAdmin]   = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/check')
+      .then(r => r.json())
+      .then(d => setIsAdmin(Boolean(d.isAdmin)))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -195,19 +203,31 @@ export default function ToolsPage() {
 
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 32px 80px' }}>
 
-        <div style={{ marginBottom: 32 }}>
-          <h1 className="font-display"
-            style={{ fontSize: 28, fontWeight: 400, color: 'var(--fg)', margin: '0 0 8px' }}>
-            Tools &amp; Equipment
-          </h1>
-          <p style={{ fontSize: 13, color: MUT, margin: 0, lineHeight: 1.6 }}>
-            What each tool is for, how to use it well, and how it works.
-            {totalCount > 0 && (
-              <span style={{ fontFamily: MONO, fontSize: 11, marginLeft: 8 }}>
-                {totalCount} entries
-              </span>
-            )}
-          </p>
+        <div style={{ marginBottom: 32, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <h1 className="font-display"
+              style={{ fontSize: 28, fontWeight: 400, color: 'var(--fg)', margin: '0 0 8px' }}>
+              Tools &amp; Equipment
+            </h1>
+            <p style={{ fontSize: 13, color: MUT, margin: 0, lineHeight: 1.6 }}>
+              What each tool is for, how to use it well, and how it works.
+              {totalCount > 0 && (
+                <span style={{ fontFamily: MONO, fontSize: 11, marginLeft: 8 }}>
+                  {totalCount} entries
+                </span>
+              )}
+            </p>
+          </div>
+          {isAdmin && (
+            <a href="/tools/new"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
+                border: '1px solid var(--accent)', padding: '6px 12px',
+                textDecoration: 'none', textTransform: 'uppercase',
+                letterSpacing: '0.1em', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              + Add a tool
+            </a>
+          )}
         </div>
 
         {/* Search */}
