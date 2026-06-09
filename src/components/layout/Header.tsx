@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, LogOut, Globe } from 'lucide-react';
+import { Search, LogOut, Globe, User, CreditCard, Users, Gauge } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -15,6 +15,8 @@ export function Header() {
   const { locale, setLocale, t, messages } = useLocale();
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // The user's chosen avatar colour + display name live on their profile, not on
   // the auth user. Fetch once when logged in so the header monogram matches what
@@ -40,6 +42,18 @@ export function Header() {
     window.addEventListener('soupdog:profile-updated', onProfileUpdated);
     return () => { active = false; window.removeEventListener('soupdog:profile-updated', onProfileUpdated); };
   }, [user]);
+
+  // Close the account menu on outside click or Escape (only while open).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [menuOpen]);
 
   const langOptions = Object.entries(messages?.languages ?? {
     en: 'English', sv: 'Svenska', zh: '中文', ar: 'العربية'
@@ -112,19 +126,79 @@ export function Header() {
         {/* Auth */}
         {!loading && (
           user ? (
-            <div className="flex items-center gap-2">
-              <Avatar
-                id={user.id}
-                name={avatar.name || user.email || '?'}
-                colorKey={avatar.color}
-                initials={avatar.initials}
-                size={28}
-                muted
-              />
-              <button onClick={signOut}
-                className="hidden sm:flex items-center gap-1.5 text-[11px] font-mono border border-[var(--border)] px-3 py-1.5 text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
-                <LogOut size={11} strokeWidth={1.5} /> {t('header.signOut')}
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(o => !o)}
+                aria-label="Account menu"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className="flex items-center rounded-full transition-opacity hover:opacity-80"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <Avatar
+                  id={user.id}
+                  name={avatar.name || user.email || '?'}
+                  colorKey={avatar.color}
+                  initials={avatar.initials}
+                  size={28}
+                  muted
+                />
               </button>
+
+              {menuOpen && (
+                <div
+                  role="menu"
+                  style={{
+                    position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 60,
+                    minWidth: 220, background: 'var(--surface)', border: '1px solid var(--border)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.10)', overflow: 'hidden',
+                  }}
+                >
+                  <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {avatar.name || 'Your profile'}
+                    </div>
+                    {user.email && (
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {user.email}
+                      </div>
+                    )}
+                  </div>
+
+                  {[
+                    { href: '/my/profile', label: 'Profile',    icon: User },
+                    { href: '/my/account', label: 'Account & membership', icon: CreditCard },
+                    { href: '/my/people',  label: 'People',     icon: Users },
+                    { href: '/my/usage',   label: 'Usage',      icon: Gauge },
+                  ].map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href} href={href} role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px',
+                        fontSize: 13, color: 'var(--fg)', textDecoration: 'none',
+                      }}
+                      className="hover:bg-[var(--surface-hover)]"
+                    >
+                      <Icon size={14} strokeWidth={1.5} style={{ color: 'var(--muted)' }} /> {label}
+                    </Link>
+                  ))}
+
+                  <button
+                    onClick={() => { setMenuOpen(false); signOut(); }}
+                    role="menuitem"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '9px 14px', fontSize: 13, color: 'var(--fg)',
+                      background: 'none', border: 'none', borderTop: '1px solid var(--border)',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                    className="hover:bg-[var(--surface-hover)]"
+                  >
+                    <LogOut size={14} strokeWidth={1.5} style={{ color: 'var(--muted)' }} /> {t('header.signOut')}
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
