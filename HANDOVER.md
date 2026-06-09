@@ -1632,3 +1632,163 @@ instruction (→ docs/ folder), NOT part of the filename — must be stripped on
 - Category vocabulary is free-text + drifting (e.g. "thermal state change") — fine for now
   (filter buttons derive from data); lock later per §5c.
 - Apparatus-prep (§2e) and the tool-availability/inventory model are captured, NOT built.
+# SESSION UPDATE — 2026-06-09 — Tools section BUILT; Techniques parity (create+archive); archive-not-delete; curation cleanup
+
+A long build/debug session. The knowledge-section CURATION SURFACE is now complete and
+consistent across both Tools and Techniques: create → read → edit → publish(verify) →
+archive/unarchive, with find-drafts and find-archived. All SHIPPED & VERIFIED on prod
+unless marked. Also: extensive earlier design work this session (validated visual system +
+dietary-fit content area) is captured in the design docs — see the pointers at the end.
+
+## SHIPPED & VERIFIED (prod, tested live)
+
+### Tools section — BUILT end-to-end (the prerequisite unblocker)
+Tasks reference tools (`tasks.suggested_tool_slugs`), so you can't curate tasks without
+creating/editing the tools they cite → Tools built first. Mirrors the Techniques/curation
+pattern over the `equipment` table.
+- **`src/app/tools/page.tsx`** — list: search + data-derived category pills (from the
+  `equipment_category` enum values present), concept-level only (`parent_id is null`),
+  summary as one-line preview, admin "+ Add a tool" button, admin "Show archived (N)" toggle.
+- **`src/app/tools/[slug]/page.tsx`** — detail, the agreed content order: breadcrumb →
+  header → hero image slot (graceful "Illustration coming soon" when `image_url` empty) →
+  what-it-is lead → what-it's-for + uses → **techniques it performs** (reverse-lookup
+  cross-links, placed high) → specs (subordinate) → specific models (parent_id children) →
+  related models (siblings) → My-kitchen pointer. Admin **Archive/Unarchive + Edit** controls
+  top-right.
+- **`src/app/tools/[slug]/edit/page.tsx`** — full edit form, fixed bottom save bar (right:0),
+  `content_reviewed` toggle, save returns to view page. (Archive control REMOVED from here in
+  the cleanup pass — now lives only on the detail page, matching Techniques.)
+- **`src/app/tools/new/page.tsx`** — "Add a tool": name → auto-slug (override) → category
+  dropdown (real enum) → optional summary → creates + redirects into edit. Minimal-create-
+  then-edit pattern.
+- **API:** `src/app/api/tools/[slug]/route.ts` (GET: tool + parent/siblings/children +
+  technique reverse-lookup); `src/app/api/admin/equipment/route.ts` (POST create, slugify,
+  dup-slug 409); `src/app/api/admin/equipment/[id]/route.ts` (PATCH edit + archive via
+  `archived` boolean → `archived_at`).
+- **The tool→technique cross-link** is a REVERSE LOOKUP: verified tasks whose
+  `suggested_tool_slugs` contains this tool's slug. The DB jsonb `.contains()` operator
+  proved UNRELIABLE (column-type ambiguity) → fetch verified tasks (~30) and match in JS,
+  normalising the value (array / JSON string / PG array literal). Works reliably now.
+
+### Techniques/tasks — parity (create + archive added)
+- **`src/app/api/admin/tasks/route.ts`** (NEW) — POST create. Requires name + slug +
+  **family** (the one NOT-NULL-no-default column). **ALSO sets `category`** (defaults to
+  `family`) — see the category bug below. Starts unverified (draft).
+- **`src/app/api/admin/tasks/[id]/route.ts`** — existing PATCH, now also handles `archived`.
+- **`src/app/techniques/new/page.tsx`** — "Add a technique": name + slug + family + optional
+  description → create + into edit. (Was first MISPLACED at `techniques/[slug]/new/` by the
+  flat-file hazard; moved to correct `techniques/new/`.)
+- **`src/app/techniques/page.tsx`** — admin "+ Add a technique" button, **"Drafts only (N)"**
+  filter (curation queue), "Show archived (N)" toggle, archived rows filtered + badged.
+- **`src/app/techniques/[slug]/page.tsx`** — Archive/Unarchive control next to Edit (admin).
+- **Verify/publish toggle ALREADY EXISTED** on the technique edit page (`is_verified`
+  checkbox). Cleanup pass made it PROMINENT: a bordered box reading "Publish this technique"
+  / "Published — verified". To publish a draft: open → Edit → scroll down → check → Save.
+
+### Archive model — SOFT-DELETE, no hard delete in the UI (deliberate decision)
+For a connected knowledge graph, hard delete is dangerous (orphans child models, breaks
+technique cross-links). Decision (researched against how Wikipedia/big content systems work
+— soft-by-default, true-erase reserved & still recoverable): **archive is the only removal
+action in the UI; hard delete deferred to a possible future backend cleanup job, NOT a
+button.**
+- **Migrations RAN LIVE:** `tools_03_archive.sql` (equipment.archived_at) and
+  `techniques_01_archive.sql` (tasks.archived_at) — each adds `archived_at timestamptz` +
+  index + `grant all ... to authenticated`.
+- Archiving rides on the existing `*_admin_update` RLS policies (it's an UPDATE of
+  archived_at) — no new policy needed.
+- Read paths filter `archived_at is null` by default; admin "Show archived" toggle reveals
+  them; Unarchive restores. Lifecycle is now: **draft (is_verified=false) → verified/live →
+  archived.**
+- RLS policies added earlier this session for equipment admin write:
+  `equipment_admin_update`, `equipment_admin_insert`, `equipment_admin_delete` (the
+  insert/update/delete-needs-its-own-policy lesson, public-scoped, account-id-gated).
+
+### Cleanup pass (end of session)
+- Removed stale `src/app/equipment/page.tsx` ("Equipment — coming soon" stub; real page is
+  `/tools`). Fixed the Sidebar "Tools" nav link (`/equipment` → `/tools`).
+- De-duplicated the Tools archive control (removed from edit page; detail page only).
+- Made the technique verify/publish toggle prominent.
+- Category backfill: `update tasks set category = family where category is null;` (RAN).
+
+## ⚠️ BUGS & LESSONS THIS SESSION
+1. **New code selects a column the migration didn't add yet → BLANK PAGE.** Hit TWICE
+   (tools, then techniques): deploying a list/detail page that `.select(...archived_at...)`
+   before running the archive migration makes the query error and the page goes empty. Also
+   caused "stuck after create" (the redirect target's detail API errored). RULE: run the
+   migration BEFORE (or with) deploying code that reads the new column. (Same family as the
+   `source_extraction` trap from the prior session.)
+2. **The `category` invisibility bug (real, fixed).** The techniques LIST groups/filters by
+   `tasks.category`, but the create form only set `family`. A technique created with
+   `category = null` EXISTED but was INVISIBLE on the list (e.g. "CVap" — found via SQL,
+   total stayed 95). Fix: create route now sets `category` (defaults to `family`); backfill
+   SQL fixes existing rows. ROOT CAUSE is schema cruft — `tasks` has THREE overlapping
+   grouping columns (`family`, `task_family`, `category`) that aren't kept in sync.
+3. **person id ≠ account id** (restated, bit us again on admin gates): `auth.uid()` returns
+   the ACCOUNT id (bb02ae50… / 1a0f72df…), NOT Rasmus's person id (b6a30271…). Admin
+   gates/RLS use account ids.
+4. **`.contains()` on jsonb is unreliable** for slug-array matching across column-type
+   variants → fetch-and-match-in-JS for small verified sets.
+5. **Flat-file `--`-to-folder delivery still bites:** the new-technique page landed in the
+   wrong folder (`[slug]/new` vs `new`). Always verify the first-line path comment matches
+   the placed folder.
+6. **Many symptoms this session were the unstable China connection**, not bugs ("Slow
+   network detected" in console; SSL/TLS handshake push failures). When something looks
+   broken, check the connection/VPN before assuming a code bug.
+
+## SCHEMA CRUFT — FLAGGED FOR A DEDICATED SESSION (do NOT do as casual cleanup)
+- **Overlapping task grouping columns** `family` / `task_family` / `category` — cause of the
+  invisibility bug. Consolidate to one. Needs data migration + every read/write path updated
+  + dry-runs. NOT a quick fix.
+- **Duplicate RLS policies on `tasks`** — 3 INSERT, 4 SELECT, 2 UPDATE accumulated across
+  sessions. Working (permissive RLS) but should consolidate to one clear policy per action;
+  must confirm which are load-bearing (e.g. the decompose insert path) before dropping any.
+- **Category free-text drift** — per the knowledge-layer doc §5c, the plan is intentional:
+  free-text now → freeze into a controlled vocabulary (deliberate creation form) once the set
+  has settled → maybe m2m later. The drift (e.g. "thermal state change", 1 item) is the
+  signal it's settling, not a bug. Guardrail added: create now defaults category so no row
+  lands category-less.
+
+## DESIGN DOCS — POINTERS (produced earlier this session; handover now points at them)
+- **`docs/Soupdog_Knowledge_Section_Roadmap_And_Visual_Strategy_v0_3.md`** — reader-facing +
+  production side of the knowledge section. v0.2 added the **VALIDATED visual system** (tested
+  with real AI renders): TOOLS = engraved B&W Haynes/patent 3/4 illustration (color not
+  identity-carrying); INGREDIENTS/DRINKS = color editorial photo on off-white #f5f3ee (color
+  CARRIES identity — engraved butter was illegible, color butter/lemon/parmesan/guanciale
+  instantly readable); TECHNIQUES = HYBRID (color doneness-state still as hero, engraved
+  action for method; multi-stage doneness is a strong format). Reusable prompt recipes
+  embedded. Concept = AI-gen; specific branded product = REAL photo. Lock one engine per
+  section to avoid drift. v0.3 added §9 the **dietary-fit content area** (a 2nd content spine,
+  the meal-planning reasoning as reading): Nutrients (build first, best home for data-graphs)
+  → Allergies (informational-not-medical guardrails) → Religious/ethical (highest curation
+  bar, attribute variation, human-reviewed) → Diets (descriptive only, lower priority).
+  Print role models: Le Répertoire (terse/expert register) vs Larousse/McGee (deep) as two
+  reading registers over one entry; Haynes for tools; Pépin for techniques; Flavor Bible for
+  affinities. Discard superseded v0_1/v0_2 copies.
+- Culinary Knowledge Layer v0.5 and Variation/Content-Pipeline v0.1 unchanged.
+
+## NEXT SESSION — options
+- **The content/curation pass** (the payoff): use "Drafts only" to work the queue — fill the
+  ~13 referenced tools (frying-pan, saucepan, chefs-knife, whisk, mixing-bowl, grater, tongs,
+  spoon, spatula, chopping-board, roasting-tin, conventional-oven, ladle) and bless the ~60
+  draft techniques. Content work; doable solo at your pace.
+- **Visual content production**: generate hero illustrations (tools, engraved) + ingredient
+  photos per the validated prompt recipes; ops pass, not a build.
+- **Schema-cruft consolidation** (own session, careful, dry-runs): the three task grouping
+  columns + duplicate RLS policies.
+- **STEP BACK TO REVENUE (untouched this whole session):** meal-plan enforcement + Stripe;
+  Demand Phase 2 (ask/habits + running balance; settle Doc A §11 opens); Sharing & Delegation
+  Phase 0 (settle v0.2 §8 opens); Plan & End-Product bridge. HONEST NOTE: the knowledge
+  section has absorbed a lot; this is the work that makes it a business and it hasn't moved.
+
+## SMALL BACKLOG (carried / minor)
+- Route rename `/api/admin/equipment` → `/api/admin/tools` (cosmetic; touches 4 callers in
+  lockstep; skipped as poor risk/reward — left working as-is).
+- Header avatar stale-until-hard-refresh (minor, pre-existing).
+- "Add new" for ingredients/products (tools + techniques have it now).
+- Tools page in recipe step-instructions (engraved style; untested idea).
+- Re-import ~34 existing recipes through decompose; delete test carbonaras.
+- npm xlsx vulns → migrate to SheetJS CDN dist (don't --force).
+- Saved-recipe folders; manual-add barcode fallback when OFF returns nothing; reader
+  view-mode toggle (the two-registers idea); skill-building loop; personal inventory
+  ("My kitchen / Blue pot" — the generic-vs-personal surface where same-name dupes are
+  allowed; public catalogue stays slug-unique).
