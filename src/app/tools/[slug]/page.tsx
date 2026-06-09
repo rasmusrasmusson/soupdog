@@ -215,7 +215,7 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
                 <SpecRow label="Capacity" value={`${tool.cavity_volume_litres} L`} />
               )}
               {tool.connected != null && (
-                <SpecRow label="Connected" value={tool.connected ? 'Yes (app control)' : 'No'} last />
+                <SpecRow label="Connected" value={tool.connected ? 'Yes — controllable remotely' : 'No'} last />
               )}
             </div>
           </section>

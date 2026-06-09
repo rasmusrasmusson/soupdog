@@ -194,11 +194,11 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
         </Field>
       </div>
 
-      <Field label="Connected (app control)">
+      <Field label="Connected">
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>
           <input type="checkbox" checked={Boolean(tool.connected)}
             onChange={e => set('connected', e.target.checked)} />
-          <span>This tool can be controlled by an app</span>
+          <span>This is a connected tool (controllable remotely — app, panel, hub, or API)</span>
         </label>
       </Field>
 
