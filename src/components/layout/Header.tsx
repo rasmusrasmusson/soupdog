@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Search, LogOut, Globe, User, CreditCard, Users, Gauge } from 'lucide-react';
+import { Search, LogOut, Globe, User, CreditCard, Gauge } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
@@ -168,7 +168,6 @@ export function Header() {
                   {[
                     { href: '/my/profile', label: 'Profile',    icon: User },
                     { href: '/my/account', label: 'Account & membership', icon: CreditCard },
-                    { href: '/my/people',  label: 'People',     icon: Users },
                     { href: '/my/usage',   label: 'Usage',      icon: Gauge },
                   ].map(({ href, label, icon: Icon }) => (
                     <Link

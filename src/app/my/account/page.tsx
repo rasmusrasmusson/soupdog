@@ -3,11 +3,19 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { User, Users, Gauge, CreditCard, LogOut, ChevronRight } from 'lucide-react';
+import { Gauge, CreditCard, LogOut, ChevronRight } from 'lucide-react';
 
 const B = '1px solid var(--border)';
 const MONO = 'var(--font-mono)';
 const MUT = 'var(--muted)';
+
+// Map Supabase provider keys to user-facing names. (azure = Microsoft.)
+const PROVIDER_NAMES: Record<string, string> = {
+  email: 'Email', azure: 'Microsoft', google: 'Google', apple: 'Apple',
+};
+function providerLabel(key: string): string {
+  return PROVIDER_NAMES[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+}
 
 interface Usage {
   plan: string;
@@ -115,9 +123,20 @@ export default function AccountPage() {
           <div style={{ fontFamily: MONO, fontSize: 13, color: 'var(--fg)', marginTop: 2, wordBreak: 'break-all' }}>
             {user.email}
           </div>
+          {(() => {
+            const providers: string[] = (user.app_metadata as any)?.providers
+              ?? ((user.app_metadata as any)?.provider ? [(user.app_metadata as any).provider] : []);
+            if (!providers.length) return null;
+            return (
+              <div style={{ marginTop: 8, fontSize: 12, color: MUT }}>
+                Sign-in {providers.length > 1 ? 'methods' : 'method'}:{' '}
+                <span style={{ color: 'var(--fg)' }}>
+                  {providers.map(providerLabel).join(', ')}
+                </span>
+              </div>
+            );
+          })()}
         </div>
-        <Row href="/my/profile" icon={User}  title="Profile"  sub="Your tastes, health, cooking skill and eating habits" />
-        <Row href="/my/people"  icon={Users} title="People"   sub="People you cook for and manage" />
         <Row href="/my/usage"   icon={Gauge} title="Usage"     sub="What you&rsquo;ve used this month" />
         <Row href="/pricing"    icon={CreditCard} title="Plans &amp; pricing" sub="Compare what each plan includes" />
         <button

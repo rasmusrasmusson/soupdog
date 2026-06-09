@@ -7,7 +7,7 @@ import { useLocale } from '@/lib/locale-context';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
 import {
   BookMarked, Info, HelpCircle, ChevronLeft, ChevronRight,
-  CalendarDays, Users, Gauge, Tag
+  CalendarDays, Users, Tag
 } from 'lucide-react';
 
 const publicNav = [
@@ -137,7 +137,6 @@ export function Sidebar() {
         <LucideNavItem label={label('myRecipes', 'My Recipes')} href="/my/recipes" icon={BookMarked} collapsed={collapsed} />
         <LucideNavItem label={label('myIngredients', 'Ingredients')} href="/my/ingredients" icon={BookMarked} collapsed={collapsed} />
         <LucideNavItem label={label('people', 'People')} href="/my/people" icon={Users} collapsed={collapsed} />
-        <LucideNavItem label={label('usage', 'Usage')} href="/my/usage" icon={Gauge} collapsed={collapsed} />
 
         <SectionLabel navKey="about" fallback="About" collapsed={collapsed} />
         <LucideNavItem label={label('pricing', 'Pricing')} href="/pricing" icon={Tag} collapsed={collapsed} />

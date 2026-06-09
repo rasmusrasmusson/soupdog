@@ -112,7 +112,6 @@ const SECTIONS = [
   { key: 'health', label: 'Health profile' },
   { key: 'taste', label: 'Taste profile' },
   { key: 'eating', label: 'Eating habits' },
-  { key: 'account', label: 'Account' },
 ] as const;
 type SectionKey = typeof SECTIONS[number]['key'];
 
@@ -297,32 +296,17 @@ function BirthdayPicker({ value, onChange }: { value: string | null; onChange: (
   );
 }
 
-// ── identities (Account) ──
-function useIdentities() {
-  const [p, setP] = useState<string[] | null>(null);
-  useEffect(() => { (async () => {
-    try { const { createClient } = await import('@/lib/supabase/client'); const s = createClient();
-      const { data } = await s.auth.getUserIdentities();
-      const l = (data?.identities ?? []).map((i: any) => i.provider); setP(l.length ? l : ['email']);
-    } catch { setP([]); }
-  })(); }, []);
-  return p;
-}
-const PROVIDER_LABEL: Record<string, string> = { email: 'Email & password', google: 'Google', azure: 'Microsoft', apple: 'Apple' };
-
 // ════════════════════════════════════════════════════════════════════════════
 export default function ProfilePage() {
   const isDesktop = useIsDesktop();
   const [section, setSection] = useState<SectionKey>('overview');
   const [p, setP] = useState<Profile | null>(null);
-  const [email, setEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // cooking
   const [cooking, setCooking] = useState<{ overall: string; areas: Record<string, number> } | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [taste, setTaste] = useState<Taste | null>(null);
-  const providers = useIdentities();
 
   // modal state
   const [modal, setModal] = useState<null | 'name' | 'dob' | 'locale' | 'units' | 'country' | 'cooking'
@@ -332,7 +316,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, avatar_color: null, avatar_initials: null, ...d.profile }); setEmail(d.email); }).catch(() => setError('Failed to load profile'));
+    fetch('/api/my/profile').then((r) => r.json()).then((d) => { setP({ country: null, avatar_color: null, avatar_initials: null, ...d.profile }); }).catch(() => setError('Failed to load profile'));
     fetch('/api/my/cooking').then((r) => r.json()).then(setCooking).catch(() => {});
     fetch('/api/my/health').then((r) => r.json()).then((d) => setHealth(d.health)).catch(() => {});
     fetch('/api/my/taste').then((r) => r.json()).then((d) => setTaste(d.taste)).catch(() => {});
@@ -406,7 +390,6 @@ export default function ProfilePage() {
     { key: 'health', title: 'Health profile', summary: bmi ? `BMI ${bmi}${actLabel ? ` · ${actLabel.split(' ')[0]}` : ''}` : 'Body, activity, allergies', done: healthDone },
     { key: 'taste', title: 'Taste profile', summary: tasteDone ? `${(taste?.liked_cuisines.length ?? 0) + (taste?.liked_ingredients.length ?? 0)} likes` : 'What you love & avoid', done: tasteDone },
     { key: 'eating', title: 'Eating habits', summary: 'Set up with your meal plan', done: false },
-    { key: 'account', title: 'Account', summary: email ?? '', done: true },
   ];
 
   // ── section bodies ──
@@ -476,17 +459,6 @@ export default function ProfilePage() {
     </div>
   );
 
-  const accountBody = (
-    <div>
-      <SectionHeader title="Account" subtitle="Your login and how you sign in." />
-      <Panel>
-        <Row label="Email" value={email} />
-        <Row label="Sign-in methods" value={providers === null ? 'Loading…' : providers.map((pr) => PROVIDER_LABEL[pr] ?? pr).join(', ')} last />
-      </Panel>
-      <p style={{ color: C.muted, fontSize: 12, marginTop: 16, lineHeight: 1.5 }}>Adding sign-in methods and password changes will live here. For now, use “Forgot password” on the sign-in page.</p>
-    </div>
-  );
-
   const healthBody = (
     <div>
       <SectionHeaderWithAll title="Health profile" subtitle="Body, activity and medical considerations — used to tailor nutrition and recommendations." onAll={() => { setDraft({ ...(health ?? {}) }); setModal('health_all'); }} />
@@ -530,7 +502,6 @@ export default function ProfilePage() {
     health: healthBody,
     taste: tasteBody,
     eating: stub('Eating habits', 'Which meals you eat, and where.', 'Set up alongside your meal plan — weekday vs weekend patterns and meal context are gathered when you activate planning, then shown here.'),
-    account: accountBody,
   };
 
   return (
