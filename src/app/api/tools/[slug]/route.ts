@@ -20,7 +20,7 @@ export async function GET(
       id, slug, name, category, description, summary, description_long,
       brand, model_number, manufacturer, connected, wattage,
       cavity_volume_litres, uses, image_url, image_credit,
-      content_reviewed, source, parent_id, capability_schema
+      content_reviewed, source, parent_id, capability_schema, archived_at
     `)
     .eq('slug', slug)
     .maybeSingle();
@@ -46,15 +46,18 @@ export async function GET(
       .select('id, slug, name, brand')
       .eq('parent_id', tool.parent_id)
       .neq('id', tool.id)
+      .is('archived_at', null)
       .order('name');
     siblings = sib ?? [];
   }
 
   // Child models — equipment rows whose parent_id is this tool (the concept page).
+  // Exclude archived models.
   const { data: kids } = await supabase
     .from('equipment')
     .select('id, slug, name, brand, model_number, wattage, connected')
     .eq('parent_id', tool.id)
+    .is('archived_at', null)
     .order('name');
   children = kids ?? [];
 

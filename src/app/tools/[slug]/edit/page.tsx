@@ -10,6 +10,7 @@ interface ToolEdit {
   connected?: boolean; wattage?: number | null; cavity_volume_litres?: number | null;
   uses?: string[]; image_url?: string; image_credit?: string;
   content_reviewed?: boolean;
+  archived?: boolean;
 }
 
 const MONO = 'var(--font-mono)';
@@ -42,6 +43,8 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
   const [saving, setSaving]   = useState(false);
   const [saved, setSaved]     = useState(false);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -66,6 +69,7 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
           uses: t.uses ?? [],
           image_url: t.image_url ?? '', image_credit: t.image_credit ?? '',
           content_reviewed: Boolean(t.content_reviewed),
+          archived: t.archived_at != null,
         });
         setLoading(false);
       })
@@ -99,6 +103,30 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
     setSaved(true);
     // Return to the view page on success.
     window.location.href = `/tools/${tool.slug}`;
+  }
+
+  async function setArchived(next: boolean) {
+    if (!tool) return;
+    setArchiving(true); setError(null);
+    const res = await fetch(`/api/admin/equipment/${tool.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    const d = await res.json().catch(() => ({}));
+    setArchiving(false);
+    if (!res.ok) {
+      setConfirmArchive(false);
+      setError(d.error ?? 'Failed.');
+      return;
+    }
+    if (next) {
+      // Archived — back to the list (it's hidden from the public view now).
+      window.location.href = '/tools';
+    } else {
+      // Unarchived — refresh the view page.
+      window.location.href = `/tools/${tool.slug}`;
+    }
   }
 
   if (allowed === false) return (
@@ -200,9 +228,45 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0,
         borderTop: B, background: 'var(--surface)', padding: '10px 32px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 50 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, color: error ? '#a33' : MUT }}>
-          {error ? error : saved ? 'Saved.' : 'Editing'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {tool.archived ? (
+            <button onClick={() => setArchived(false)} disabled={archiving}
+              style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)',
+                background: 'none', border: '1px solid var(--accent)', padding: '6px 14px',
+                cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1,
+                textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              {archiving ? 'Restoring…' : 'Unarchive'}
+            </button>
+          ) : confirmArchive ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontFamily: MONO, fontSize: 11, color: MUT }}>
+                Archive this tool? (reversible)
+              </span>
+              <button onClick={() => setArchived(true)} disabled={archiving}
+                style={{ fontFamily: MONO, fontSize: 11, color: '#fff',
+                  background: 'var(--muted)', border: 'none', padding: '6px 14px',
+                  cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1,
+                  textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                {archiving ? 'Archiving…' : 'Archive'}
+              </button>
+              <button onClick={() => setConfirmArchive(false)} disabled={archiving}
+                style={{ fontFamily: MONO, fontSize: 11, color: MUT,
+                  background: 'none', border: 'none', cursor: 'pointer' }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => { setConfirmArchive(true); setError(null); }}
+              style={{ fontFamily: MONO, fontSize: 11, color: MUT,
+                background: 'none', border: 'none', cursor: 'pointer',
+                textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+              Archive
+            </button>
+          )}
+          <span style={{ fontFamily: MONO, fontSize: 11, color: error ? '#a33' : MUT }}>
+            {error ? error : saved ? 'Saved.' : tool.archived ? 'Archived' : 'Editing'}
+          </span>
+        </div>
         <button onClick={save} disabled={saving}
           style={{ fontFamily: MONO, fontSize: 12, color: '#fff',
             background: 'var(--accent)', border: 'none', padding: '8px 20px',

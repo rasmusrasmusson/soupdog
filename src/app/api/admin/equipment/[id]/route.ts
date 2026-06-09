@@ -63,6 +63,11 @@ export async function PATCH(
     }
   }
 
+  // Archive / unarchive: body.archived (boolean) maps to archived_at timestamp.
+  if ('archived' in body) {
+    patch.archived_at = body.archived ? new Date().toISOString() : null;
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
   }

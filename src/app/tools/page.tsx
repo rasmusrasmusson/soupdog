@@ -11,6 +11,7 @@ interface ToolRow {
   category:  string;
   summary?:  string;
   image_url?: string;
+  archived:  boolean;
 }
 
 const MONO = 'var(--font-mono)';
@@ -61,6 +62,14 @@ function ToolRowItem({ t }: { t: ToolRow }) {
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {t.summary}
+        </span>
+      )}
+
+      {t.archived && (
+        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT,
+          border: B, padding: '2px 6px', textTransform: 'uppercase',
+          letterSpacing: '0.1em', flexShrink: 0 }}>
+          Archived
         </span>
       )}
 
@@ -134,6 +143,7 @@ export default function ToolsPage() {
   const [query, setQuery]       = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isAdmin, setIsAdmin]   = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -151,7 +161,7 @@ export default function ToolsPage() {
       // under their concept and show on the concept's detail page).
       const { data } = await supabase
         .from('equipment')
-        .select('id, slug, name, category, summary, image_url, parent_id')
+        .select('id, slug, name, category, summary, image_url, parent_id, archived_at')
         .is('parent_id', null)
         .order('name');
 
@@ -162,18 +172,22 @@ export default function ToolsPage() {
         category: r.category ?? 'other',
         summary: r.summary ?? undefined,
         image_url: r.image_url ?? undefined,
+        archived: r.archived_at != null,
       })));
       setLoading(false);
     }
     load();
   }, []);
 
+  // Visible set: live tools only, unless an admin has toggled "show archived".
+  const visible = tools.filter(t => showArchived || !t.archived);
+
   // Categories present in the data, in alphabetical order.
   const presentCategories = Array.from(
-    new Set(tools.map(t => t.category))
+    new Set(visible.map(t => t.category))
   ).sort();
 
-  const filtered = tools.filter(t => {
+  const filtered = visible.filter(t => {
     const matchesQuery = query.length < 2 ||
       t.name.toLowerCase().includes(query.toLowerCase()) ||
       (t.summary ?? '').toLowerCase().includes(query.toLowerCase());
@@ -185,7 +199,8 @@ export default function ToolsPage() {
     .map(key => ({ key, label: humanCategory(key), tools: filtered.filter(t => t.category === key) }))
     .filter(g => g.tools.length > 0);
 
-  const totalCount = tools.length;
+  const totalCount = visible.length;
+  const archivedCount = tools.filter(t => t.archived).length;
   const isSearching = query.length >= 2 || activeCategory !== 'all';
 
   return (
@@ -274,6 +289,24 @@ export default function ToolsPage() {
             );
           })}
         </div>
+
+        {/* Admin: show archived toggle */}
+        {isAdmin && archivedCount > 0 && (
+          <div style={{ marginBottom: 20 }}>
+            <button
+              onClick={() => setShowArchived(s => !s)}
+              style={{
+                fontFamily: MONO, fontSize: 10, padding: '4px 12px',
+                border: showArchived ? '1px solid var(--accent)' : B,
+                background: showArchived ? 'var(--accent-subtle)' : 'var(--surface)',
+                color: showArchived ? 'var(--accent)' : MUT,
+                cursor: 'pointer', transition: 'all 0.15s',
+                textTransform: 'uppercase', letterSpacing: '0.1em',
+              }}>
+              {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         {loading ? (
