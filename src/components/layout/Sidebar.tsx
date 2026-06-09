@@ -14,7 +14,7 @@ const publicNav = [
   { key: 'recipes',     href: '/recipes',     icon: 'recipes'     as const },
   { key: 'ingredients', href: '/ingredients', icon: 'ingredients' as const },
   { key: 'techniques',  href: '/techniques',  icon: 'techniques'  as const },
-  { key: 'tools',       href: '/equipment',   icon: 'tools'       as const },
+  { key: 'tools',       href: '/tools',       icon: 'tools'       as const },
 ];
 
 // Resolve a nav label: use the i18n string if present, otherwise fall back to a
