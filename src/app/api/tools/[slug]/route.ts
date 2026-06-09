@@ -59,21 +59,34 @@ export async function GET(
   children = kids ?? [];
 
   // ── Techniques this tool performs (reverse lookup) ────────────
-  // tasks.suggested_tool_slugs is a jsonb array of slugs; find verified tasks
-  // that list this tool's slug. Using the `cs` (contains) operator on the jsonb.
+  // tasks.suggested_tool_slugs holds the tool slugs a task uses. The DB-side
+  // jsonb containment operator proved unreliable across column-type variants
+  // (jsonb vs text[]), so we fetch the verified tasks (small set, ~30) and match
+  // in JS, normalising the value to a string[] whether it arrives as an array,
+  // a JSON string, or a Postgres array literal.
   let techniques: { slug: string; name: string }[] = [];
   {
     const { data: tasks } = await supabase
       .from('tasks')
-      .select('slug, name, suggested_tool_slugs, is_verified')
+      .select('slug, name, suggested_tool_slugs')
       .eq('is_verified', true)
-      .contains('suggested_tool_slugs', JSON.stringify([tool.slug]))
       .order('name');
-    // Defensive: also filter client-side in case the DB operator is loose.
+
+    const toSlugList = (v: any): string[] => {
+      if (v == null) return [];
+      if (Array.isArray(v)) return v.map((s) => String(s).trim());
+      if (typeof v === 'string') {
+        const s = v.trim();
+        try { const p = JSON.parse(s); if (Array.isArray(p)) return p.map((x) => String(x).trim()); } catch {}
+        // Postgres array literal fallback: {a,b,c}
+        return s.replace(/^[{[]|[}\]]$/g, '').split(',')
+          .map((x) => x.replace(/^["']|["']$/g, '').trim()).filter(Boolean);
+      }
+      return [];
+    };
+
     techniques = (tasks ?? [])
-      .filter((t: any) => Array.isArray(t.suggested_tool_slugs)
-        ? t.suggested_tool_slugs.includes(tool.slug)
-        : true)
+      .filter((t: any) => toSlugList(t.suggested_tool_slugs).includes(tool.slug))
       .map((t: any) => ({ slug: t.slug, name: t.name }));
   }
 
