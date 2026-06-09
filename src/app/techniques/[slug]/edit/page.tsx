@@ -137,9 +137,23 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       <div style={FIELD}><label style={L}>Common mistakes</label>
         <textarea style={{ ...I, minHeight: 56, resize: 'vertical' }} value={t.common_mistakes ?? ''} onChange={e => set('common_mistakes', e.target.value)} /></div>
 
-      <label style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 24px', cursor: 'pointer' }}>
-        <input type="checkbox" checked={!!t.is_verified} onChange={e => set('is_verified', e.target.checked)} />
-        <span style={{ fontSize: 14, color: 'var(--fg)' }}>Verified (part of the guide / shown without a draft badge)</span>
+      <label style={{
+        display: 'flex', alignItems: 'flex-start', gap: 12, margin: '8px 0 24px',
+        cursor: 'pointer', padding: '14px 16px',
+        border: `1px solid ${t.is_verified ? 'var(--accent)' : 'var(--border)'}`,
+        background: t.is_verified ? 'var(--accent-subtle)' : 'transparent',
+      }}>
+        <input type="checkbox" checked={!!t.is_verified} onChange={e => set('is_verified', e.target.checked)}
+          style={{ marginTop: 2 }} />
+        <span>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: 'var(--fg)' }}>
+            {t.is_verified ? 'Published — verified' : 'Publish this technique'}
+          </span>
+          <span style={{ display: 'block', fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+            Verified techniques join the AI guide and lose the &ldquo;draft&rdquo; badge. Leave
+            unchecked to keep it as a draft.
+          </span>
+        </span>
       </label>
 
       {/* Fixed bottom save bar (matches the recipe editor pattern; no chat sidebar here so right:0) */}
