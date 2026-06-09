@@ -97,6 +97,8 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
     setSaving(false);
     if (!res.ok) { setError(d.error ?? 'Save failed.'); return; }
     setSaved(true);
+    // Return to the view page on success.
+    window.location.href = `/tools/${tool.slug}`;
   }
 
   if (allowed === false) return (
