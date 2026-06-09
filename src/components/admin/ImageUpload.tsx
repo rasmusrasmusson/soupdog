@@ -20,9 +20,11 @@ interface Props {
 export function ImageUpload({ kind, slug, value, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   async function handleFile(file: File) {
+    if (!file.type.startsWith('image/')) { setErr('Please choose an image file.'); return; }
     setBusy(true); setErr(null);
     try {
       const fd = new FormData();
@@ -41,12 +43,43 @@ export function ImageUpload({ kind, slug, value, onChange }: Props) {
     }
   }
 
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (busy) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  }
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+        style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+      />
+
+      {/* Dropzone — click to pick, or drag a file in (like the recipe import) */}
+      <div
+        onClick={() => { if (!busy) inputRef.current?.click(); }}
+        onDrop={onDrop}
+        onDragOver={e => { e.preventDefault(); if (!busy) setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={e => { if ((e.key === 'Enter' || e.key === ' ') && !busy) { e.preventDefault(); inputRef.current?.click(); } }}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 16, padding: 14,
+          border: `1px dashed ${dragOver ? 'var(--accent)' : value ? 'var(--accent)' : 'var(--border)'}`,
+          background: dragOver ? 'var(--accent-subtle)' : 'var(--surface)',
+          cursor: busy ? 'default' : 'pointer', transition: 'border-color 0.15s, background 0.15s',
+        }}
+      >
         {/* Preview */}
         <div style={{
-          width: 96, height: 96, flexShrink: 0, border: B, background: 'var(--surface)',
+          width: 88, height: 88, flexShrink: 0, border: B, background: 'var(--bg)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
         }}>
           {value
@@ -54,44 +87,32 @@ export function ImageUpload({ kind, slug, value, onChange }: Props) {
             : <span style={{ fontFamily: MONO, fontSize: 9, color: MUT, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.08em' }}>No image</span>}
         </div>
 
-        <div style={{ flex: 1 }}>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-            style={{ display: 'none' }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-          />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => inputRef.current?.click()}
-              disabled={busy}
-              style={{
-                fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
-                padding: '7px 14px', cursor: busy ? 'default' : 'pointer',
-                border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)',
-                opacity: busy ? 0.6 : 1,
-              }}>
-              {busy ? 'Uploading…' : value ? 'Replace image' : 'Upload image'}
-            </button>
-            {value && !busy && (
-              <button
-                type="button"
-                onClick={() => onChange('')}
-                style={{
-                  fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
-                  padding: '7px 14px', cursor: 'pointer', border: B, background: 'transparent', color: MUT,
-                }}>
-                Remove
-              </button>
-            )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, color: 'var(--fg)' }}>
+            {busy
+              ? 'Uploading…'
+              : dragOver
+                ? 'Drop to upload'
+                : value ? 'Drag a new image here, or click to replace' : 'Drag an image here, or click to choose'}
           </div>
-          <p style={{ fontSize: 11, color: MUT, marginTop: 8, lineHeight: 1.5 }}>
+          <p style={{ fontSize: 11, color: MUT, marginTop: 6, lineHeight: 1.5 }}>
             PNG, JPEG or WebP. Resized and optimised automatically on upload.
           </p>
           {err && <p style={{ fontSize: 12, color: '#a33', marginTop: 4 }}>{err}</p>}
         </div>
+
+        {value && !busy && (
+          <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onChange(''); }}
+            style={{
+              fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
+              padding: '7px 12px', cursor: 'pointer', border: B, background: 'transparent',
+              color: MUT, flexShrink: 0,
+            }}>
+            Remove
+          </button>
+        )}
       </div>
     </div>
   );
