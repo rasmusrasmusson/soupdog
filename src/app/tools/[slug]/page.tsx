@@ -15,6 +15,7 @@ interface Tool {
   connected?: boolean; wattage?: number; cavity_volume_litres?: number;
   uses?: string[]; image_url?: string; image_credit?: string;
   content_reviewed?: boolean; source?: string;
+  archived_at?: string | null;
   parent?: Rel | null; siblings: Rel[]; children: ChildModel[];
   techniques: { slug: string; name: string }[];
 }
@@ -43,6 +44,24 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+
+  async function setArchived(next: boolean) {
+    if (!tool) return;
+    setArchiving(true);
+    const res = await fetch(`/api/admin/equipment/${tool.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    setArchiving(false);
+    setConfirmArchive(false);
+    if (res.ok) {
+      if (next) window.location.href = '/tools';
+      else setTool({ ...tool, archived_at: null });
+    }
+  }
 
   useEffect(() => {
     fetch(`/api/tools/${slug}`)
@@ -125,14 +144,46 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
             </p>
           </div>
           {isAdmin && (
-            <a href={`/tools/${tool.slug}/edit`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
-                border: '1px solid var(--accent)', padding: '6px 10px',
-                textDecoration: 'none', textTransform: 'uppercase',
-                letterSpacing: '0.1em', flexShrink: 0 }}>
-              <Pencil size={11} /> Edit
-            </a>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {tool.archived_at ? (
+                <button onClick={() => setArchived(false)} disabled={archiving}
+                  style={{ fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
+                    border: '1px solid var(--accent)', padding: '6px 10px', background: 'transparent',
+                    cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1,
+                    textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  {archiving ? 'Restoring…' : 'Unarchive'}
+                </button>
+              ) : confirmArchive ? (
+                <>
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>Archive? (reversible)</span>
+                  <button onClick={() => setArchived(true)} disabled={archiving}
+                    style={{ fontFamily: MONO, fontSize: 10, color: '#fff', background: 'var(--muted)',
+                      border: 'none', padding: '6px 10px', cursor: archiving ? 'default' : 'pointer',
+                      opacity: archiving ? 0.6 : 1, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                    {archiving ? '…' : 'Archive'}
+                  </button>
+                  <button onClick={() => setConfirmArchive(false)} disabled={archiving}
+                    style={{ fontFamily: MONO, fontSize: 10, color: MUT, background: 'none',
+                      border: 'none', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button onClick={() => setConfirmArchive(true)}
+                  style={{ fontFamily: MONO, fontSize: 10, color: MUT, background: 'none',
+                    border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                  Archive
+                </button>
+              )}
+              <a href={`/tools/${tool.slug}/edit`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
+                  border: '1px solid var(--accent)', padding: '6px 10px',
+                  textDecoration: 'none', textTransform: 'uppercase',
+                  letterSpacing: '0.1em', flexShrink: 0 }}>
+                <Pencil size={11} /> Edit
+              </a>
+            </div>
           )}
         </div>
 

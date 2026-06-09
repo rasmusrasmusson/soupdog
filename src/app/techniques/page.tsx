@@ -48,6 +48,7 @@ export default function TechniquesPage() {
   const [activeCat, setActiveCat] = useState<string>('all'); // 'all' or a category label
   const [isAdmin, setIsAdmin] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [draftsOnly, setDraftsOnly] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -67,8 +68,11 @@ export default function TechniquesPage() {
   }, []);
 
   // Visible set: live techniques only, unless an admin has toggled "show archived".
-  const visibleTasks = (tasks ?? []).filter(t => showArchived || !t.archived_at);
+  const visibleTasks = (tasks ?? []).filter(t =>
+    (showArchived || !t.archived_at) && (!draftsOnly || !t.is_verified)
+  );
   const archivedCount = (tasks ?? []).filter(t => t.archived_at).length;
+  const draftCount = (tasks ?? []).filter(t => !t.is_verified && !t.archived_at).length;
 
   // distinct category labels present in the data, with counts (for the filter buttons)
   const catCounts = new Map<string, number>();
@@ -176,19 +180,34 @@ export default function TechniquesPage() {
       )}
 
       {/* Admin: show archived toggle */}
-      {isAdmin && archivedCount > 0 && (
-        <div style={{ marginBottom: 20 }}>
-          <button
-            onClick={() => setShowArchived(s => !s)}
-            style={{
-              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
-              textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer',
-              border: `1px solid ${showArchived ? 'var(--accent)' : 'var(--border)'}`,
-              background: showArchived ? 'var(--accent-subtle)' : 'transparent',
-              color: showArchived ? 'var(--accent)' : 'var(--muted)',
-            }}>
-            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
-          </button>
+      {isAdmin && (draftCount > 0 || archivedCount > 0) && (
+        <div style={{ marginBottom: 20, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {draftCount > 0 && (
+            <button
+              onClick={() => setDraftsOnly(s => !s)}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+                textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer',
+                border: `1px solid ${draftsOnly ? 'var(--accent)' : 'var(--border)'}`,
+                background: draftsOnly ? 'var(--accent-subtle)' : 'transparent',
+                color: draftsOnly ? 'var(--accent)' : 'var(--muted)',
+              }}>
+              {draftsOnly ? 'Show all' : `Drafts only (${draftCount})`}
+            </button>
+          )}
+          {archivedCount > 0 && (
+            <button
+              onClick={() => setShowArchived(s => !s)}
+              style={{
+                fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+                textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer',
+                border: `1px solid ${showArchived ? 'var(--accent)' : 'var(--border)'}`,
+                background: showArchived ? 'var(--accent-subtle)' : 'transparent',
+                color: showArchived ? 'var(--accent)' : 'var(--muted)',
+              }}>
+              {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+            </button>
+          )}
         </div>
       )}
 
