@@ -346,6 +346,9 @@ export default function ProfilePage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Save failed');
       setP(next); setModal(null);
+      // Tell the header (and anything else showing the avatar) to re-fetch the profile,
+      // so the avatar/name updates without a hard refresh.
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('soupdog:profile-updated'));
       if (data.warning) setError(data.warning); else setError(null);
     } catch (e: any) { setError(e.message || 'Save failed'); }
     finally { setSaving(false); }

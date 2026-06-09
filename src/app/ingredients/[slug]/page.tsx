@@ -771,7 +771,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                     textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 8 }}>
                     No cooking recipes yet
                   </div>
-                  <a href="/my/recipes/import"
+                  <a href={`/my/recipes/import?product=${encodeURIComponent(ing.name)}&productSlug=${encodeURIComponent(ing.slug)}`}
                     style={{ fontFamily: MONO, fontSize: 11, color: 'var(--accent)',
                       textDecoration: 'none', padding: '5px 12px', border: B }}>
                     Create a recipe using this product →

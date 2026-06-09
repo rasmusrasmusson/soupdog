@@ -23,15 +23,22 @@ export function Header() {
   useEffect(() => {
     if (!user) { setAvatar({ color: null, name: null, initials: null }); return; }
     let active = true;
-    fetch('/api/my/profile')
-      .then(r => r.json())
-      .then(d => { if (active) setAvatar({
-        color: d?.profile?.avatar_color ?? null,
-        name: d?.profile?.full_name || d?.profile?.display_name || null,
-        initials: d?.profile?.avatar_initials ?? null,
-      }); })
-      .catch(() => { /* leave defaults; Avatar falls back to deterministic colour + initial */ });
-    return () => { active = false; };
+    const loadAvatar = () => {
+      fetch('/api/my/profile')
+        .then(r => r.json())
+        .then(d => { if (active) setAvatar({
+          color: d?.profile?.avatar_color ?? null,
+          name: d?.profile?.full_name || d?.profile?.display_name || null,
+          initials: d?.profile?.avatar_initials ?? null,
+        }); })
+        .catch(() => { /* leave defaults; Avatar falls back to deterministic colour + initial */ });
+    };
+    loadAvatar();
+    // Re-fetch when the profile is saved elsewhere (e.g. /my/profile), so the
+    // header avatar updates without a hard refresh.
+    const onProfileUpdated = () => loadAvatar();
+    window.addEventListener('soupdog:profile-updated', onProfileUpdated);
+    return () => { active = false; window.removeEventListener('soupdog:profile-updated', onProfileUpdated); };
   }, [user]);
 
   const langOptions = Object.entries(messages?.languages ?? {

@@ -143,6 +143,19 @@ export default function ImportRecipePage() {
   // Hidden faithful parse — sent to decompose-save as source_extraction (revert source).
   const [sourceExtraction, setSourceExtraction] = useState<any>(null);
 
+  // Pre-seed from a product (e.g. "Create a recipe using this product" on an ingredient
+  // page passes ?product=Name). Prefills the title and seeds the paste box with the
+  // product as a starting ingredient line — the user fills in the rest.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const product = params.get('product');
+    if (product) {
+      setManualTitle(prev => prev || product);
+      setText(prev => prev || `Ingredients:\n- ${product}\n\nMethod:\n`);
+    }
+  }, []);
+
   const [chatHistory, setChatHistory] = useState<ChatTurn[]>([]);
   const [chatInput,   setChatInput]   = useState('');
   const [chatLoading, setChatLoading] = useState(false);
