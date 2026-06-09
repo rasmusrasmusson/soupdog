@@ -40,6 +40,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     const supabase = createClient();
     await supabase.auth.signOut();
+    // Leave wherever they were (which may now show a logged-out / "please sign in"
+    // state) and land on the home page. Full navigation also clears client state.
+    if (typeof window !== 'undefined') window.location.href = '/';
   };
 
   return (

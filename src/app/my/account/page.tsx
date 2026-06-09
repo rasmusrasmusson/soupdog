@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
-import { Gauge, CreditCard, LogOut, ChevronRight } from 'lucide-react';
+import { Gauge, CreditCard, ChevronRight } from 'lucide-react';
 
 const B = '1px solid var(--border)';
 const MONO = 'var(--font-mono)';
@@ -48,7 +48,7 @@ function Row({ href, icon: Icon, title, sub }: { href: string; icon: any; title:
 }
 
 export default function AccountPage() {
-  const { user, loading: authLoading, signOut } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [usage, setUsage] = useState<Usage | null>(null);
 
   useEffect(() => {
@@ -139,17 +139,6 @@ export default function AccountPage() {
         </div>
         <Row href="/my/usage"   icon={Gauge} title="Usage"     sub="What you&rsquo;ve used this month" />
         <Row href="/pricing"    icon={CreditCard} title="Plans &amp; pricing" sub="Compare what each plan includes" />
-        <button
-          onClick={signOut}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 14, width: '100%',
-            padding: '16px 18px', fontSize: 14, fontWeight: 600, color: 'var(--fg)',
-            background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left',
-          }}
-          className="hover:bg-[var(--surface-hover)]"
-        >
-          <LogOut size={18} strokeWidth={1.5} style={{ color: MUT }} /> Sign out
-        </button>
       </div>
 
       {usage?.isPlaceholder && (
