@@ -17,6 +17,7 @@ type Task = {
   min_duration_seconds: number | null;
   max_duration_seconds: number | null;
   is_verified: boolean;
+  archived_at: string | null;
 };
 
 // Human label for a category slug (falls back to the slug itself, prettified).
@@ -45,26 +46,39 @@ export default function TechniquesPage() {
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState<string>('all'); // 'all' or a category label
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/admin/check')
+      .then(r => r.json())
+      .then(d => setIsAdmin(Boolean(d.isAdmin)))
+      .catch(() => setIsAdmin(false));
+  }, []);
 
   useEffect(() => {
     const supabase = createClient() as any;
     supabase
       .from('tasks')
-      .select('id, slug, name, category, description, completion_type, completion_target, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, is_verified')
+      .select('id, slug, name, category, description, completion_type, completion_target, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, is_verified, archived_at')
       .order('is_verified', { ascending: false })
       .order('name', { ascending: true })
       .then(({ data }: { data: Task[] | null }) => setTasks(data ?? []));
   }, []);
 
+  // Visible set: live techniques only, unless an admin has toggled "show archived".
+  const visibleTasks = (tasks ?? []).filter(t => showArchived || !t.archived_at);
+  const archivedCount = (tasks ?? []).filter(t => t.archived_at).length;
+
   // distinct category labels present in the data, with counts (for the filter buttons)
   const catCounts = new Map<string, number>();
-  for (const t of (tasks ?? [])) {
+  for (const t of visibleTasks) {
     const k = categoryLabel(t.category);
     catCounts.set(k, (catCounts.get(k) ?? 0) + 1);
   }
   const catButtons = [...catCounts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
-  const filtered = (tasks ?? []).filter(t => {
+  const filtered = visibleTasks.filter(t => {
     const matchesCat = activeCat === 'all' || categoryLabel(t.category) === activeCat;
     const matchesQuery = !query.trim()
       || t.name.toLowerCase().includes(query.toLowerCase())
@@ -81,7 +95,7 @@ export default function TechniquesPage() {
   }
   const sortedGroups = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
 
-  const verifiedCount = (tasks ?? []).filter(t => t.is_verified).length;
+  const verifiedCount = visibleTasks.filter(t => t.is_verified).length;
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '32px 24px 80px' }}>
@@ -92,12 +106,24 @@ export default function TechniquesPage() {
         }}>
           Browse
         </div>
-        <h1 style={{
-          fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 600,
-          margin: 0, color: 'var(--fg)',
-        }}>
-          Techniques
-        </h1>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)', fontSize: 34, fontWeight: 600,
+            margin: 0, color: 'var(--fg)',
+          }}>
+            Techniques
+          </h1>
+          {isAdmin && (
+            <a href="/techniques/new"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)',
+                border: '1px solid var(--accent)', padding: '6px 12px',
+                textDecoration: 'none', textTransform: 'uppercase',
+                letterSpacing: '0.1em', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              + Add a technique
+            </a>
+          )}
+        </div>
         <p style={{ color: 'var(--muted)', marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
           The verified cooking techniques Soupdog understands — each with what it does,
           how it&apos;s done, and how you know it&apos;s finished.
@@ -149,6 +175,23 @@ export default function TechniquesPage() {
         </div>
       )}
 
+      {/* Admin: show archived toggle */}
+      {isAdmin && archivedCount > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <button
+            onClick={() => setShowArchived(s => !s)}
+            style={{
+              fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em',
+              textTransform: 'uppercase', padding: '6px 12px', cursor: 'pointer',
+              border: `1px solid ${showArchived ? 'var(--accent)' : 'var(--border)'}`,
+              background: showArchived ? 'var(--accent-subtle)' : 'transparent',
+              color: showArchived ? 'var(--accent)' : 'var(--muted)',
+            }}>
+            {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+          </button>
+        </div>
+      )}
+
       {!tasks && <p style={{ color: 'var(--muted)' }}>Loading…</p>}
       {tasks && filtered.length === 0 && (
         <p style={{ color: 'var(--muted)' }}>No techniques match “{query}”.</p>
@@ -188,6 +231,15 @@ export default function TechniquesPage() {
                       border: '1px solid var(--border)', borderRadius: 2, padding: '1px 4px',
                     }}>
                       draft
+                    </span>
+                  )}
+                  {t.archived_at && (
+                    <span title="Archived" style={{
+                      fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.08em',
+                      textTransform: 'uppercase', color: 'var(--muted)',
+                      border: '1px solid var(--border)', borderRadius: 2, padding: '1px 4px',
+                    }}>
+                      archived
                     </span>
                   )}
                 </div>

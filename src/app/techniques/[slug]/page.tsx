@@ -12,6 +12,7 @@ type Task = {
   min_duration_seconds: number | null; max_duration_seconds: number | null;
   typical_input_state: string | null; typical_output_state: string | null;
   suggested_tool_slugs: string[] | null; image_url: string | null; is_verified: boolean;
+  archived_at: string | null;
 };
 
 const prettify = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -58,6 +59,24 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
   const { slug } = use(params);
   const [task, setTask] = useState<Task | null | 'missing'>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+
+  async function setArchived(next: boolean) {
+    if (!task || task === 'missing') return;
+    setArchiving(true);
+    const res = await fetch(`/api/admin/tasks/${task.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    setArchiving(false);
+    setConfirmArchive(false);
+    if (res.ok) {
+      if (next) window.location.href = '/techniques';
+      else setTask({ ...task, archived_at: null });
+    }
+  }
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -121,14 +140,56 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
               draft — not yet verified
             </span>
           )}
+          {task.archived_at && (
+            <span style={{
+              fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.08em',
+              textTransform: 'uppercase', color: 'var(--muted)',
+              border: '1px solid var(--border)', borderRadius: 2, padding: '2px 6px',
+            }}>
+              archived
+            </span>
+          )}
         </div>
         {isAdmin && (
-          <Link href={`/techniques/${slug}/edit`} style={{
-            fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)',
-            border: '1px solid var(--accent)', padding: '6px 14px', textDecoration: 'none',
-          }}>
-            Edit
-          </Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {task.archived_at ? (
+              <button onClick={() => setArchived(false)} disabled={archiving}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)',
+                  border: '1px solid var(--accent)', padding: '6px 14px', background: 'transparent',
+                  cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1 }}>
+                {archiving ? 'Restoring…' : 'Unarchive'}
+              </button>
+            ) : confirmArchive ? (
+              <>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>
+                  Archive? (reversible)
+                </span>
+                <button onClick={() => setArchived(true)} disabled={archiving}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: '#fff',
+                    background: 'var(--muted)', border: 'none', padding: '6px 14px',
+                    cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1 }}>
+                  {archiving ? 'Archiving…' : 'Archive'}
+                </button>
+                <button onClick={() => setConfirmArchive(false)} disabled={archiving}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)',
+                    background: 'none', border: 'none', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button onClick={() => setConfirmArchive(true)}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--muted)',
+                  background: 'none', border: 'none', cursor: 'pointer' }}>
+                Archive
+              </button>
+            )}
+            <Link href={`/techniques/${slug}/edit`} style={{
+              fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--accent)',
+              border: '1px solid var(--accent)', padding: '6px 14px', textDecoration: 'none',
+            }}>
+              Edit
+            </Link>
+          </div>
         )}
       </div>
 

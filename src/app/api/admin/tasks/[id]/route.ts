@@ -79,6 +79,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if ('is_verified' in patch) patch.is_verified = !!patch.is_verified;
 
+  // Archive / unarchive: body.archived (boolean) maps to archived_at timestamp.
+  if ('archived' in body) {
+    patch.archived_at = body.archived ? new Date().toISOString() : null;
+  }
+
   if (Object.keys(patch).length === 0) {
     return NextResponse.json({ error: 'No editable fields' }, { status: 400 });
   }
