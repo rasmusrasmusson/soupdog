@@ -15,7 +15,7 @@ const EDITABLE = new Set([
   'heat_mechanism', 'heat_medium',
   'min_duration_seconds', 'max_duration_seconds',
   'typical_input_state', 'typical_output_state',
-  'suggested_tool_slugs', 'is_verified',
+  'suggested_tool_slugs', 'is_verified', 'image_url',
 ]);
 
 // enum guards (null allowed = clear the field)

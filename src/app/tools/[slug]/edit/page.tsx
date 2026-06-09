@@ -2,6 +2,7 @@
 // src/app/tools/[slug]/edit/page.tsx
 
 import React, { useState, useEffect, use } from 'react';
+import { ImageUpload } from '@/components/admin/ImageUpload';
 
 interface ToolEdit {
   id: string; slug: string; name: string; category: string;
@@ -185,10 +186,10 @@ export default function ToolEditPage({ params }: { params: Promise<{ slug: strin
         <input style={inputStyle} value={tool.manufacturer} onChange={e => set('manufacturer', e.target.value)} />
       </Field>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 16 }}>
-        <Field label="Hero image URL"><input style={inputStyle} value={tool.image_url} onChange={e => set('image_url', e.target.value)} /></Field>
-        <Field label="Image credit"><input style={inputStyle} value={tool.image_credit} onChange={e => set('image_credit', e.target.value)} /></Field>
-      </div>
+      <Field label="Hero image">
+        <ImageUpload kind="tools" slug={tool.slug} value={tool.image_url} onChange={url => set('image_url', url)} />
+      </Field>
+      <Field label="Image credit"><input style={inputStyle} value={tool.image_credit} onChange={e => set('image_credit', e.target.value)} /></Field>
 
       <Field label="Curation">
         <label style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 14, cursor: 'pointer' }}>

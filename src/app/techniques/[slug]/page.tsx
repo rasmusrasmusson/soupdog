@@ -193,6 +193,13 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         )}
       </div>
 
+      {task.image_url && (
+        <div style={{ marginTop: 20, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
+          <img src={task.image_url} alt={task.name}
+            style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
+        </div>
+      )}
+
       {task.description && (
         <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg)', marginTop: 14 }}>
           {task.description}

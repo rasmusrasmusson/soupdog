@@ -4,6 +4,7 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { ImageUpload } from '@/components/admin/ImageUpload';
 
 const COMPLETION_TYPES = ['', 'time','core_temp','surface_temp','color','volume','mass','texture','structural','aroma','ph','subjective'];
 const HEAT_MECHANISMS = ['', 'conduction','convection','radiation','dielectric','combination','none'];
@@ -60,6 +61,7 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       typical_input_state: t.typical_input_state, typical_output_state: t.typical_output_state,
       suggested_tool_slugs: Array.isArray(t.suggested_tool_slugs) ? t.suggested_tool_slugs.join(', ') : t.suggested_tool_slugs,
       is_verified: t.is_verified,
+      image_url: t.image_url ?? null,
     };
     const res = await fetch(`/api/admin/tasks/${t.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -130,6 +132,9 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
 
       <div style={FIELD}><label style={L}>Tools (comma-separated slugs)</label>
         <input style={I} value={toolStr} onChange={e => set('suggested_tool_slugs', e.target.value)} placeholder='large-pot, colander' /></div>
+
+      <div style={FIELD}><label style={L}>Hero image</label>
+        <ImageUpload kind="techniques" slug={slug} value={t.image_url} onChange={url => set('image_url', url)} /></div>
 
       <div style={FIELD}><label style={L}>Tips</label>
         <textarea style={{ ...I, minHeight: 56, resize: 'vertical' }} value={t.tips ?? ''} onChange={e => set('tips', e.target.value)} /></div>
