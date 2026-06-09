@@ -50,6 +50,10 @@ export async function POST(req: NextRequest) {
 
   const insert: Record<string, any> = {
     name, slug, family,
+    // The techniques list groups/filters by `category`; if we leave it null the
+    // new technique is invisible there. Default it to the family (refine later in
+    // the edit form). Accepts an explicit category override from the body.
+    category: (body.category ?? '').trim() || family,
     description: (body.description ?? '').trim() || null,
     // is_verified defaults to false; new technique starts unverified (a draft).
     source: 'human_authored',
