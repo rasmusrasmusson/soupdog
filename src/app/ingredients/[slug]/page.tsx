@@ -14,7 +14,7 @@
 //     over time; no migration needed to ship this layout.
 
 import React, { useState, useEffect, use } from 'react';
-import { ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronRight, ExternalLink, Pencil } from 'lucide-react';
 import {
   KLink, Section, SubLabel, CountChip,
   Toc, ContentRail, useTocProvider, TocProvider, anchorId,
@@ -48,6 +48,7 @@ interface Ingredient {
   base_temp_celsius?: number; off_id?: string;
   image_url?: string; image_credit?: string;
   content_reviewed?: boolean; ai_content_generated_at?: string;
+  archived_at?: string | null;
   // joined
   parent?: Rel | null; siblings: Rel[]; children: Rel[];
   transformationRecipe?: { title: string; slug: string } | null;
@@ -147,11 +148,35 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [aiPolling, setAiPolling] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
 
   // TOC plumbing (Section titles register themselves)
   const { entries, api } = useTocProvider();
 
+  async function setArchived(next: boolean) {
+    if (!ing) return;
+    setArchiving(true);
+    const res = await fetch(`/api/admin/ingredients/${ing.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: next }),
+    });
+    setArchiving(false);
+    setConfirmArchive(false);
+    if (res.ok) {
+      if (next) window.location.href = '/ingredients';
+      else setIng({ ...ing, archived_at: null });
+    }
+  }
+
   useEffect(() => {
+    fetch('/api/admin/check')
+      .then(r => r.json())
+      .then(d => setIsAdmin(Boolean(d.isAdmin)))
+      .catch(() => setIsAdmin(false));
+
     fetch(`/api/ingredients/${slug}`)
       .then(r => r.json())
       .then(d => {
@@ -250,12 +275,51 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                   justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 8 }}>
                   <h1 className="font-display" style={{ fontFamily: SERIF, fontSize: 30,
                     fontWeight: 400, lineHeight: 1.15, color: FG, margin: 0 }}>{ing.name}</h1>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
                     <ConfidenceBadge reviewed={ing.content_reviewed} hasAi={!!ing.ai_content_generated_at} />
                     <span style={{ fontFamily: MONO, fontSize: 10, color: MUT,
                       textTransform: 'uppercase', letterSpacing: '0.12em', border: B, padding: '2px 8px' }}>
                       {ing.category}
                     </span>
+                    {isAdmin && (
+                      <>
+                        {ing.archived_at ? (
+                          <button onClick={() => setArchived(false)} disabled={archiving}
+                            style={{ fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
+                              border: '1px solid var(--accent)', padding: '5px 9px', background: 'transparent',
+                              cursor: archiving ? 'default' : 'pointer', opacity: archiving ? 0.6 : 1,
+                              textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                            {archiving ? 'Restoring…' : 'Unarchive'}
+                          </button>
+                        ) : confirmArchive ? (
+                          <>
+                            <span style={{ fontFamily: MONO, fontSize: 10, color: MUT }}>Archive?</span>
+                            <button onClick={() => setArchived(true)} disabled={archiving}
+                              style={{ fontFamily: MONO, fontSize: 10, color: '#fff', background: 'var(--muted)',
+                                border: 'none', padding: '5px 9px', cursor: archiving ? 'default' : 'pointer',
+                                opacity: archiving ? 0.6 : 1, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                              {archiving ? '…' : 'Archive'}
+                            </button>
+                            <button onClick={() => setConfirmArchive(false)} disabled={archiving}
+                              style={{ fontFamily: MONO, fontSize: 10, color: MUT, background: 'none',
+                                border: 'none', cursor: 'pointer' }}>Cancel</button>
+                          </>
+                        ) : (
+                          <button onClick={() => setConfirmArchive(true)}
+                            style={{ fontFamily: MONO, fontSize: 10, color: MUT, background: 'none',
+                              border: 'none', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                            Archive
+                          </button>
+                        )}
+                        <a href={`/ingredients/${ing.slug}/edit`}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                            fontFamily: MONO, fontSize: 10, color: 'var(--accent)',
+                            border: '1px solid var(--accent)', padding: '5px 9px',
+                            textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                          <Pencil size={11} /> Edit
+                        </a>
+                      </>
+                    )}
                   </div>
                 </div>
 
