@@ -152,7 +152,7 @@ export function Section({
   id?: string;
   badge?: string;
   action?: React.ReactNode;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   empty?: boolean;
   emptyNote?: string;
 }) {
