@@ -87,6 +87,19 @@ export async function GET(
     .eq('parent_id', ing.id)
     .limit(20);
 
+  // ── Fetch content sub-sections (Storing/Production/History/…) ─
+  const { data: sectionRows } = await db
+    .from('content_sections')
+    .select('id, section_key, sort_order, headline, image_url, image_credit, body, bullets')
+    .eq('entity_type', 'ingredient')
+    .eq('entity_id', ing.id)
+    .order('sort_order', { ascending: true });
+
+  const sections: Record<string, any[]> = {};
+  for (const row of (sectionRows ?? [])) {
+    (sections[row.section_key] ??= []).push(row);
+  }
+
   // ── Fetch transformation recipe ──────────────────────────────
   let transformationRecipe: any = null;
   if (ing.transformation_recipe_id) {
@@ -125,6 +138,7 @@ export async function GET(
       siblings,
       children:             children ?? [],
       transformationRecipe,
+      sections,
       needsAiContent,
     },
   });

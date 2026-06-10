@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect, use } from 'react';
 import { ImageUpload } from '@/components/admin/ImageUpload';
+import { SubSectionEditor, SubSection } from '@/components/knowledge/SubSectionEditor';
 
 interface IngredientEdit {
   id: string; slug: string; name: string; category: string;
@@ -84,6 +85,7 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [subSections, setSubSections] = useState<Record<string, SubSection[]>>({});
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -117,6 +119,17 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
           content_reviewed: Boolean(t.content_reviewed),
           archived: t.archived_at != null,
         });
+        // Normalise loaded sub-sections (API returns rows per section_key).
+        const raw = d.ingredient.sections ?? {};
+        const norm: Record<string, SubSection[]> = {};
+        for (const key of Object.keys(raw)) {
+          norm[key] = (raw[key] ?? []).map((r: any) => ({
+            headline: r.headline ?? '', image_url: r.image_url ?? '',
+            image_credit: r.image_credit ?? '', body: r.body ?? '',
+            bullets: Array.isArray(r.bullets) ? r.bullets : [],
+          }));
+        }
+        setSubSections(norm);
         setLoading(false);
       })
       .catch(() => { setError('Failed to load.'); setLoading(false); });
@@ -216,18 +229,33 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.storage_notes} onChange={e => set('storage_notes', e.target.value)} />
       </Field>
+      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
+        sectionKey="storing" sectionLabel="Storing" imageKind="ingredients"
+        value={subSections['storing'] ?? []} />
+
       <Field label="Culture and religion">
         <textarea style={{ ...inputStyle, minHeight: 90, resize: 'vertical' }}
           value={ing.cultural_notes} onChange={e => set('cultural_notes', e.target.value)} />
       </Field>
+      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
+        sectionKey="culture" sectionLabel="Culture" imageKind="ingredients"
+        value={subSections['culture'] ?? []} />
+
       <Field label="Production / cultivation">
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.manufacturing_notes} onChange={e => set('manufacturing_notes', e.target.value)} />
       </Field>
+      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
+        sectionKey="production" sectionLabel="Production" imageKind="ingredients"
+        value={subSections['production'] ?? []} />
+
       <Field label="History">
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.history} onChange={e => set('history', e.target.value)} />
       </Field>
+      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
+        sectionKey="history" sectionLabel="History" imageKind="ingredients"
+        value={subSections['history'] ?? []} />
 
       {/* ── Allergies & diets ───────────────────────────────── */}
       <div style={sectionLabel}>Allergies &amp; diets</div>

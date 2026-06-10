@@ -16,7 +16,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { ChevronRight, ExternalLink, Pencil } from 'lucide-react';
 import {
-  KLink, Section, SubLabel, CountChip,
+  KLink, Section, SubLabel, CountChip, SubSections,
   Toc, ContentRail, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
 
@@ -55,6 +55,8 @@ interface Ingredient {
   linkedRecipes?: { id: string; slug: string; title: string }[];
   recipeCount?: number;
   confusedWith?: Rel[];
+  sections?: Record<string, { id: string; headline?: string; image_url?: string;
+    image_credit?: string; body?: string; bullets?: string[] }[]>;
   needsAiContent?: boolean;
 }
 
@@ -209,6 +211,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
   );
 
   const n = ing.nutrition_per_100g ?? {};
+  const sec = (key: string) => ing.sections?.[key] ?? [];
   const hasBasicNutrition = n.calories != null || n.protein != null || n.fat != null;
   const hasDetailedNutrition = n.vitamin_c != null || n.calcium != null || n.iron != null;
   const hasEthical = ing.is_vegan != null || ing.is_vegetarian != null ||
@@ -402,15 +405,20 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
 
             {/* ── Storing & shelf life ──────────────────────────── */}
             <Section title="Storing and shelf life" id="storing"
-              empty={!ing.storage_notes && inSeason.length === 0}
+              empty={!ing.storage_notes && inSeason.length === 0 && sec('storing').length === 0}
               emptyNote="Storage guidance for this ingredient hasn't been added yet.">
               {ing.storage_notes && (
                 <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
                   {ing.storage_notes}
                 </p>
               )}
+              {sec('storing').length > 0 && (
+                <div style={{ marginTop: ing.storage_notes ? 18 : 0 }}>
+                  <SubSections items={sec('storing')} />
+                </div>
+              )}
               {inSeason.length > 0 && (
-                <div style={{ marginTop: ing.storage_notes ? 16 : 0 }}>
+                <div style={{ marginTop: (ing.storage_notes || sec('storing').length) ? 18 : 0 }}>
                   <SubLabel>Seasonality</SubLabel>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: 3 }}>
                     {MONTHS.map((m, i) => (
@@ -468,7 +476,10 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
             )}
 
             {/* ── Details / anatomy ─────────────────────────────── */}
-            <Section title="Details" id="details" empty emptyNote="A detailed breakdown of this ingredient's parts hasn't been added yet." />
+            {/* ── Composition (parts / what it's made of) ───────── */}
+            {/* The parts here are themselves ingredients, linked via the
+                relation picker (follow-up build). Scaffolded for now. */}
+            <Section title="Composition" id="composition" empty emptyNote="A breakdown of what this is made of hasn't been added yet." />
 
             {/* ── Nutrition ─────────────────────────────────────── */}
             <Section title="Nutrition" id="nutrition"
@@ -561,12 +572,17 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
 
             {/* ── Culture & religion ────────────────────────────── */}
             <Section title="Culture and religion" id="culture"
-              empty={!ing.cultural_notes}
+              empty={!ing.cultural_notes && sec('culture').length === 0}
               emptyNote="Cultural and religious notes for this ingredient are on the way.">
               {ing.cultural_notes && (
                 <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
                   {ing.cultural_notes}
                 </p>
+              )}
+              {sec('culture').length > 0 && (
+                <div style={{ marginTop: ing.cultural_notes ? 18 : 0 }}>
+                  <SubSections items={sec('culture')} />
+                </div>
               )}
             </Section>
 
@@ -589,25 +605,45 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
 
             {/* ── Production ────────────────────────────────────── */}
             <Section title="Production" id="production"
-              empty={!ing.manufacturing_notes}
+              empty={!ing.manufacturing_notes && sec('production').length === 0 && !aiPolling}
               emptyNote="Production and cultivation notes haven't been added yet.">
-              {aiPolling && !ing.manufacturing_notes ? <AiPlaceholder lines={3} />
-                : ing.manufacturing_notes && (
-                  <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                    {ing.manufacturing_notes}
-                  </p>
+              {aiPolling && !ing.manufacturing_notes && sec('production').length === 0
+                ? <AiPlaceholder lines={3} />
+                : (
+                  <>
+                    {ing.manufacturing_notes && (
+                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
+                        {ing.manufacturing_notes}
+                      </p>
+                    )}
+                    {sec('production').length > 0 && (
+                      <div style={{ marginTop: ing.manufacturing_notes ? 18 : 0 }}>
+                        <SubSections items={sec('production')} />
+                      </div>
+                    )}
+                  </>
                 )}
             </Section>
 
             {/* ── History ───────────────────────────────────────── */}
             <Section title="History" id="history"
-              empty={!ing.history && !aiPolling}
+              empty={!ing.history && sec('history').length === 0 && !aiPolling}
               emptyNote="The history and origin of this ingredient is being written.">
-              {aiPolling && !ing.history ? <AiPlaceholder lines={4} />
-                : ing.history && (
-                  <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                    {ing.history}
-                  </p>
+              {aiPolling && !ing.history && sec('history').length === 0
+                ? <AiPlaceholder lines={4} />
+                : (
+                  <>
+                    {ing.history && (
+                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
+                        {ing.history}
+                      </p>
+                    )}
+                    {sec('history').length > 0 && (
+                      <div style={{ marginTop: ing.history ? 18 : 0 }}>
+                        <SubSections items={sec('history')} />
+                      </div>
+                    )}
+                  </>
                 )}
             </Section>
 
