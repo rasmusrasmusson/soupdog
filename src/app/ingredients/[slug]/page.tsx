@@ -19,6 +19,7 @@ import {
   KLink, Section, SubLabel, CountChip, SubSections, renderProse,
   Toc, ContentRail, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
+import { AiPanel } from '@/components/knowledge/AiPanel';
 
 // ── Types ─────────────────────────────────────────────────────
 interface NutritionPer100g {
@@ -713,8 +714,25 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* ── Right rail: TOC (AI panel takes over in Step 2) ──── */}
-        <ContentRail toc={<Toc entries={entries} />} />
+        {/* ── Right rail: TOC + Ask Soupdog assistant ──────────── */}
+        <ContentRail
+          toc={<Toc entries={entries} />}
+          ai={(close) => (
+            <AiPanel onClose={close} context={{
+              entityType: 'ingredient',
+              entityName: ing.name,
+              summary: ing.summary,
+              facts: {
+                category: ing.category,
+                taste: ing.taste_profile,
+                allergens: ing.allergens,
+                vegan: ing.is_vegan, vegetarian: ing.is_vegetarian,
+                halal: ing.is_halal, kosher: ing.is_kosher, glutenFree: ing.is_gluten_free,
+                uses: ing.uses,
+              },
+            }} />
+          )}
+        />
 
       </div>
 

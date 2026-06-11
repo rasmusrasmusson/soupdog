@@ -19,6 +19,7 @@ import {
   KLink, Section, SubLabel,
   Toc, ContentRail, useTocProvider, TocProvider,
 } from '@/components/knowledge/KnowledgePage';
+import { AiPanel } from '@/components/knowledge/AiPanel';
 
 interface Rel { id: string; slug: string; name: string; brand?: string }
 interface ChildModel extends Rel {
@@ -346,8 +347,24 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* ── Right rail: TOC (AI panel takes over in Step 2) ──── */}
-        <ContentRail toc={<Toc entries={entries} />} />
+        {/* ── Right rail: TOC + Ask Soupdog assistant ──────────── */}
+        <ContentRail
+          toc={<Toc entries={entries} />}
+          ai={(close) => (
+            <AiPanel onClose={close} context={{
+              entityType: 'tool',
+              entityName: tool.name,
+              summary: lead,
+              facts: {
+                category: tool.category,
+                wattage: tool.wattage,
+                capacityLitres: tool.cavity_volume_litres,
+                connected: tool.connected,
+                techniques: tool.techniques?.map(t => t.name),
+              },
+            }} />
+          )}
+        />
 
       </div>
     </TocProvider>

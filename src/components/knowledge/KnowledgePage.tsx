@@ -416,31 +416,65 @@ export function Toc({ entries }: { entries: TocEntry[] }) {
 
 // ───────────────────────────────────────────────────────────────
 //  Content rail — the right column.
-//  Option-1 single-column model: shows the TOC by default; when the
-//  AI assistant is opened it takes over the rail and the TOC hides.
-//  `topSlot` is reserved for the future inventory card (renders above
-//  whichever mode is active).
+//  Option-1 single-column model: shows the TOC by default with a small
+//  "Ask Soupdog" affordance at the top; opening the assistant takes over
+//  the rail (TOC hides) until closed. `topSlot` is reserved for the future
+//  inventory card (renders above whichever mode is active).
 // ───────────────────────────────────────────────────────────────
 export function ContentRail({
-  toc, ai, aiOpen, topSlot,
+  toc, ai, topSlot,
 }: {
   toc: React.ReactNode;
-  ai?: React.ReactNode;
-  aiOpen?: boolean;
+  ai?: (close: () => void) => React.ReactNode; // render-prop so the panel gets a close()
   topSlot?: React.ReactNode;
 }) {
+  const [aiOpen, setAiOpen] = useState(false);
+
   return (
     <aside
       className="hidden lg:flex no-print"
       style={{
-        width: 248, flexShrink: 0, borderLeft: B,
+        width: 268, flexShrink: 0, borderLeft: B,
         position: 'sticky', top: 0, height: 'calc(100vh - 48px)',
         overflowY: 'auto', padding: '24px 20px',
-        flexDirection: 'column', gap: 22,
+        flexDirection: 'column', gap: 18,
       }}
     >
       {topSlot}
-      {aiOpen ? ai : toc}
+      {aiOpen && ai ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {ai(() => setAiOpen(false))}
+        </div>
+      ) : (
+        <>
+          {ai && (
+            <button
+              onClick={() => setAiOpen(true)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                border: `1px solid ${ACCENT}`, background: 'var(--accent-subtle)',
+                color: ACCENT, padding: '9px 12px', cursor: 'pointer',
+                fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+              }}
+              className="hover:opacity-80 transition-opacity"
+            >
+              <SparkleIcon /> Ask Soupdog
+            </button>
+          )}
+          {toc}
+        </>
+      )}
     </aside>
+  );
+}
+
+// Tiny inline sparkle (avoids a lucide import in this file).
+function SparkleIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3l1.9 5.8a2 2 0 0 0 1.3 1.3L21 12l-5.8 1.9a2 2 0 0 0-1.3 1.3L12 21l-1.9-5.8a2 2 0 0 0-1.3-1.3L3 12l5.8-1.9a2 2 0 0 0 1.3-1.3z" />
+    </svg>
   );
 }
