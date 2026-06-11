@@ -378,6 +378,26 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
           )}
         </div>
 
+        {/* Inline controls: servings + progress (desktop). Replaces the old
+            right-hand panel now that the assistant owns the right rail. */}
+        <div className="hidden md:flex items-center gap-6 px-8 py-3 border-b border-[var(--border)] no-print">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">Servings</span>
+            <div className="flex items-center border border-[var(--border)]">
+              <button onClick={() => changeServings(-1)} className="w-7 h-7 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">−</button>
+              <span className="px-3 font-mono tabular-nums text-[13px] text-[var(--fg)]">{servings}</span>
+              <button onClick={() => changeServings(+1)} className="w-7 h-7 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">+</button>
+            </div>
+          </div>
+          <div className="flex-1 flex items-center gap-5 min-w-0">
+            <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
+            {(recipe.equipment?.length ?? 0) > 0 && (
+              <div className="flex-1 min-w-0"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
+            )}
+            <div className="flex-1 min-w-0"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
+          </div>
+        </div>
+
         <RecipeDisplay
           recipe={recipe}
           linkIngredients
@@ -399,35 +419,9 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
         </div>
       </div>
 
-      {/* Right panel */}
-      <aside className="hidden md:block w-48 flex-shrink-0 border-l border-[var(--border)] sticky top-0 h-full overflow-y-auto bg-[var(--surface)] text-[12px] no-print">
-        <PanelSection title="Progress">
-          <ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} />
-          <div className="mt-2"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
-          <div className="mt-2"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
-        </PanelSection>
-        <PanelSection title="Servings">
-          <div className="flex items-center border border-[var(--border)]">
-            <button onClick={() => changeServings(-1)} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">−</button>
-            <span className="flex-1 text-center font-mono tabular-nums text-[13px]">
-              {servings}
-            </span>
-            <button onClick={() => changeServings(+1)} className="w-8 h-8 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">+</button>
-          </div>
-        </PanelSection>
-        <PanelSection title="Recipe Information">
-          <table className="w-full text-[11px]">
-            <tbody>
-              {[['Version',`v${recipe.version}`],['Cuisine',recipe.cuisine??'—'],['Difficulty',recipe.difficulty],['Updated',new Date(recipe.updatedAt).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})]].map(([k,v])=>(
-                <tr key={k} className="border-b border-[var(--border-subtle)] last:border-0">
-                  <td className="py-1.5 text-[var(--muted)] font-mono text-[10px]">{k}</td>
-                  <td className="py-1.5 text-[var(--fg)] text-right">{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </PanelSection>
-      </aside>
+      {/* (Old right panel removed — servings/progress are now inline, and the
+          assistant occupies the right rail globally. Recipe info was a
+          duplicate of the meta grid.) */}
 
       {/* Mobile sticky bar */}
       <div className="md:hidden fixed bottom-[56px] left-0 right-0 z-10 bg-[var(--surface)] border-t border-[var(--border)] px-4 py-2 flex items-center gap-4 no-print">
@@ -669,17 +663,6 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
 
 
 
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="border-b border-[var(--border)]">
-      <div className="px-4 py-2 bg-[var(--surface-hover)] border-b border-[var(--border)]">
-        <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{title}</span>
-      </div>
-      <div className="px-4 py-3">{children}</div>
-    </div>
-  );
-}
 
 function ProgressBar({ label, done, total }: { label: string; done: number; total: number }) {
   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
