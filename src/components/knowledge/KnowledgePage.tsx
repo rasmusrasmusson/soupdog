@@ -184,12 +184,13 @@ export function SubSections({ items }: { items: RenderedSubSection[] }) {
   );
 }
 
-// Render plain text into paragraphs and bullet lists. The ONLY convention is
-// a line starting with "- " (dash-space) → a bullet. Consecutive bullet lines
-// group into one <ul>; everything else is a paragraph. Blank lines separate
-// paragraphs. No other markup (no bold, headings, links) — keeps stored content
-// clean text while supporting the one thing prose actually needs: bullets,
-// interleaved anywhere. Used for sub-section bodies and main section text alike.
+// Render plain text into lines and bullet lists. Rules (literal, predictable):
+//   • a line starting with "- " (dash-space) → a bullet;
+//   • consecutive bullet lines group into one <ul>;
+//   • every other line renders on its own line (each Enter is a line break);
+//   • a blank line produces a larger paragraph-style gap.
+// The ONLY markup is the "- " bullet — no bold, headings, or links — so stored
+// content stays clean text. Used for sub-section bodies and main section text.
 export function renderProse(
   text: string | null | undefined,
   opts?: { fontSize?: number; color?: string },
@@ -200,46 +201,50 @@ export function renderProse(
   const lines = text.replace(/\r\n/g, '\n').split('\n');
 
   const blocks: React.ReactNode[] = [];
-  let para: string[] = [];
   let bullets: string[] = [];
   let key = 0;
+  let blankPending = false; // a blank line seen since the last rendered block
 
-  const flushPara = () => {
-    if (para.length) {
-      blocks.push(
-        <p key={`p${key++}`} style={{ fontSize, lineHeight: 1.75, color, margin: blocks.length ? '10px 0 0' : 0 }}>
-          {para.join(' ')}
-        </p>
-      );
-      para = [];
-    }
-  };
   const flushBullets = () => {
     if (bullets.length) {
       blocks.push(
         <ul key={`u${key++}`} style={{ fontSize, lineHeight: 1.7, color,
-          margin: blocks.length ? '8px 0 0' : 0, paddingLeft: 20 }}>
-          {bullets.map((b, i) => <li key={i} style={{ marginBottom: 3 }}>{b}</li>)}
+          margin: blocks.length ? `${blankPending ? 12 : 6}px 0 0` : 0, paddingLeft: 18,
+          listStyleType: 'disc', listStylePosition: 'outside' }}>
+          {bullets.map((b, i) => (
+            <li key={i} style={{ marginBottom: 3, paddingLeft: 4, display: 'list-item' }}>{b}</li>
+          ))}
         </ul>
       );
       bullets = [];
+      blankPending = false;
     }
   };
 
   for (const raw of lines) {
     const line = raw.trimEnd();
     const isBullet = /^\s*-\s+/.test(line);
-    if (isBullet) {
-      flushPara();
-      bullets.push(line.replace(/^\s*-\s+/, ''));
-    } else if (line.trim() === '') {
-      flushPara(); flushBullets();
-    } else {
+
+    if (line.trim() === '') {
       flushBullets();
-      para.push(line.trim());
+      blankPending = true;
+      continue;
     }
+    if (isBullet) {
+      bullets.push(line.replace(/^\s*-\s+/, ''));
+      continue;
+    }
+    // Plain line — render on its own line. Bigger top gap after a blank line.
+    flushBullets();
+    blocks.push(
+      <p key={`p${key++}`} style={{ fontSize, lineHeight: 1.6, color,
+        margin: blocks.length ? `${blankPending ? 12 : 2}px 0 0` : 0 }}>
+        {line.trim()}
+      </p>
+    );
+    blankPending = false;
   }
-  flushPara(); flushBullets();
+  flushBullets();
   return <>{blocks}</>;
 }
 
