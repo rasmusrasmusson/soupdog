@@ -9,6 +9,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { SubSectionEditor, SubSection } from '@/components/knowledge/SubSectionEditor';
+import { CompositionEditor, type CompositionEntry } from '@/components/knowledge/CompositionEditor';
 
 interface IngredientEdit {
   id: string; slug: string; name: string; category: string;
@@ -86,6 +87,7 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
   const [saved, setSaved] = useState(false);
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [subSections, setSubSections] = useState<Record<string, SubSection[]>>({});
+  const [composition, setComposition] = useState<CompositionEntry[]>([]);
 
   useEffect(() => {
     fetch('/api/admin/check')
@@ -130,6 +132,7 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
           }));
         }
         setSubSections(norm);
+        setComposition(d.ingredient.composition ?? []);
         setLoading(false);
       })
       .catch(() => { setError('Failed to load.'); setLoading(false); });
@@ -286,6 +289,14 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
       <SubSectionEditor slug={ing.slug} sectionKey="history" sectionLabel="History"
         imageKind="ingredients" value={subSections['history'] ?? []}
         onChange={next => { setSubSections(s => ({ ...s, history: next })); setSaved(false); }} />
+
+      {/* ── Composition (derived ingredients) ───────────────── */}
+      <div style={sectionLabel}>Composition</div>
+      <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
+        Ingredients that come from {ing.name?.toLowerCase()} — pulp, juice, zest, etc. Each is its own
+        ingredient. Changes here save immediately.
+      </p>
+      <CompositionEditor parentId={ing.id} parentName={ing.name ?? 'this ingredient'} value={composition} />
 
       {/* ── Allergies & diets ───────────────────────────────── */}
       <div style={sectionLabel}>Allergies &amp; diets</div>

@@ -20,6 +20,7 @@ import {
   InlineToc, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
+import { IngredientPreviewCard, type CompositionEntry } from '@/components/knowledge/CompositionEditor';
 
 // ── Types ─────────────────────────────────────────────────────
 interface NutritionPer100g {
@@ -56,6 +57,7 @@ interface Ingredient {
   linkedRecipes?: { id: string; slug: string; title: string }[];
   recipeCount?: number;
   confusedWith?: Rel[];
+  composition?: CompositionEntry[];
   sections?: Record<string, { id: string; headline?: string; image_url?: string;
     image_credit?: string; body?: string; bullets?: string[] }[]>;
   needsAiContent?: boolean;
@@ -492,9 +494,19 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
 
             {/* ── Details / anatomy ─────────────────────────────── */}
             {/* ── Composition (parts / what it's made of) ───────── */}
-            {/* The parts here are themselves ingredients, linked via the
-                relation picker (follow-up build). Scaffolded for now. */}
-            <Section title="Composition" id="composition" empty emptyNote="A breakdown of what this is made of hasn't been added yet." />
+            {/* Ingredients derived from this one (pulp, juice, zest…), each its
+                own ingredient via a process. Linked by transformed_from_id. */}
+            <Section title="Composition" id="composition"
+              empty={(ing.composition?.length ?? 0) === 0}
+              emptyNote="A breakdown of what this is made of hasn't been added yet.">
+              {(ing.composition?.length ?? 0) > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                  {ing.composition!.map(c => (
+                    <IngredientPreviewCard key={c.id} entry={c} href={`/ingredients/${c.slug}`} />
+                  ))}
+                </div>
+              )}
+            </Section>
 
             {/* ── Nutrition ─────────────────────────────────────── */}
             <Section title="Nutrition" id="nutrition"

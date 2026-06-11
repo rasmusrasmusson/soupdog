@@ -87,6 +87,23 @@ export async function GET(
     .eq('parent_id', ing.id)
     .limit(20);
 
+  // ── Composition: ingredients derived FROM this one ───────────
+  // The inverse of transformed_from_id — pulp, juice, zest, etc. that start as
+  // part of this ingredient and become their own ingredient via a process.
+  // Each entry carries preview fields so the section can render preview cards.
+  const { data: compRows } = await db
+    .from('ingredients')
+    .select('id, slug, name, short_description, summary, image_url, transformation_recipe_id')
+    .eq('transformed_from_id', ing.id)
+    .order('name', { ascending: true })
+    .limit(40);
+  const composition = (compRows ?? []).map((c: any) => ({
+    id: c.id, slug: c.slug, name: c.name,
+    blurb: c.short_description || c.summary || null,
+    imageUrl: c.image_url || null,
+    hasRecipe: !!c.transformation_recipe_id,
+  }));
+
   // ── Fetch content sub-sections (Storing/Production/History/…) ─
   const { data: sectionRows } = await db
     .from('content_sections')
@@ -94,7 +111,6 @@ export async function GET(
     .eq('entity_type', 'ingredient')
     .eq('entity_id', ing.id)
     .order('sort_order', { ascending: true });
-
   const sections: Record<string, any[]> = {};
   for (const row of (sectionRows ?? [])) {
     (sections[row.section_key] ??= []).push(row);
@@ -137,8 +153,9 @@ export async function GET(
       parent,
       siblings,
       children:             children ?? [],
-      transformationRecipe,
+      composition,
       sections,
+      transformationRecipe,
       needsAiContent,
     },
   });
