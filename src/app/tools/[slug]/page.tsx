@@ -17,7 +17,7 @@ import React, { useState, useEffect, use } from 'react';
 import { ChevronRight, Pencil } from 'lucide-react';
 import {
   KLink, Section, SubLabel,
-  Toc, ContentRail, useTocProvider, TocProvider,
+  InlineToc, useTocProvider, TocProvider,
 } from '@/components/knowledge/KnowledgePage';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 
@@ -131,10 +131,10 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
         ...(tool.brand ? { brand: { '@type': 'Brand', name: tool.brand } } : {}),
       }) }} />
 
-      <div style={{ display: 'flex', gap: 0, minHeight: '100%' }}>
+      <div style={{ minHeight: '100%' }}>
 
         {/* ── Main content column ──────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '24px 36px 80px' }}>
+        <div style={{ minWidth: 0, padding: '24px 36px 80px' }}>
           <div style={{ maxWidth: 720 }}>
 
             {/* Breadcrumb */}
@@ -246,6 +246,9 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
                 )}
               </div>
             </div>
+
+            {/* Inline "On this page" — the rail now belongs to the assistant */}
+            <InlineToc entries={entries} />
 
             {/* ── How it's used ─────────────────────────────────── */}
             <Section title="How it's used" id="how-its-used"
@@ -361,9 +364,7 @@ export default function ToolDetailPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* ── Right rail: TOC (assistant is now the global dock) ─ */}
-        <ContentRail toc={<Toc entries={entries} />} />
-
+        {/* (Assistant rail is now global in AppShell; TOC is inline at top.) */}
       </div>
     </TocProvider>
   );

@@ -1,17 +1,18 @@
 'use client';
 // src/components/assistant/AssistantDock.tsx
 //
-// The global assistant — a FLOATING overlay (Facebook/Intercom pattern), not a
-// layout column, so it costs zero page width. Collapsed = a small sparkle
-// bubble bottom-right; expanded = a floating panel above the page. Conversation
-// + page context come from AssistantProvider, so the chat follows the user
-// across navigation and knows what page they're on.
+// The global assistant — an INTEGRATED right rail (the "butler"), present on
+// every logged-in page as part of the layout (like the recipe editor's chat).
+// Full height, its own column. Conversation + page context come from
+// AssistantProvider, so the chat follows the user across navigation and knows
+// what page they're on.
 //
-// Streams from /api/assistant (Soupdog/food-scoped, read-only). On mobile the
-// expanded state is a full-screen sheet.
+// Collapsible: a slim collapse control tucks it to a thin tab so users can
+// reclaim width when they want. Streams from /api/assistant (Soupdog-scoped,
+// read-only). Desktop (lg+) only; mobile gets a future full-screen treatment.
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, ChevronDown } from 'lucide-react';
+import { Send, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useAssistant } from './AssistantProvider';
 
 const MONO = 'var(--font-mono)';
@@ -87,132 +88,111 @@ export function AssistantDock() {
   }
 
   const here = pageContext?.entityName;
-  const suggestions = here
-    ? [`Tell me more about ${here.toLowerCase()}`, `What can I make with ${here.toLowerCase()}?`, `What can I substitute it with?`]
-    : ['What can you help me with?', 'Suggest a quick dinner idea', 'How do I plan my meals here?'];
 
-  // ── Collapsed: floating sparkle bubble, bottom-right ───────────
+  // ── Collapsed: a thin tab the user can re-open ─────────────────
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="no-print"
-        title="Ask Soupdog"
+        className="hidden lg:flex no-print"
+        title="Open assistant"
         style={{
-          position: 'fixed', right: 20, bottom: 20, zIndex: 70,
-          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: 52, height: 52, borderRadius: '50%',
-          background: ACCENT, color: '#fff', border: 'none', cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          flexShrink: 0, width: 40, borderLeft: B, background: 'var(--bg)',
+          flexDirection: 'column', alignItems: 'center', gap: 10,
+          paddingTop: 18, cursor: 'pointer', border: 'none', borderLeftWidth: 1,
+          borderLeftStyle: 'solid', borderLeftColor: 'var(--border)',
         }}
       >
-        <Sparkle size={22} />
+        <ChevronLeft size={16} style={{ color: MUT }} />
+        <span style={{ color: ACCENT }}><Sparkle size={16} /></span>
+        <span style={{ writingMode: 'vertical-rl', fontFamily: MONO, fontSize: 10,
+          letterSpacing: '0.15em', textTransform: 'uppercase', color: MUT, marginTop: 6 }}>
+          Ask Soupdog
+        </span>
       </button>
     );
   }
 
-  // ── Expanded: floating panel (overlay) — full-screen on mobile ─
+  // ── Open: integrated rail ──────────────────────────────────────
   return (
-    <div
-      className="no-print"
+    <aside
+      className="hidden lg:flex no-print"
       style={{
-        position: 'fixed', zIndex: 70,
-        // desktop: floating card bottom-right; mobile: full-screen sheet
-        right: 'var(--dock-right, 20px)', bottom: 'var(--dock-bottom, 20px)',
+        width: 300, flexShrink: 0, borderLeft: B, background: 'var(--bg)',
+        height: '100%', flexDirection: 'column',
       }}
     >
-      <div
-        style={{
-          display: 'flex', flexDirection: 'column',
-          width: 'min(380px, calc(100vw - 40px))',
-          height: 'min(560px, calc(100vh - 120px))',
-          background: 'var(--bg)', border: B,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-        }}
-      >
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '12px 14px', borderBottom: B }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
-            fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: MUT }}>
-            <span style={{ color: ACCENT }}><Sparkle size={12} /></span> Ask Soupdog
-          </span>
-          <button onClick={() => setOpen(false)} title="Minimise"
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUT, padding: 2 }}>
-            <ChevronDown size={18} />
-          </button>
-        </div>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 16px', borderBottom: B }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7,
+          fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: MUT }}>
+          <span style={{ color: ACCENT }}><Sparkle size={12} /></span> Ask Soupdog
+        </span>
+        <button onClick={() => setOpen(false)} title="Collapse"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: MUT, padding: 2 }}>
+          <ChevronRight size={16} />
+        </button>
+      </div>
 
-        {/* Context chip */}
-        {here && (
-          <div style={{ fontFamily: MONO, fontSize: 9, color: MUT, textTransform: 'uppercase',
-            letterSpacing: '0.1em', padding: '8px 14px', borderBottom: B }}>
-            Looking at: <span style={{ color: FG }}>{here}</span>
+      {/* Context chip */}
+      {here && (
+        <div style={{ fontFamily: MONO, fontSize: 9, color: MUT, textTransform: 'uppercase',
+          letterSpacing: '0.1em', padding: '8px 16px', borderBottom: B }}>
+          Looking at: <span style={{ color: FG }}>{here}</span>
+        </div>
+      )}
+
+      {/* Messages */}
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 16px' }}>
+        {messages.length === 0 ? (
+          <p style={{ fontSize: 12.5, lineHeight: 1.6, color: MUT, margin: 0 }}>
+            Ask me anything about{here ? ` ${here.toLowerCase()}` : ' food'}, cooking, or Soupdog —
+            substitutions, what to make, how the site works.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {messages.map((m, i) => (
+              <div key={i} style={{
+                fontSize: 13, lineHeight: 1.6,
+                color: m.role === 'user' ? FG : 'var(--fg-secondary)',
+                padding: m.role === 'user' ? '8px 10px' : 0,
+                background: m.role === 'user' ? 'var(--surface)' : 'transparent',
+                border: m.role === 'user' ? B : 'none',
+                whiteSpace: 'pre-wrap',
+              }}>
+                {m.content || (streaming && i === messages.length - 1
+                  ? <span style={{ color: MUT, fontStyle: 'italic' }}>…</span> : '')}
+              </div>
+            ))}
           </div>
         )}
-
-        {/* Messages */}
-        <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px' }}>
-          {messages.length === 0 ? (
-            <div>
-              <p style={{ fontSize: 12.5, lineHeight: 1.6, color: MUT, margin: '0 0 12px' }}>
-                Ask me anything about{here ? ` ${here.toLowerCase()}` : ' food'}, cooking, or Soupdog.
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {suggestions.map(s => (
-                  <button key={s} onClick={() => send(s)}
-                    style={{ textAlign: 'left', fontSize: 12.5, color: ACCENT, background: 'none',
-                      border: B, padding: '7px 10px', cursor: 'pointer', lineHeight: 1.3 }}
-                    className="hover:bg-[var(--surface-hover)] transition-colors">
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {messages.map((m, i) => (
-                <div key={i} style={{
-                  fontSize: 13, lineHeight: 1.6,
-                  color: m.role === 'user' ? FG : 'var(--fg-secondary)',
-                  padding: m.role === 'user' ? '8px 10px' : 0,
-                  background: m.role === 'user' ? 'var(--surface)' : 'transparent',
-                  border: m.role === 'user' ? B : 'none',
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {m.content || (streaming && i === messages.length - 1
-                    ? <span style={{ color: MUT, fontStyle: 'italic' }}>…</span> : '')}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div style={{ borderTop: B, padding: '10px 12px' }}>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
-            <textarea
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Ask a question…"
-              rows={2}
-              style={{ flex: 1, border: B, background: 'var(--surface)', padding: '8px 10px',
-                fontSize: 13, color: FG, outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
-            />
-            <button onClick={() => send()} disabled={streaming || !input.trim()} title="Send"
-              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                width: 34, height: 34, background: ACCENT, border: 'none', color: '#fff',
-                cursor: (streaming || !input.trim()) ? 'default' : 'pointer',
-                opacity: (streaming || !input.trim()) ? 0.5 : 1, flexShrink: 0 }}>
-              <Send size={14} />
-            </button>
-          </div>
-          <p style={{ fontFamily: MONO, fontSize: 9, color: MUT, margin: '6px 0 0', lineHeight: 1.4 }}>
-            Soupdog's assistant can make mistakes. Double-check anything important.
-          </p>
-        </div>
       </div>
-    </div>
+
+      {/* Input */}
+      <div style={{ borderTop: B, padding: '10px 12px' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+          <textarea
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+            placeholder="Ask a question…"
+            rows={2}
+            style={{ flex: 1, border: B, background: 'var(--surface)', padding: '8px 10px',
+              fontSize: 13, color: FG, outline: 'none', resize: 'none', fontFamily: 'inherit', lineHeight: 1.4 }}
+          />
+          <button onClick={() => send()} disabled={streaming || !input.trim()} title="Send"
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 34, height: 34, background: ACCENT, border: 'none', color: '#fff',
+              cursor: (streaming || !input.trim()) ? 'default' : 'pointer',
+              opacity: (streaming || !input.trim()) ? 0.5 : 1, flexShrink: 0 }}>
+            <Send size={14} />
+          </button>
+        </div>
+        <p style={{ fontFamily: MONO, fontSize: 9, color: MUT, margin: '6px 0 0', lineHeight: 1.4 }}>
+          Soupdog's assistant can make mistakes.
+        </p>
+      </div>
+    </aside>
   );
 }

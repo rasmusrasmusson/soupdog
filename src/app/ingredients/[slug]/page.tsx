@@ -17,7 +17,7 @@ import React, { useState, useEffect, use } from 'react';
 import { ChevronRight, ExternalLink, Pencil } from 'lucide-react';
 import {
   KLink, Section, SubLabel, CountChip, SubSections, renderProse,
-  Toc, ContentRail, useTocProvider, TocProvider, anchorId,
+  InlineToc, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 
@@ -259,10 +259,10 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
         ...(ing.brand ? { brand: { '@type': 'Brand', name: ing.brand } } : {}),
       }) }} />
 
-      <div style={{ display: 'flex', gap: 0, minHeight: '100%' }}>
+      <div style={{ minHeight: '100%' }}>
 
         {/* ── Main content column ──────────────────────────────── */}
-        <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '24px 36px 80px' }}>
+        <div style={{ minWidth: 0, padding: '24px 36px 80px' }}>
           <div style={{ maxWidth: 720 }}>
 
             {/* Breadcrumb */}
@@ -385,6 +385,9 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                 </div>
               )}
             </div>
+
+            {/* Inline "On this page" — the rail now belongs to the assistant */}
+            <InlineToc entries={entries} />
 
             {/* ── How to use ────────────────────────────────────── */}
             <Section title={`How to use ${ing.name.toLowerCase()}`} id="how-to-use">
@@ -729,9 +732,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* ── Right rail: TOC (assistant is now the global dock) ─ */}
-        <ContentRail toc={<Toc entries={entries} />} />
-
+        {/* (Assistant rail is now global in AppShell; TOC is inline at top.) */}
       </div>
 
       <style>{`@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>

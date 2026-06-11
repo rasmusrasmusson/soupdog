@@ -350,6 +350,41 @@ export function TocProvider({ api, children }: { api: TocApi; children: React.Re
   return <TocCtx.Provider value={api}>{children}</TocCtx.Provider>;
 }
 
+// Inline "On this page" — a compact jump block placed at the TOP of the content
+// (Notion/Wikipedia style). Used now that the right rail belongs to the
+// assistant. Renders the registered H2 sections as wrapping dotted links;
+// costs no rail space and never inner-scrolls.
+export function InlineToc({ entries }: { entries: TocEntry[] }) {
+  if (entries.length < 2) return null; // not worth showing for 0-1 sections
+  function go(id: string) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  return (
+    <nav aria-label="On this page" style={{
+      border: B, background: 'var(--surface)', padding: '12px 14px',
+      margin: '0 0 24px',
+    }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em',
+        textTransform: 'uppercase', color: MUT, marginBottom: 8 }}>
+        On this page
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+        {entries.filter(e => e.level <= 2).map(e => (
+          <button key={e.id} onClick={() => go(e.id)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+              fontSize: 13, color: ACCENT,
+              textDecoration: 'underline', textDecorationStyle: 'dotted',
+              textDecorationColor: 'rgba(46,70,56,0.4)', textUnderlineOffset: '3px' }}
+            className="hover:opacity-70 transition-opacity">
+            {e.label}
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 export function Toc({ entries }: { entries: TocEntry[] }) {
   const [active, setActive] = useState<string | null>(null);
 
