@@ -19,7 +19,7 @@ import {
   KLink, Section, SubLabel, CountChip, SubSections, renderProse,
   Toc, ContentRail, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
-import { AiPanel } from '@/components/knowledge/AiPanel';
+import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 
 // ── Types ─────────────────────────────────────────────────────
 interface NutritionPer100g {
@@ -157,6 +157,21 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
 
   // TOC plumbing (Section titles register themselves)
   const { entries, api } = useTocProvider();
+
+  // Publish page context to the global assistant dock (null until loaded).
+  useAssistantContext(ing ? {
+    entityType: 'ingredient',
+    entityName: ing.name,
+    summary: ing.summary,
+    facts: {
+      category: ing.category,
+      taste: ing.taste_profile,
+      allergens: ing.allergens,
+      vegan: ing.is_vegan, vegetarian: ing.is_vegetarian,
+      halal: ing.is_halal, kosher: ing.is_kosher, glutenFree: ing.is_gluten_free,
+      uses: ing.uses,
+    },
+  } : null);
 
   async function setArchived(next: boolean) {
     if (!ing) return;
@@ -714,25 +729,8 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
           </div>
         </div>
 
-        {/* ── Right rail: TOC + Ask Soupdog assistant ──────────── */}
-        <ContentRail
-          toc={<Toc entries={entries} />}
-          ai={(close) => (
-            <AiPanel onClose={close} context={{
-              entityType: 'ingredient',
-              entityName: ing.name,
-              summary: ing.summary,
-              facts: {
-                category: ing.category,
-                taste: ing.taste_profile,
-                allergens: ing.allergens,
-                vegan: ing.is_vegan, vegetarian: ing.is_vegetarian,
-                halal: ing.is_halal, kosher: ing.is_kosher, glutenFree: ing.is_gluten_free,
-                uses: ing.uses,
-              },
-            }} />
-          )}
-        />
+        {/* ── Right rail: TOC (assistant is now the global dock) ─ */}
+        <ContentRail toc={<Toc entries={entries} />} />
 
       </div>
 
