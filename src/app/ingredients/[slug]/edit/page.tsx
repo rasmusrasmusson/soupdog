@@ -170,21 +170,26 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
     // Persist all sub-section groups (one replace-all POST per section_key).
     try {
       const keys = Object.keys(subSections);
-      await Promise.all(keys.map(sectionKey =>
-        fetch('/api/admin/content-sections', {
+      await Promise.all(keys.map(async (sectionKey) => {
+        const r = await fetch('/api/admin/content-sections', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             entityType: 'ingredient', entityId: ing.id, sectionKey,
             items: subSections[sectionKey],
           }),
-        }).then(async r => {
-          if (!r.ok) {
-            const e = await r.json().catch(() => ({}));
-            throw new Error(e.error ?? `Failed saving ${sectionKey}`);
+        });
+        if (!r.ok) {
+          let detail = `HTTP ${r.status}`;
+          try {
+            const e = await r.json();
+            if (e?.error) detail = e.error;
+          } catch {
+            if (r.status === 404) detail = 'Save endpoint not found (route not deployed?)';
           }
-        })
-      ));
+          throw new Error(`${sectionKey}: ${detail}`);
+        }
+      }));
     } catch (e: any) {
       setSaving(false);
       setError(e.message ?? 'Sub-sections failed to save.');
