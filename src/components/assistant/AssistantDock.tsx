@@ -66,8 +66,8 @@ export function AssistantDock() {
         setStreaming(false); return;
       }
 
-      // The route returns JSON for actions (navigate / answerText) and an SSE
-      // stream for normal answers. Branch on content-type.
+      // The route returns JSON for actions (navigate / search / answerText) and
+      // an SSE stream for normal answers. Branch on content-type.
       const ctype = res.headers.get('Content-Type') ?? '';
       if (ctype.includes('application/json')) {
         const data = await res.json();
@@ -77,7 +77,20 @@ export function AssistantDock() {
           router.push(data.navigate);
           return;
         }
-        setLast(data.answerText ?? 'Something went wrong. Please try again.');
+        // Search result: text + optional clickable destinations.
+        const links: { url: string; label: string }[] = [];
+        if (data.navigateOffer) links.push(data.navigateOffer);
+        if (Array.isArray(data.options)) links.push(...data.options);
+        if (Array.isArray(data.more)) links.push(...data.more);
+        setMessages(m => {
+          const n = [...m];
+          n[n.length - 1] = {
+            role: 'assistant',
+            content: data.answerText ?? 'Something went wrong. Please try again.',
+            links: links.length ? links : undefined,
+          };
+          return n;
+        });
         setStreaming(false);
         return;
       }
@@ -173,16 +186,31 @@ export function AssistantDock() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {messages.map((m, i) => (
-              <div key={i} style={{
-                fontSize: 13, lineHeight: 1.6,
-                color: m.role === 'user' ? FG : 'var(--fg-secondary)',
-                padding: m.role === 'user' ? '8px 10px' : 0,
-                background: m.role === 'user' ? 'var(--surface)' : 'transparent',
-                border: m.role === 'user' ? B : 'none',
-                whiteSpace: 'pre-wrap',
-              }}>
-                {m.content || (streaming && i === messages.length - 1
-                  ? <span style={{ color: MUT, fontStyle: 'italic' }}>…</span> : '')}
+              <div key={i}>
+                <div style={{
+                  fontSize: 13, lineHeight: 1.6,
+                  color: m.role === 'user' ? FG : 'var(--fg-secondary)',
+                  padding: m.role === 'user' ? '8px 10px' : 0,
+                  background: m.role === 'user' ? 'var(--surface)' : 'transparent',
+                  border: m.role === 'user' ? B : 'none',
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {m.content || (streaming && i === messages.length - 1
+                    ? <span style={{ color: MUT, fontStyle: 'italic' }}>…</span> : '')}
+                </div>
+                {m.links && m.links.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {m.links.map((lk, li) => (
+                      <button key={li} onClick={() => router.push(lk.url)}
+                        style={{ textAlign: 'left', fontSize: 12.5, color: ACCENT, background: 'none',
+                          border: B, padding: '7px 10px', cursor: 'pointer', lineHeight: 1.3,
+                          display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                        className="hover:bg-[var(--surface-hover)] transition-colors">
+                        <span style={{ color: ACCENT }}>→</span> {lk.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

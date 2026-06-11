@@ -20,7 +20,7 @@ export interface PageContext {
   facts?: Record<string, any> | string;
 }
 
-export interface AssistantMsg { role: 'user' | 'assistant'; content: string }
+export interface AssistantMsg { role: 'user' | 'assistant'; content: string; links?: { url: string; label: string }[] }
 
 interface AssistantState {
   // page context

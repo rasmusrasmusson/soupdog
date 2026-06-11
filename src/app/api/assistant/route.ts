@@ -1,19 +1,14 @@
 // src/app/api/assistant/route.ts
 //
-// Site-wide knowledge assistant. Page-aware, Soupdog/food-scoped. Mostly
-// READ-ONLY (answers/explains) but can NAVIGATE: when the user asks to be taken
-// somewhere ("show me the lemon page", "open chicken tikka"), the assistant
-// resolves the real slug server-side (never guesses a URL -> never 404s) and
-// tells the client to navigate.
+// Site-wide knowledge assistant. Page-aware, Soupdog/food-scoped. Three intents:
+//   • NAVIGATE — "take me to X" → resolve real slug → client navigates.
+//   • SEARCH   — "do you have X?" / "what recipes use Y?" → look up the REAL
+//     library, then answer FROM the results (offer to open). The assistant must
+//     never claim the library lacks something without actually searching.
+//   • ANSWER   — everything else → stream a normal reply.
 //
-// Flow:
-//   1. A fast non-streaming intent classifier decides: navigate vs answer.
-//   2. If NAVIGATE -> resolve {query,type} against search_index + equipment ->
-//      return JSON {navigate, label} (no streaming).
-//   3. If ANSWER -> stream the reply as before (SSE).
-//
-// Navigation is the assistant's first ACTION; the same {action:…} shape extends
-// later to add-to-plan / save / etc. (those touch the write/access seam).
+// Slugs/results come from search_index (ingredient/recipe/technique) + equipment
+// (tools). The AI never invents URLs or claims about library contents.
 
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -44,27 +39,39 @@ You help with anything on Soupdog and anything about food: ingredients, tools an
 
 You ONLY help with food, cooking, nutrition, kitchen equipment, and Soupdog itself. If asked about anything unrelated, politely say you can only help with food and Soupdog — briefly — and offer to help with something food-related.
 
+IMPORTANT: You do not know the full contents of the Soupdog library from memory. Never claim a recipe/ingredient/etc. does or doesn't exist based on your own knowledge — that is determined by searching, which happens separately.
+
 You answer and explain. Keep answers concise, practical, and warm. Plain text only — no markdown bold, headings, or bullet syntax. A few short paragraphs at most.`;
 }
 
 async function classify(message: string, ctx: any, accountId: string): Promise<
-  { kind: 'navigate'; query: string; entityType?: string } | { kind: 'answer' }
+  | { kind: 'navigate'; query: string; entityType?: string }
+  | { kind: 'search'; query: string; entityType?: string }
+  | { kind: 'answer' }
 > {
-  const sys = `You classify a user's message to Soupdog's assistant into one of two intents and reply with ONLY JSON.
+  const sys = `You classify a user's message to Soupdog's assistant into ONE intent and reply with ONLY JSON.
 
-If the user wants to be TAKEN TO / SHOWN / OPEN a specific page for a named thing (an ingredient, tool, technique, or recipe), reply:
-{"kind":"navigate","query":"<the thing's name>","entityType":"ingredient|tool|technique|recipe"}
-- "query" is the plain name to look up (e.g. "lemon", "chicken tikka masala", "immersion circulator").
-- "entityType" is your best guess of which kind of page; omit if unsure.
-- If they say "this"/"it" and are currently looking at something, use that thing's name and type.
+NAVIGATE — the user wants to be TAKEN TO / SHOWN / OPEN a specific page they name:
+{"kind":"navigate","query":"<name>","entityType":"ingredient|tool|technique|recipe"}
 
-For ANYTHING ELSE (questions, explanations, advice, substitutions, general chat), reply:
+SEARCH — the user asks WHETHER something exists in Soupdog, or to FIND/LIST things, e.g. "do you have a recipe for X", "is there an X", "what recipes use Y", "find me Z", "any X recipes?":
+{"kind":"search","query":"<the thing to look for>","entityType":"ingredient|tool|technique|recipe (omit if unsure)"}
+
+ANSWER — anything else (explanations, advice, substitutions, how-to, general chat):
 {"kind":"answer"}
+
+Rules:
+- "query" is the plain search term (e.g. "apple pie", "lemon", "sous vide").
+- If they say "this"/"it" and are looking at something, use that thing's name.
+- Questions about whether Soupdog HAS something are SEARCH, never ANSWER.
 
 Examples:
 "show me the lemon page" -> {"kind":"navigate","query":"lemon","entityType":"ingredient"}
-"take me to chicken tikka masala" -> {"kind":"navigate","query":"chicken tikka masala","entityType":"recipe"}
-"open this" (looking at Lemon) -> {"kind":"navigate","query":"lemon","entityType":"ingredient"}
+"take me to chicken tikka" -> {"kind":"navigate","query":"chicken tikka","entityType":"recipe"}
+"do you have a recipe for apple pie?" -> {"kind":"search","query":"apple pie","entityType":"recipe"}
+"is there a page on saffron?" -> {"kind":"search","query":"saffron","entityType":"ingredient"}
+"what recipes use lemon?" -> {"kind":"search","query":"lemon"}
+"find me something with chicken" -> {"kind":"search","query":"chicken","entityType":"recipe"}
 "what can I substitute for lemon?" -> {"kind":"answer"}
 "how do I store it?" -> {"kind":"answer"}
 
@@ -73,55 +80,54 @@ Reply with ONLY the JSON, no markdown.`;
   const ctxNote = ctx?.entityName ? `\n\n(The user is currently looking at: ${ctx.entityName}${ctx.entityType ? ` — a ${ctx.entityType}` : ''}.)` : '';
 
   const r = await aiMessage({
-    model: HAIKU_MODEL,
-    feature: 'chat_question',
-    accountId,
-    max_tokens: 120,
-    system: sys,
-    messages: [{ role: 'user', content: message.trim() + ctxNote }],
+    model: HAIKU_MODEL, feature: 'chat_question', accountId, max_tokens: 120,
+    system: sys, messages: [{ role: 'user', content: message.trim() + ctxNote }],
   });
   if (!r.ok || !r.data) return { kind: 'answer' };
   const text = (r.data.content ?? []).map((c: any) => c.type === 'text' ? c.text : '').join('').trim();
   try {
-    const parsed = JSON.parse(text.replace(/^```(?:json)?/, '').replace(/```$/, '').trim());
-    if (parsed?.kind === 'navigate' && parsed.query) {
-      return { kind: 'navigate', query: String(parsed.query), entityType: parsed.entityType };
-    }
+    const p = JSON.parse(text.replace(/^```(?:json)?/, '').replace(/```$/, '').trim());
+    if (p?.kind === 'navigate' && p.query) return { kind: 'navigate', query: String(p.query), entityType: p.entityType };
+    if (p?.kind === 'search' && p.query)   return { kind: 'search',   query: String(p.query), entityType: p.entityType };
   } catch { /* fall through */ }
   return { kind: 'answer' };
 }
 
-async function resolveDestination(db: any, query: string, entityType?: string):
-  Promise<{ url: string; label: string } | null> {
+type Hit = { url: string; label: string; type: string };
 
+// Search the real library. Returns ranked hits across search_index + equipment.
+async function searchLibrary(db: any, query: string, entityType?: string): Promise<Hit[]> {
   const q = query.trim();
-  if (!q) return null;
+  if (!q) return [];
+  const hits: Hit[] = [];
 
-  async function tryTool(): Promise<{ url: string; label: string } | null> {
-    const { data } = await db.from('equipment')
-      .select('slug, name').ilike('name', `%${q}%`).is('parent_id', null).limit(5);
-    if (data?.length) {
-      const exact = data.find((r: any) => r.name.toLowerCase() === q.toLowerCase()) ?? data[0];
-      return { url: `/tools/${exact.slug}`, label: exact.name };
-    }
-    return null;
+  // search_index: ingredient / recipe / technique
+  let sel = db.from('search_index').select('slug, type, title').ilike('title', `%${q}%`).limit(12);
+  if (entityType && entityType !== 'tool' && URL_PREFIX[entityType]) sel = sel.eq('type', entityType);
+  const { data: idx } = await sel;
+  for (const r of (idx ?? [])) {
+    const prefix = URL_PREFIX[r.type];
+    if (prefix) hits.push({ url: `${prefix}${r.slug}`, label: r.title, type: r.type });
   }
 
-  async function tryIndex(type?: string): Promise<{ url: string; label: string } | null> {
-    let sel = db.from('search_index').select('slug, type, title').ilike('title', `%${q}%`).limit(8);
-    if (type && URL_PREFIX[type]) sel = sel.eq('type', type);
-    const { data } = await sel;
-    if (!data?.length) return null;
-    const exact = data.find((r: any) => (r.title ?? '').toLowerCase() === q.toLowerCase()) ?? data[0];
-    const prefix = URL_PREFIX[exact.type];
-    if (!prefix) return null;
-    return { url: `${prefix}${exact.slug}`, label: exact.title };
+  // equipment (tools) — include unless the user clearly wanted a non-tool type
+  if (!entityType || entityType === 'tool') {
+    const { data: eq } = await db.from('equipment')
+      .select('slug, name').ilike('name', `%${q}%`).is('parent_id', null).limit(8);
+    for (const r of (eq ?? [])) hits.push({ url: `/tools/${r.slug}`, label: r.name, type: 'tool' });
   }
 
-  if (entityType === 'tool') {
-    return (await tryTool()) ?? (await tryIndex());
-  }
-  return (await tryIndex(entityType)) ?? (await tryIndex()) ?? (await tryTool());
+  // Rank: exact title match first, then by label length (closer matches shorter).
+  const ql = q.toLowerCase();
+  hits.sort((a, b) => {
+    const ax = a.label.toLowerCase() === ql ? 0 : 1;
+    const bx = b.label.toLowerCase() === ql ? 0 : 1;
+    if (ax !== bx) return ax - bx;
+    return a.label.length - b.label.length;
+  });
+  // Dedupe by url
+  const seen = new Set<string>();
+  return hits.filter(h => (seen.has(h.url) ? false : (seen.add(h.url), true))).slice(0, 6);
 }
 
 export async function POST(req: NextRequest) {
@@ -140,13 +146,13 @@ export async function POST(req: NextRequest) {
     return new Response(JSON.stringify({ error: 'message required' }), { status: 400 });
   }
 
-  // 1. Classify: navigate vs answer
   const intent = await classify(message, context, user!.id);
 
+  // ── NAVIGATE ─────────────────────────────────────────────────
   if (intent.kind === 'navigate') {
-    const dest = await resolveDestination(db, intent.query, intent.entityType);
-    if (dest) {
-      return new Response(JSON.stringify({ navigate: dest.url, label: dest.label }), {
+    const hits = await searchLibrary(db, intent.query, intent.entityType);
+    if (hits.length) {
+      return new Response(JSON.stringify({ navigate: hits[0].url, label: hits[0].label }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -155,7 +161,31 @@ export async function POST(req: NextRequest) {
     }), { headers: { 'Content-Type': 'application/json' } });
   }
 
-  // 2. Answer (stream)
+  // ── SEARCH ───────────────────────────────────────────────────
+  if (intent.kind === 'search') {
+    const hits = await searchLibrary(db, intent.query, intent.entityType);
+    if (hits.length === 0) {
+      return new Response(JSON.stringify({
+        answerText: `I searched Soupdog and couldn't find anything matching "${intent.query}" yet. I can still help with general cooking questions about it if you like.`,
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    // Single strong hit → tell + offer to open it (client renders a go button).
+    if (hits.length === 1 || hits[0].label.toLowerCase() === intent.query.trim().toLowerCase()) {
+      const h = hits[0];
+      return new Response(JSON.stringify({
+        answerText: `Yes — Soupdog has "${h.label}".`,
+        navigateOffer: { url: h.url, label: h.label },
+        more: hits.slice(1, 4).map(x => ({ url: x.url, label: x.label })),
+      }), { headers: { 'Content-Type': 'application/json' } });
+    }
+    // Several hits → list them as options.
+    return new Response(JSON.stringify({
+      answerText: `Yes — Soupdog has a few matches for "${intent.query}":`,
+      options: hits.slice(0, 5).map(x => ({ url: x.url, label: x.label, type: x.type })),
+    }), { headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // ── ANSWER (stream) ──────────────────────────────────────────
   const complex = /compare|difference between|vs\.?|versus|step by step|walk me through/i.test(message);
   const model = complex ? SONNET_MODEL : HAIKU_MODEL;
 
