@@ -154,38 +154,93 @@ export function SubSections({ items }: { items: RenderedSubSection[] }) {
   if (!items?.length) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {items.map((s, i) => (
-        <div key={s.id ?? i}>
-          {s.headline && <SubLabel tone="fg">{s.headline}</SubLabel>}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: s.image_url ? 'minmax(0,1fr) 140px' : '1fr',
-            gap: 18, alignItems: 'start',
-          }}>
-            <div>
-              {s.body && (
-                <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                  {s.body}
-                </p>
-              )}
-              {(s.bullets?.length ?? 0) > 0 && (
-                <ul style={{ fontSize: 13.5, lineHeight: 1.7, margin: s.body ? '8px 0 0' : 0,
-                  paddingLeft: 20, color: 'var(--fg-secondary)' }}>
-                  {s.bullets!.map((b, bi) => <li key={bi} style={{ marginBottom: 3 }}>{b}</li>)}
-                </ul>
+      {items.map((s, i) => {
+        // Bullets now live inline in body as "- " lines. Legacy rows may still
+        // carry a separate bullets[] — append them so old data still renders.
+        const body = [
+          s.body ?? '',
+          ...(s.bullets ?? []).map(b => `- ${b}`),
+        ].filter(Boolean).join('\n');
+        return (
+          <div key={s.id ?? i}>
+            {s.headline && <SubLabel tone="fg">{s.headline}</SubLabel>}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: s.image_url ? 'minmax(0,1fr) 140px' : '1fr',
+              gap: 18, alignItems: 'start',
+            }}>
+              <div>{renderProse(body)}</div>
+              {s.image_url && (
+                <div style={{ border: B, background: 'var(--surface-hover)', overflow: 'hidden' }}>
+                  <img src={s.image_url} alt={s.headline ?? ''}
+                    style={{ width: '100%', height: 'auto', display: 'block' }} />
+                </div>
               )}
             </div>
-            {s.image_url && (
-              <div style={{ border: B, background: 'var(--surface-hover)', overflow: 'hidden' }}>
-                <img src={s.image_url} alt={s.headline ?? ''}
-                  style={{ width: '100%', height: 'auto', display: 'block' }} />
-              </div>
-            )}
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
+}
+
+// Render plain text into paragraphs and bullet lists. The ONLY convention is
+// a line starting with "- " (dash-space) → a bullet. Consecutive bullet lines
+// group into one <ul>; everything else is a paragraph. Blank lines separate
+// paragraphs. No other markup (no bold, headings, links) — keeps stored content
+// clean text while supporting the one thing prose actually needs: bullets,
+// interleaved anywhere. Used for sub-section bodies and main section text alike.
+export function renderProse(
+  text: string | null | undefined,
+  opts?: { fontSize?: number; color?: string },
+): React.ReactNode {
+  if (!text || !text.trim()) return null;
+  const fontSize = opts?.fontSize ?? 13.5;
+  const color = opts?.color ?? 'var(--fg-secondary)';
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+
+  const blocks: React.ReactNode[] = [];
+  let para: string[] = [];
+  let bullets: string[] = [];
+  let key = 0;
+
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push(
+        <p key={`p${key++}`} style={{ fontSize, lineHeight: 1.75, color, margin: blocks.length ? '10px 0 0' : 0 }}>
+          {para.join(' ')}
+        </p>
+      );
+      para = [];
+    }
+  };
+  const flushBullets = () => {
+    if (bullets.length) {
+      blocks.push(
+        <ul key={`u${key++}`} style={{ fontSize, lineHeight: 1.7, color,
+          margin: blocks.length ? '8px 0 0' : 0, paddingLeft: 20 }}>
+          {bullets.map((b, i) => <li key={i} style={{ marginBottom: 3 }}>{b}</li>)}
+        </ul>
+      );
+      bullets = [];
+    }
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const isBullet = /^\s*-\s+/.test(line);
+    if (isBullet) {
+      flushPara();
+      bullets.push(line.replace(/^\s*-\s+/, ''));
+    } else if (line.trim() === '') {
+      flushPara(); flushBullets();
+    } else {
+      flushBullets();
+      para.push(line.trim());
+    }
+  }
+  flushPara(); flushBullets();
+  return <>{blocks}</>;
 }
 
 // A whole section: anchored title + body, with a hairline divider below.

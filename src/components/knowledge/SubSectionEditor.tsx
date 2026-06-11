@@ -1,14 +1,14 @@
 'use client';
 // src/components/knowledge/SubSectionEditor.tsx
 //
-// Reusable editor for the repeatable sub-sections of one (entity, section).
-// Each sub-section = headline + optional image + body + bullets. Add / remove /
-// reorder; saves the whole list (replace-all) to /api/admin/content-sections.
+// Controlled editor for the repeatable sub-sections of one (entity, section).
+// Each sub-section = headline + body (with "- " bullet lines) + optional image.
+// Add / remove / reorder. The PARENT owns the data and saves it (one Save for
+// the whole page) — this component has no save button of its own.
 //
-// Used inside the ingredient editor (and later tools/techniques) — one instance
-// per prose section that wants named sub-parts (Storing, Production, …).
+// Used inside the ingredient editor (and later tools/techniques).
 
-import React, { useState } from 'react';
+import React from 'react';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { ChevronUp, ChevronDown, Trash2, Plus } from 'lucide-react';
 
@@ -16,8 +16,8 @@ export interface SubSection {
   headline: string;
   image_url: string;
   image_credit: string;
-  body: string;
-  bullets: string[];
+  body: string;      // bullets are "- " lines inside the body
+  bullets: string[]; // retained for back-compat; new edits keep it empty
 }
 
 const MONO = 'var(--font-mono)';
@@ -38,50 +38,28 @@ export function emptySubSection(): SubSection {
 }
 
 export function SubSectionEditor({
-  entityType, entityId, slug, sectionKey, sectionLabel, value, imageKind,
+  slug, sectionKey, sectionLabel, value, onChange, imageKind,
 }: {
-  entityType: 'ingredient' | 'tool' | 'technique';
-  entityId: string;
   slug: string;
   sectionKey: string;
   sectionLabel: string;
   value: SubSection[];
+  onChange: (next: SubSection[]) => void;
   imageKind: string; // upload route prefix, e.g. 'ingredients'
 }) {
-  const [items, setItems] = useState<SubSection[]>(value.length ? value : []);
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const items = value;
 
   function update(i: number, patch: Partial<SubSection>) {
-    setItems(prev => prev.map((it, idx) => idx === i ? { ...it, ...patch } : it));
-    setStatus(null);
+    onChange(items.map((it, idx) => idx === i ? { ...it, ...patch } : it));
   }
-  function add() { setItems(prev => [...prev, emptySubSection()]); setStatus(null); }
-  function remove(i: number) { setItems(prev => prev.filter((_, idx) => idx !== i)); setStatus(null); }
+  function add() { onChange([...items, emptySubSection()]); }
+  function remove(i: number) { onChange(items.filter((_, idx) => idx !== i)); }
   function move(i: number, dir: -1 | 1) {
-    setItems(prev => {
-      const j = i + dir;
-      if (j < 0 || j >= prev.length) return prev;
-      const next = [...prev];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-    setStatus(null);
-  }
-
-  async function save() {
-    setSaving(true); setStatus(null);
-    const res = await fetch('/api/admin/content-sections', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entityType, entityId, sectionKey, items }),
-    });
-    setSaving(false);
-    if (res.ok) setStatus('Saved.');
-    else {
-      const d = await res.json().catch(() => ({}));
-      setStatus(d.error ?? 'Save failed.');
-    }
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const next = [...items];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
   }
 
   return (
@@ -98,7 +76,7 @@ export function SubSectionEditor({
 
       {items.length === 0 && (
         <p style={{ fontSize: 12, color: MUT, fontStyle: 'italic', margin: '0 0 12px' }}>
-          No sub-sections. Add one for e.g. “Ambient storage”, “Refrigerated”, “Frozen”.
+          No sub-sections. Add one for e.g. &ldquo;Ambient storage&rdquo;, &ldquo;Refrigerated&rdquo;, &ldquo;Frozen&rdquo;.
         </p>
       )}
 
@@ -121,17 +99,10 @@ export function SubSectionEditor({
           </div>
 
           <div style={{ marginBottom: 10 }}>
-            <label style={miniLabel}>Body text</label>
-            <textarea style={{ ...inputStyle, minHeight: 70, resize: 'vertical' }} value={it.body}
+            <label style={miniLabel}>Body &mdash; start a line with &ldquo;- &rdquo; for a bullet</label>
+            <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }} value={it.body}
+              placeholder={'Typical shelf life: 1-2 weeks.\n\nWhat happens:\n- Moisture evaporates through the peel\n- Fruit becomes lighter and softer'}
               onChange={e => update(i, { body: e.target.value })} />
-          </div>
-
-          <div style={{ marginBottom: 10 }}>
-            <label style={miniLabel}>Bullet points (one per line)</label>
-            <textarea style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }}
-              value={it.bullets.join('\n')}
-              placeholder={'Moisture evaporates through the peel\nFruit becomes lighter and softer'}
-              onChange={e => update(i, { bullets: e.target.value.split('\n') })} />
           </div>
 
           <div>
@@ -147,24 +118,13 @@ export function SubSectionEditor({
         </div>
       ))}
 
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-        <button type="button" onClick={add}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontFamily: MONO, fontSize: 11, color: 'var(--accent)', background: 'none',
-            border: '1px dashed var(--accent)', padding: '7px 12px', cursor: 'pointer',
-            textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          <Plus size={13} /> Add sub-section
-        </button>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {status && <span style={{ fontFamily: MONO, fontSize: 10, color: status === 'Saved.' ? 'var(--accent)' : '#a33' }}>{status}</span>}
-          <button type="button" onClick={save} disabled={saving}
-            style={{ fontFamily: MONO, fontSize: 11, color: '#fff', background: 'var(--accent)',
-              border: 'none', padding: '7px 16px', cursor: saving ? 'default' : 'pointer',
-              opacity: saving ? 0.6 : 1, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            {saving ? 'Saving…' : `Save ${sectionLabel.toLowerCase()}`}
-          </button>
-        </div>
-      </div>
+      <button type="button" onClick={add}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+          fontFamily: MONO, fontSize: 11, color: 'var(--accent)', background: 'none',
+          border: '1px dashed var(--accent)', padding: '7px 12px', cursor: 'pointer',
+          textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+        <Plus size={13} /> Add sub-section
+      </button>
     </div>
   );
 }

@@ -16,7 +16,7 @@
 import React, { useState, useEffect, use } from 'react';
 import { ChevronRight, ExternalLink, Pencil } from 'lucide-react';
 import {
-  KLink, Section, SubLabel, CountChip, SubSections,
+  KLink, Section, SubLabel, CountChip, SubSections, renderProse,
   Toc, ContentRail, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
 
@@ -407,11 +407,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
             <Section title="Storing and shelf life" id="storing"
               empty={!ing.storage_notes && inSeason.length === 0 && sec('storing').length === 0}
               emptyNote="Storage guidance for this ingredient hasn't been added yet.">
-              {ing.storage_notes && (
-                <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                  {ing.storage_notes}
-                </p>
-              )}
+              {ing.storage_notes && renderProse(ing.storage_notes)}
               {sec('storing').length > 0 && (
                 <div style={{ marginTop: ing.storage_notes ? 18 : 0 }}>
                   <SubSections items={sec('storing')} />
@@ -574,11 +570,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
             <Section title="Culture and religion" id="culture"
               empty={!ing.cultural_notes && sec('culture').length === 0}
               emptyNote="Cultural and religious notes for this ingredient are on the way.">
-              {ing.cultural_notes && (
-                <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                  {ing.cultural_notes}
-                </p>
-              )}
+              {ing.cultural_notes && renderProse(ing.cultural_notes)}
               {sec('culture').length > 0 && (
                 <div style={{ marginTop: ing.cultural_notes ? 18 : 0 }}>
                   <SubSections items={sec('culture')} />
@@ -611,11 +603,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                 ? <AiPlaceholder lines={3} />
                 : (
                   <>
-                    {ing.manufacturing_notes && (
-                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                        {ing.manufacturing_notes}
-                      </p>
-                    )}
+                    {ing.manufacturing_notes && renderProse(ing.manufacturing_notes)}
                     {sec('production').length > 0 && (
                       <div style={{ marginTop: ing.manufacturing_notes ? 18 : 0 }}>
                         <SubSections items={sec('production')} />
@@ -633,11 +621,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                 ? <AiPlaceholder lines={4} />
                 : (
                   <>
-                    {ing.history && (
-                      <p style={{ fontSize: 13.5, lineHeight: 1.75, color: 'var(--fg-secondary)', margin: 0 }}>
-                        {ing.history}
-                      </p>
-                    )}
+                    {ing.history && renderProse(ing.history)}
                     {sec('history').length > 0 && (
                       <div style={{ marginTop: ing.history ? 18 : 0 }}>
                         <SubSections items={sec('history')} />

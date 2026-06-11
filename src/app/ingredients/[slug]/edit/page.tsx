@@ -165,8 +165,33 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
       }),
     });
     const d = await res.json();
+    if (!res.ok) { setSaving(false); setError(d.error ?? 'Save failed.'); return; }
+
+    // Persist all sub-section groups (one replace-all POST per section_key).
+    try {
+      const keys = Object.keys(subSections);
+      await Promise.all(keys.map(sectionKey =>
+        fetch('/api/admin/content-sections', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entityType: 'ingredient', entityId: ing.id, sectionKey,
+            items: subSections[sectionKey],
+          }),
+        }).then(async r => {
+          if (!r.ok) {
+            const e = await r.json().catch(() => ({}));
+            throw new Error(e.error ?? `Failed saving ${sectionKey}`);
+          }
+        })
+      ));
+    } catch (e: any) {
+      setSaving(false);
+      setError(e.message ?? 'Sub-sections failed to save.');
+      return;
+    }
+
     setSaving(false);
-    if (!res.ok) { setError(d.error ?? 'Save failed.'); return; }
     setSaved(true);
     window.location.href = `/ingredients/${ing.slug}`;
   }
@@ -229,33 +254,33 @@ export default function IngredientEditPage({ params }: { params: Promise<{ slug:
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.storage_notes} onChange={e => set('storage_notes', e.target.value)} />
       </Field>
-      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
-        sectionKey="storing" sectionLabel="Storing" imageKind="ingredients"
-        value={subSections['storing'] ?? []} />
+      <SubSectionEditor slug={ing.slug} sectionKey="storing" sectionLabel="Storing"
+        imageKind="ingredients" value={subSections['storing'] ?? []}
+        onChange={next => { setSubSections(s => ({ ...s, storing: next })); setSaved(false); }} />
 
       <Field label="Culture and religion">
         <textarea style={{ ...inputStyle, minHeight: 90, resize: 'vertical' }}
           value={ing.cultural_notes} onChange={e => set('cultural_notes', e.target.value)} />
       </Field>
-      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
-        sectionKey="culture" sectionLabel="Culture" imageKind="ingredients"
-        value={subSections['culture'] ?? []} />
+      <SubSectionEditor slug={ing.slug} sectionKey="culture" sectionLabel="Culture"
+        imageKind="ingredients" value={subSections['culture'] ?? []}
+        onChange={next => { setSubSections(s => ({ ...s, culture: next })); setSaved(false); }} />
 
       <Field label="Production / cultivation">
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.manufacturing_notes} onChange={e => set('manufacturing_notes', e.target.value)} />
       </Field>
-      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
-        sectionKey="production" sectionLabel="Production" imageKind="ingredients"
-        value={subSections['production'] ?? []} />
+      <SubSectionEditor slug={ing.slug} sectionKey="production" sectionLabel="Production"
+        imageKind="ingredients" value={subSections['production'] ?? []}
+        onChange={next => { setSubSections(s => ({ ...s, production: next })); setSaved(false); }} />
 
       <Field label="History">
         <textarea style={{ ...inputStyle, minHeight: 110, resize: 'vertical' }}
           value={ing.history} onChange={e => set('history', e.target.value)} />
       </Field>
-      <SubSectionEditor entityType="ingredient" entityId={ing.id} slug={ing.slug}
-        sectionKey="history" sectionLabel="History" imageKind="ingredients"
-        value={subSections['history'] ?? []} />
+      <SubSectionEditor slug={ing.slug} sectionKey="history" sectionLabel="History"
+        imageKind="ingredients" value={subSections['history'] ?? []}
+        onChange={next => { setSubSections(s => ({ ...s, history: next })); setSaved(false); }} />
 
       {/* ── Allergies & diets ───────────────────────────────── */}
       <div style={sectionLabel}>Allergies &amp; diets</div>
