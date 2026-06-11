@@ -14,11 +14,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
-        {/* Global assistant — present on every logged-in page, conversation
-            follows the user. Renders its own collapsed tab when closed. */}
-        <AssistantDock />
       </div>
       <MobileNav />
+      {/* Global assistant — a fixed-position floating overlay (no layout cost).
+          Present on every logged-in page; conversation follows the user. */}
+      <AssistantDock />
     </AssistantProvider>
   );
 }
