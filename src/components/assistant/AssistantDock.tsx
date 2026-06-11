@@ -12,6 +12,7 @@
 // read-only). Desktop (lg+) only; mobile gets a future full-screen treatment.
 
 import React, { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Send, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useAssistant } from './AssistantProvider';
 
@@ -32,6 +33,7 @@ function Sparkle({ size = 13 }: { size?: number }) {
 
 export function AssistantDock() {
   const { pageContext, messages, setMessages, open, setOpen } = useAssistant();
+  const router = useRouter();
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -39,6 +41,10 @@ export function AssistantDock() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, streaming, open]);
+
+  function setLast(content: string) {
+    setMessages(m => { const n = [...m]; n[n.length - 1] = { role: 'assistant', content }; return n; });
+  }
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
@@ -53,11 +59,30 @@ export function AssistantDock() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context: pageContext ?? { entityType: 'page' }, message: msg, history }),
       });
+
       if (!res.ok || !res.body) {
         const e = await res.json().catch(() => ({}));
-        setMessages(m => { const n = [...m]; n[n.length - 1] = { role: 'assistant', content: e.error ?? 'Something went wrong. Please try again.' }; return n; });
+        setLast(e.error ?? 'Something went wrong. Please try again.');
         setStreaming(false); return;
       }
+
+      // The route returns JSON for actions (navigate / answerText) and an SSE
+      // stream for normal answers. Branch on content-type.
+      const ctype = res.headers.get('Content-Type') ?? '';
+      if (ctype.includes('application/json')) {
+        const data = await res.json();
+        if (data.navigate) {
+          setLast(`Taking you to ${data.label ?? 'that page'}…`);
+          setStreaming(false);
+          router.push(data.navigate);
+          return;
+        }
+        setLast(data.answerText ?? 'Something went wrong. Please try again.');
+        setStreaming(false);
+        return;
+      }
+
+      // Streaming answer
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let acc = '';
@@ -70,18 +95,13 @@ export function AssistantDock() {
           if (!data) continue;
           try {
             const ev = JSON.parse(data);
-            if (ev.type === 'chunk') {
-              acc += ev.text;
-              setMessages(m => { const n = [...m]; n[n.length - 1] = { role: 'assistant', content: acc }; return n; });
-            } else if (ev.type === 'error') {
-              acc = acc || 'Something went wrong. Please try again.';
-              setMessages(m => { const n = [...m]; n[n.length - 1] = { role: 'assistant', content: acc }; return n; });
-            }
+            if (ev.type === 'chunk') { acc += ev.text; setLast(acc); }
+            else if (ev.type === 'error') { setLast(acc || 'Something went wrong. Please try again.'); }
           } catch { /* skip */ }
         }
       }
     } catch {
-      setMessages(m => { const n = [...m]; n[n.length - 1] = { role: 'assistant', content: 'Something went wrong. Please try again.' }; return n; });
+      setLast('Something went wrong. Please try again.');
     } finally {
       setStreaming(false);
     }
