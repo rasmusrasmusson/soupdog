@@ -9,6 +9,7 @@ import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
+import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -145,11 +146,12 @@ function mapNewSchemaRecipe(row: any): Recipe {
 }
 
 // ── Recipe nutrition section ──────────────────────────────────
-function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition }: {
+function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition, onComputed }: {
   versionId?: string;
   ingredients: RecipeIngredientRef[];
   servings: number;
   storedNutrition?: any;
+  onComputed?: (perServing: any, atServings: number) => void;
 }) {
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
@@ -186,6 +188,17 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   const result = apiResult ?? fallback;
   const phase  = apiResult?.phase ?? 'pre-cooking';
   const n      = result?.perServing ?? {};
+
+  // Report the per-serving figures up so the assistant context can use the
+  // SAME numbers the user sees (keyed by servings so re-scaling stays in sync).
+  const reportedRef = React.useRef<string>('');
+  React.useEffect(() => {
+    if (!onComputed) return;
+    const key = JSON.stringify({ n, servings });
+    if (key === reportedRef.current) return;
+    reportedRef.current = key;
+    if ((n?.calories ?? 0) > 0) onComputed(n, servings);
+  }, [n, servings, onComputed]);
 
   const hasCalc   = result?.confidence !== 'insufficient' && (n?.calories ?? 0) > 0;
   const hasStored = storedNutrition?.calories;
@@ -268,6 +281,39 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
   const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
   const changeServings = (delta: number) => setServings(prev => Math.max(1, prev + delta));
 
+  // Live per-serving nutrition reported up from RecipeNutritionSection (the same
+  // figures shown on the page). Falls back to stored nutrition if present.
+  const [liveNutrition, setLiveNutrition] = useState<{ perServing: any; atServings: number } | null>(null);
+
+  // Publish rich page context to the global assistant, so it can answer
+  // questions about THIS recipe (nutrition, ingredients, steps) — including
+  // per-portion maths based on the currently selected servings.
+  const baseServings = recipe.servings || 1;
+  const nut: any = liveNutrition?.perServing ?? recipe.nutrition ?? {};
+  const nutServings = liveNutrition?.atServings ?? baseServings;
+  useAssistantContext({
+    entityType: 'recipe',
+    entityName: recipe.title,
+    summary: recipe.description,
+    facts: {
+      cuisine: recipe.cuisine,
+      difficulty: recipe.difficulty,
+      baseServings,
+      currentServings: servings,
+      ingredients: recipe.ingredients.map((i: any) =>
+        [i.name, i.quantity?.value, i.quantity?.unit].filter(Boolean).join(' ').trim()
+      ),
+      steps: recipe.steps.map((s: any, i: number) => `${i + 1}. ${s.instruction ?? ''}`.trim()).slice(0, 30),
+      nutrition: (nut.calories || nut.protein || nut.carbohydrates) ? {
+        note: `These nutrition values are PER SERVING, calculated at ${nutServings} servings. The user currently has servings set to ${servings}. Scale per-portion figures accordingly if they differ.`,
+        calories: nut.calories, protein: nut.protein,
+        carbohydrates: nut.carbohydrates, fat: nut.fat,
+        saturatedFat: nut.saturated_fat, fiber: nut.fiber,
+        sugar: nut.sugar, sodium: nut.sodium,
+      } : undefined,
+    },
+  });
+
 
   // Presentation (ingredients/tools/steps) lives in the shared <RecipeDisplay>.
   // The shell keeps only what it needs for the meta grid + sidebar.
@@ -346,6 +392,7 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
             ingredients={recipe.ingredients}
             servings={servings}
             storedNutrition={recipe.nutrition}
+            onComputed={(perServing, atServings) => setLiveNutrition({ perServing, atServings })}
           />
 
           <div className="md:hidden h-16" />
