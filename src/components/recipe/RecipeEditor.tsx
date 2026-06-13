@@ -179,6 +179,10 @@ interface Props {
   };
   onSave: (data: RecipeFormData) => Promise<void>;
   saving: boolean;
+  /** When true, the editor fills its container instead of the default
+   *  centered max-w-3xl column. Used by the advanced editor where a fixed
+   *  chat panel sits to the right; the create page leaves this false. */
+  fillWidth?: boolean;
 }
 
 const DIFFICULTY_OPTIONS = ['trivial', 'easy', 'medium', 'hard', 'expert'];
@@ -2339,7 +2343,7 @@ function initialToGroups(title: string, initial?: Props['initial']): Group[] {
 
 // ── Main editor ───────────────────────────────────────────────
 
-export function RecipeEditor({ initial, onSave, saving }: Props) {
+export function RecipeEditor({ initial, onSave, saving, fillWidth = false }: Props) {
   const [title,            setTitle]       = useState(initial?.title ?? '');
   const [description,      setDescription] = useState(initial?.description ?? '');
   const [cuisine,          setCuisine]     = useState(initial?.cuisine ?? '');
@@ -2449,7 +2453,7 @@ export function RecipeEditor({ initial, onSave, saving }: Props) {
   ]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10">
+    <div className={fillWidth ? "w-full px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>
       {/* Meta */}
       <section>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recipe title"

@@ -344,7 +344,7 @@ export default function EditRecipePage() {
               No max-width cap — the editor fills the available space. */}
           <div style={{ flex: 1, minWidth: 0, paddingRight: 300 }}>
             <div style={{ width: '100%' }}>
-            <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
+            <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} fillWidth />
 
             {/* Concepts (global name bindings) for this recipe */}
             {(editorInitial?.canonicalId || id) && (
