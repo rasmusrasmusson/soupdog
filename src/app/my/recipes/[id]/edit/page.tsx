@@ -337,13 +337,13 @@ export default function EditRecipePage() {
       ) : error ? (
         <div className="px-8 py-16 text-[var(--error)] text-[12px] font-mono">{error}</div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingRight: 300 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-          {/* Left — Recipe editor. The editor is max-w-3xl + mx-auto internally,
-              so the column must NOT be flex:1 (that makes the editor float in a
-              huge empty space). Let it size to content, centered in the area
-              left of the fixed chat sidebar. */}
-          <div style={{ flex: '1 1 820px', maxWidth: 820, minWidth: 0 }}>
+          {/* Left — Recipe editor. Column grows (flex:1) to fill the space left
+              of the fixed 300px chat; its inner content is capped + centered so
+              it doesn't sit left with a big right gap. */}
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 'calc(100% - 300px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 880 }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
 
             {/* Concepts (global name bindings) for this recipe */}
@@ -355,10 +355,11 @@ export default function EditRecipePage() {
                 <ConceptBinder entityType="recipe" entityId={(editorInitial?.canonicalId || id) as string} />
               </div>
             )}
+            </div>
           </div>
 
           {/* Right — Chat panel (fixed right sidebar) */}
-          <div style={{ width: 0, flexShrink: 0 }}>
+          <div style={{ width: 300, flexShrink: 0 }}>
             <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
             <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
