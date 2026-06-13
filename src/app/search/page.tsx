@@ -210,7 +210,7 @@ export default function SearchPage() {
       case 'ingredient':
       case 'product':    return `/ingredients/${r.slug}`;
       case 'technique':  return `/techniques/${r.slug}`;
-      case 'equipment':  return `/equipment/${r.slug}`;
+      case 'equipment':  return `/tools/${r.slug}`;
       default:           return `/${r.slug}`;
     }
   };
