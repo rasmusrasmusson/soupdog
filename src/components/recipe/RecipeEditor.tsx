@@ -2453,8 +2453,7 @@ export function RecipeEditor({ initial, onSave, saving, fillWidth = false }: Pro
   ]);
 
   return (
-    <div className={fillWidth ? "w-full px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>
-      {/* Meta */}
+<div className={fillWidth ? "max-w-3xl px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>      {/* Meta */}
       <section>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recipe title"
           className="w-full bg-transparent border-none outline-none font-display text-[28px] md:text-[36px] font-light text-[var(--fg)] placeholder:text-[var(--border)] mb-4" />
