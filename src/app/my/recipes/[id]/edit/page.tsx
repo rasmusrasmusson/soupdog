@@ -6,9 +6,11 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Loader2, Send, AlertTriangle, RotateCcw } from 'lucide-react';
 import { RecipeEditor } from '@/components/recipe/RecipeEditor';
+import { ConceptBinder } from '@/components/knowledge/ConceptBinder';
 import type { RecipeFormData } from '@/lib/recipe-actions';
 
 const MONO = 'var(--font-mono)';
+const MUT  = 'var(--muted)';
 const B    = '1px solid var(--border)';
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
@@ -335,15 +337,28 @@ export default function EditRecipePage() {
       ) : error ? (
         <div className="px-8 py-16 text-[var(--error)] text-[12px] font-mono">{error}</div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingRight: 300 }}>
 
-          {/* Left — Recipe editor */}
-          <div style={{ flex: 1, minWidth: 0, maxWidth: 'calc(100% - 300px)' }}>
+          {/* Left — Recipe editor. The editor is max-w-3xl + mx-auto internally,
+              so the column must NOT be flex:1 (that makes the editor float in a
+              huge empty space). Let it size to content, centered in the area
+              left of the fixed chat sidebar. */}
+          <div style={{ flex: '1 1 820px', maxWidth: 820, minWidth: 0 }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
+
+            {/* Concepts (global name bindings) for this recipe */}
+            {(editorInitial?.canonicalId || id) && (
+              <div style={{ padding: '0 32px 80px' }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, marginBottom: 10 }}>
+                  Concepts — names this is known by
+                </div>
+                <ConceptBinder entityType="recipe" entityId={(editorInitial?.canonicalId || id) as string} />
+              </div>
+            )}
           </div>
 
           {/* Right — Chat panel (fixed right sidebar) */}
-          <div style={{ width: 300, flexShrink: 0 }}>
+          <div style={{ width: 0, flexShrink: 0 }}>
             <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
             <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
