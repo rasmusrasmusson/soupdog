@@ -12,7 +12,7 @@
 // read-only). Desktop (lg+) only; mobile gets a future full-screen treatment.
 
 import React, { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Send, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useAssistant } from './AssistantProvider';
 
@@ -21,6 +21,14 @@ const MUT = 'var(--muted)';
 const FG = 'var(--fg)';
 const ACCENT = 'var(--accent)';
 const B = '1px solid var(--border)';
+
+// Routes that supply their own chat rail and should NOT show the global dock.
+// Matches /my/recipes/<id> and /my/recipes/<id>/edit (but not /my/recipes itself
+// or /my/recipes/new, which have no own-chat rail).
+function isOwnChatRoute(pathname: string | null): boolean {
+  if (!pathname) return false;
+  return /^\/my\/recipes\/(?!new(?:\/|$))[^/]+(?:\/edit)?\/?$/.test(pathname);
+}
 
 function Sparkle({ size = 13 }: { size?: number }) {
   return (
@@ -34,6 +42,7 @@ function Sparkle({ size = 13 }: { size?: number }) {
 export function AssistantDock() {
   const { pageContext, messages, setMessages, open, setOpen } = useAssistant();
   const router = useRouter();
+  const pathname = usePathname();
   const [input, setInput] = useState('');
   const [streaming, setStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -121,6 +130,10 @@ export function AssistantDock() {
   }
 
   const here = pageContext?.entityName;
+
+  // Suppress on routes that have their own chat rail (recipe editors), so
+  // <main> isn't squeezed by a second 300px column.
+  if (isOwnChatRoute(pathname)) return null;
 
   // ── Collapsed: a thin tab the user can re-open ─────────────────
   if (!open) {
