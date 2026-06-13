@@ -388,8 +388,11 @@ export default function BasicEditPage() {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-      {/* Left — WYSIWYG recipe */}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: 'calc(100% - 300px)', padding: '0 32px 120px' }}>
+      {/* Left — WYSIWYG recipe. Chat is position:fixed (out of flow), so we
+          reserve its 300px via paddingRight here and give the chat slot width:0
+          below. No max-width cap / centering — content fills the space. */}
+      <div style={{ flex: 1, minWidth: 0, padding: '0 32px 120px', paddingRight: 332 }}>
+        <div style={{ width: '100%' }}>
 
         {/* Breadcrumb */}
         <div style={{ borderBottom: B, padding: '12px 0', marginBottom: 28, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -421,10 +424,11 @@ export default function BasicEditPage() {
             <ConceptBinder entityType="recipe" entityId={recipe._canonicalId} />
           </div>
         )}
+        </div>
       </div>
 
-      {/* Right — Chat panel */}
-      <div style={{ width: 300, flexShrink: 0 }}>
+      {/* Right — Chat panel (fixed; slot is zero-width since it's out of flow) */}
+      <div style={{ width: 0, flexShrink: 0 }}>
         <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
           <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

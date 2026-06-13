@@ -339,11 +339,11 @@ export default function EditRecipePage() {
       ) : (
         <div style={{ display: 'flex', alignItems: 'flex-start' }}>
 
-          {/* Left — Recipe editor. Column grows (flex:1) to fill the space left
-              of the fixed 300px chat; its inner content is capped + centered so
-              it doesn't sit left with a big right gap. */}
-          <div style={{ flex: 1, minWidth: 0, maxWidth: 'calc(100% - 300px)', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={{ width: '100%', maxWidth: 880 }}>
+          {/* Left — Recipe editor. Chat is position:fixed (out of flow); reserve
+              its 300px via paddingRight and give the chat slot width:0 below.
+              No max-width cap — the editor fills the available space. */}
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 300 }}>
+            <div style={{ width: '100%' }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} />
 
             {/* Concepts (global name bindings) for this recipe */}
@@ -358,8 +358,8 @@ export default function EditRecipePage() {
             </div>
           </div>
 
-          {/* Right — Chat panel (fixed right sidebar) */}
-          <div style={{ width: 300, flexShrink: 0 }}>
+          {/* Right — Chat panel (fixed; slot is zero-width since it's out of flow) */}
+          <div style={{ width: 0, flexShrink: 0 }}>
             <div style={{ position: 'fixed', top: 0, right: 0, width: 300, height: '100vh', borderLeft: B, background: 'var(--surface)', display: 'flex', flexDirection: 'column', zIndex: 40 }}>
 
             <div style={{ padding: '12px 16px', borderBottom: B, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
