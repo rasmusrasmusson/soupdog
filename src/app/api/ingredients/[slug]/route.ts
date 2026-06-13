@@ -116,6 +116,18 @@ export async function GET(
     (sections[row.section_key] ??= []).push(row);
   }
 
+  // ── Fetch concepts (global name bindings) for this ingredient ─
+  const { data: cmRows } = await db
+    .from('concept_member')
+    .select('id, position, concept:concept_id ( id, name, note )')
+    .eq('entity_type', 'ingredient')
+    .eq('entity_id', ing.id)
+    .order('position', { ascending: true });
+  const concepts = (cmRows ?? []).map((m: any) => {
+    const c = Array.isArray(m.concept) ? m.concept[0] : m.concept;
+    return { memberId: m.id, conceptId: c?.id, name: c?.name, note: c?.note ?? null };
+  }).filter((c: any) => c.conceptId);
+
   // ── Fetch transformation recipe ──────────────────────────────
   let transformationRecipe: any = null;
   if (ing.transformation_recipe_id) {
@@ -154,6 +166,7 @@ export async function GET(
       siblings,
       children:             children ?? [],
       composition,
+      concepts,
       sections,
       transformationRecipe,
       needsAiContent,

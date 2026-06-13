@@ -58,6 +58,7 @@ interface Ingredient {
   recipeCount?: number;
   confusedWith?: Rel[];
   composition?: CompositionEntry[];
+  concepts?: { memberId: string; conceptId: string; name: string; note?: string | null }[];
   sections?: Record<string, { id: string; headline?: string; image_url?: string;
     image_credit?: string; body?: string; bullets?: string[] }[]>;
   needsAiContent?: boolean;
@@ -343,6 +344,18 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                     )}
                   </div>
                 </div>
+
+                {(ing.concepts?.length ?? 0) > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+                      Also known as
+                    </span>
+                    {ing.concepts!.map(c => (
+                      <span key={c.memberId} style={{ fontSize: 12, color: 'var(--fg-secondary)',
+                        border: B, padding: '2px 8px', background: 'var(--surface)' }}>{c.name}</span>
+                    ))}
+                  </div>
+                )}
 
                 {(ing.brand || ing.manufacturer) && (
                   <div style={{ fontFamily: MONO, fontSize: 11, color: MUT, marginBottom: 8 }}>
