@@ -2454,6 +2454,19 @@ export function RecipeEditor({ initial, onSave, saving, fillWidth = false }: Pro
 
   return (
     <div className={fillWidth ? "w-full px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>
+
+        {/* ===== WIDTH PROBE — remove after debugging ===== */}
+        <div style={{ background: '#fca5a5', padding: 4, marginBottom: 4 }}>RUNG 1: plain full-width div</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fcd34d', marginBottom: 4 }}>
+          <tbody><tr><td style={{ padding: 4 }}>RUNG 2: table width:100%</td></tr></tbody>
+        </table>
+        <div style={{ display: 'flex', background: '#86efac', marginBottom: 4 }}>
+          <div style={{ flex: 1, padding: 4 }}>RUNG 3: flex child flex:1</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 64px 64px minmax(0,3fr) auto', gap: 4, background: '#93c5fd', marginBottom: 12 }}>
+          <div style={{ padding: 4 }}>RUNG 4: editor grid template</div><div /><div /><div /><div />
+        </div>
+        {/* ===== END PROBE ===== */}
       {/* Meta */}
       <section>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recipe title"
