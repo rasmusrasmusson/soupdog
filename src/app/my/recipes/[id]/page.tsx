@@ -394,6 +394,19 @@ export default function BasicEditPage() {
       <div style={{ flex: 1, minWidth: 0, padding: '0 32px 120px', paddingRight: 332 }}>
         <div style={{ width: '100%' }}>
 
+        {/* ===== WIDTH PROBE — remove after debugging ===== */}
+        <div style={{ background: '#fca5a5', padding: 4, marginBottom: 4 }}>RUNG 1: plain full-width div</div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: '#fcd34d', marginBottom: 4 }}>
+          <tbody><tr><td style={{ padding: 4 }}>RUNG 2: table width:100%</td></tr></tbody>
+        </table>
+        <div style={{ display: 'flex', background: '#86efac', marginBottom: 4 }}>
+          <div style={{ flex: 1, padding: 4 }}>RUNG 3: flex child flex:1</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) 64px 64px minmax(0,3fr) auto', gap: 4, background: '#93c5fd', marginBottom: 12 }}>
+          <div style={{ padding: 4 }}>RUNG 4: editor grid template</div><div /><div /><div /><div />
+        </div>
+        {/* ===== END PROBE ===== */}
+
         {/* Breadcrumb */}
         <div style={{ borderBottom: B, padding: '12px 0', marginBottom: 28, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Link href="/my/recipes" className="flex items-center gap-1.5 text-[11px] font-mono text-[var(--muted)] hover:text-[var(--accent)] transition-colors">
