@@ -16,7 +16,7 @@ const TYPE_MAP: Record<ContentType, string[] | null> = {
   All:        null,
   Recipes:    ['recipe'],
   Ingredients:['ingredient', 'product'],
-  Techniques: ['technique'],
+  Techniques: ['technique', 'task'],
   Equipment:  ['equipment'],
 };
 
@@ -209,7 +209,8 @@ export default function SearchPage() {
       case 'recipe':     return `/recipes/${r.slug}`;
       case 'ingredient':
       case 'product':    return `/ingredients/${r.slug}`;
-      case 'technique':  return `/techniques/${r.slug}`;
+      case 'technique':
+      case 'task':       return `/techniques/${r.slug}`;
       case 'equipment':  return `/tools/${r.slug}`;
       default:           return `/${r.slug}`;
     }
@@ -217,6 +218,7 @@ export default function SearchPage() {
 
   const typeLabel = (type: string) => {
     if (type === 'product') return 'Product';
+    if (type === 'task') return 'Technique';
     return type.charAt(0).toUpperCase() + type.slice(1);
   };
 
