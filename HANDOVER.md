@@ -1792,3 +1792,183 @@ button.**
   view-mode toggle (the two-registers idea); skill-building loop; personal inventory
   ("My kitchen / Blue pot" — the generic-vs-personal surface where same-name dupes are
   allowed; public catalogue stays slug-unique).
+
+# SESSION UPDATE — 2026-06-09 — Tools section; Techniques parity; archive model; account/nav; IMAGE PIPELINE
+
+A long multi-part session. Built the knowledge-section curation surface to completion
+(Tools + Techniques: create/read/edit/publish/archive), restructured account & nav,
+fixed sign-out, and built the **image upload pipeline** (Supabase Storage + resize/WebP +
+drag-and-drop). All SHIPPED & VERIFIED on prod unless marked. This entry supersedes the
+earlier-in-session draft and includes the image work that came after it.
+
+## SHIPPED & VERIFIED (prod, tested live)
+
+### Tools section — BUILT end-to-end (over the `equipment` table)
+Tasks reference tools (`tasks.suggested_tool_slugs`), so tools had to exist before task
+curation. Mirrors the Techniques/curation pattern.
+- `src/app/tools/page.tsx` — list: search + data-derived category pills, concept-level only
+  (`parent_id is null`), admin "+ Add a tool", "Show archived (N)" toggle.
+- `src/app/tools/[slug]/page.tsx` — detail (hero image slot → what-it-is → uses → techniques
+  it performs (reverse-lookup) → specs → models/siblings). Admin Archive/Unarchive + Edit.
+- `src/app/tools/[slug]/edit/page.tsx` — full edit; fixed bottom save bar; content_reviewed
+  toggle. **Hero image = ImageUpload component** (was URL-paste). Archive control removed
+  here (now detail-only).
+- `src/app/tools/new/page.tsx` — "Add a tool": name → auto-slug → category dropdown
+  (equipment_category enum) → optional summary → create + into edit.
+- API: `src/app/api/tools/[slug]/route.ts` (GET + technique reverse-lookup, archived filtered);
+  `src/app/api/admin/equipment/route.ts` (POST create, dup-slug 409);
+  `src/app/api/admin/equipment/[id]/route.ts` (PATCH edit + archive).
+- Tool→technique cross-link = REVERSE LOOKUP: verified tasks whose suggested_tool_slugs
+  contains the slug. jsonb `.contains()` UNRELIABLE → fetch verified tasks + match in JS.
+
+### Techniques/tasks — parity (create + archive)
+- `src/app/api/admin/tasks/route.ts` (NEW) — POST create. Requires name + slug + **family**
+  (NOT-NULL no-default). **Also sets `category`** (defaults to family — see category bug).
+  `image_url` added to the PATCH whitelist in `tasks/[id]/route.ts`.
+- `src/app/techniques/new/page.tsx` — "Add a technique" (was misplaced at `[slug]/new`, moved).
+- `src/app/techniques/page.tsx` — admin "+ Add a technique", **"Drafts only (N)"** filter,
+  "Show archived (N)" toggle.
+- `src/app/techniques/[slug]/page.tsx` — Archive/Unarchive next to Edit; **renders hero image**.
+- `src/app/techniques/[slug]/edit/page.tsx` — PROMINENT publish toggle (bordered box
+  "Publish this technique" / "Published — verified"); **hero image upload field**.
+
+### Archive model — SOFT-DELETE only in UI, no hard delete (decision)
+Hard delete is dangerous for a connected graph (orphans children, breaks cross-links).
+Decision: archive is the only UI removal; hard delete deferred to a possible future backend
+job, never a button. Migrations RAN LIVE: `tools_03_archive.sql`, `techniques_01_archive.sql`
+(each: `archived_at timestamptz` + index + grant). Rides on existing `*_admin_update` RLS.
+Lifecycle: draft (is_verified=false) → verified/live → archived.
+
+### Account & navigation restructure
+Principle settled: **sidebar = the product** (recipes/plan/people/ingredients);
+**avatar menu = me & account** (profile/membership/usage/sign out).
+- `src/components/layout/Header.tsx` — avatar is now a DROPDOWN menu (Profile · Account &
+  membership · Usage · Sign out). Closes on outside-click/Escape. Also re-fetches the avatar
+  on a `soupdog:profile-updated` window event (fixes stale-until-refresh).
+- `src/app/my/account/page.tsx` (NEW) — account/membership front door: plan card (reads
+  `/api/my/usage`), usage bar, upgrade→/pricing, **sign-in methods** (reads
+  `user.app_metadata.providers`, maps azure→Microsoft/google→Google/apple→Apple; DISPLAY ONLY,
+  no link/unlink UI — only Microsoft sign-in is actually built). Honest pre-billing framing
+  via the `isPlaceholder` flag.
+- `src/components/layout/Sidebar.tsx` — removed Usage (now in avatar menu). (Tools link is
+  `/tools`.)
+- `src/app/my/profile/page.tsx` — removed its duplicate "Account" section (now lives at
+  /my/account); profile = eater-only. Dispatches `soupdog:profile-updated` on save.
+- `src/lib/auth-context.tsx` — `signOut` now redirects to `/` (was leaving the user stranded
+  on the now-inaccessible page).
+
+### Cleanup pass
+Removed stale `src/app/equipment/page.tsx` ("coming soon" stub; real page is /tools).
+Category backfill RAN: `update tasks set category = family where category is null;`.
+Two small carried fixes: header avatar refresh (above); pre-seed product into create-recipe
+(`ingredients/[slug]` button passes `?product=&productSlug=`; import page prefills title + paste).
+
+### IMAGE PIPELINE — BUILT (hosting on Soupdog, no external links) ✅ technique image verified live
+- **Hosting = Supabase Storage**, public `images` bucket. Files at
+  `images/<kind>/<slug>-<timestamp>.webp` (timestamp busts CDN cache on replace).
+- `src/app/api/admin/upload-image/route.ts` (NEW) — admin-gated; takes multipart file,
+  resizes to ≤1200px + converts to **WebP** via `sharp` (1.7MB PNG → ~80–150KB), uploads via
+  the **service-role** client (past bucket RLS), returns public URL. Accepts kinds:
+  techniques/tools/ingredients/recipes/meals.
+- `src/components/admin/ImageUpload.tsx` (NEW) — reusable. **Drag-and-drop** (matches recipe
+  import) + click-to-pick + preview/replace/remove. Wired into tools & techniques edit forms.
+- `supabase/migrations/images_00_storage_bucket.sql` — creates the public bucket + read policy.
+  **MUST be run; needs `npm install sharp`; needs SUPABASE_SERVICE_ROLE_KEY in Vercel (already set).**
+- VERIFIED: technique hero image upload + render works live.
+
+## ⚠️ BUGS & LESSONS THIS SESSION
+1. **New code selects a column the migration didn't add yet → BLANK PAGE.** Hit twice
+   (tools, techniques archive_at). Run the migration BEFORE/with deploying code that reads it.
+2. **The `category` invisibility bug.** Techniques list groups/filters by `tasks.category`,
+   but create only set `family` → a technique with category=null EXISTED but was INVISIBLE
+   (found "CVap" via SQL; total stayed 95). Fixed: create sets category (defaults to family) +
+   backfill. ROOT CAUSE = three overlapping grouping columns (family/task_family/category).
+3. **person id ≠ account id.** `auth.uid()` = ACCOUNT id (bb02ae50… / 1a0f72dd…), not Rasmus's
+   person id (b6a30271…). Admin gates / RLS use account ids; env `SOUPDOG_ADMIN_ACCOUNT_IDS`.
+4. **jsonb `.contains()` unreliable** for slug-array matching → fetch-and-match in JS.
+5. **Flat-file `--`-to-folder delivery** misplaced the new-technique page → 404. Verify the
+   first-line path comment matches the placed folder.
+6. **Account linking is real:** rr@le.works has `providers: [email, azure]` (Microsoft + email
+   on one account). Worked correctly here; provider-linking has edge cases for later (OAuth
+   email vs signup email).
+7. **Connection (China/VPN) caused several false alarms** — "blank" pages, `schannel
+   handshake failed` push fails. NOT bugs. Check VPN/connection first.
+8. **Vercel missed-webhook fix:** when GitHub has a commit but Vercel didn't auto-deploy it,
+   push an EMPTY commit (`git commit --allow-empty -m "nudge" && git push`) to re-trigger.
+   (Worked this session.) The `git: 'credential-manager-core' is not a git command` line is a
+   harmless warning, not a failure.
+
+## SCHEMA CRUFT — FLAGGED FOR A DEDICATED SESSION (NOT casual cleanup)
+- Overlapping task grouping columns `family`/`task_family`/`category` (cause of bug #2).
+  Consolidate to one; needs data migration + every read/write path + dry-runs.
+- Duplicate RLS policies on `tasks` (3 INSERT / 4 SELECT / 2 UPDATE). Consolidate; confirm
+  load-bearing ones (decompose insert) before dropping.
+- Category free-text drift is INTENTIONAL per knowledge-layer §5c: free-text now → freeze to
+  controlled vocabulary (deliberate creation form) → maybe m2m. Drift = the settling signal.
+
+## DESIGN DOCS (in docs/) — pointers
+- `Soupdog_Knowledge_Section_Roadmap_And_Visual_Strategy_v0_3.md` — VALIDATED visual system
+  (TOOLS = engraved B&W; INGREDIENTS/DRINKS = colour photo on #f5f3ee, colour carries identity;
+  TECHNIQUES = hybrid doneness-still + engraved action) + §9 dietary-fit content area
+  (Nutrients → Allergies → Religious/ethical → Diets). Reusable prompt recipes embedded.
+- Culinary Knowledge Layer v0.5; Variation/Content-Pipeline v0.1 (unchanged).
+
+## NEXT SESSION — RECOMMENDED STEPS (in priority order)
+1. **Finish the image work's loose ends:** confirm `npm install sharp` + the bucket SQL ran
+   and the build is green; then decide on **AI image generation in-app** — the natural next
+   build now the pipeline exists. It calls an image model with the already-validated prompts,
+   then POSTs the result through the same upload route → bucket. Run it as a POST-VERIFY "step
+   2" action (cost-gated, never in the live edit loop), per the variation-gen discipline.
+   (Image gen is a DIFFERENT API/provider than the text models in `src/lib/ai/anthropic.ts` —
+   separate cost line, slow 10–30s, should be usage-logged like text.)
+2. **Ingredient edit page** (if ingredient images/edits wanted): ingredients have NO edit
+   surface at all today (only `/my/ingredients/new` create; OFF auto-fills images for barcode
+   products). Build an admin-gated `ingredients/[slug]/edit` + PATCH route mirroring tools/
+   techniques; the ImageUpload + pipeline (kind='ingredients') are already ready to drop in.
+   It's really "build the ingredient editor" — a real surface, not a quick add.
+3. **Content/curation pass** (the payoff): use "Drafts only" to bless the ~60 draft techniques;
+   fill the ~13 referenced tools; upload hero images (now possible). Solo-doable.
+4. **THE REVENUE TRACK (untouched for several sessions — flag honestly):** meal-plan
+   enforcement + Stripe (plan column, checkout, credit_ledger, balance gate in
+   `src/lib/ai/anthropic.ts`); Demand Phase 2 (settle Doc A §11 opens); Sharing & Delegation
+   Phase 0 (settle v0.2 §8 opens); Plan & End-Product bridge. This is the work that makes it a
+   business; the knowledge section has absorbed many sessions.
+5. Schema-cruft consolidation (own careful session — see above).
+
+## DISPLAY WORK DEFERRED (designed-intent, build against real images later)
+Recipe tool hero-shots in steps; ingredients/tools in a recipe revealing info on CLICK
+(popup, not navigate-away — keeps the calm aesthetic); meal images (can go inline since the
+meal page is otherwise sparse). Don't build until images exist to design against.
+
+## SMALL BACKLOG (carried / minor)
+- Old images not deleted on replace (timestamped; old file orphaned in bucket) — prune later.
+- Tools edit page once had a duplicate archive control (removed); fully consistent now.
+- Route rename `/api/admin/equipment` → `/api/admin/tools` (cosmetic; 4 callers lockstep; skipped).
+- npm xlsx vulns "no fix available" → migrate to SheetJS CDN dist (don't --force).
+- Re-import ~34 existing recipes through decompose; delete test carbonaras.
+- Header avatar cross-tab edge (event approach doesn't cover other tabs); saved-recipe folders;
+  barcode manual-add fallback when OFF returns nothing (China/SE-Asia thin); reader view-mode
+  toggle (two-registers); skill-building loop; personal inventory ("My kitchen / Blue pot" —
+  generic-vs-personal: public catalogue slug-unique, personal allows same-name dupes).
+
+## DELIVERY / WORKFLOW REMINDERS (for the next chat)
+- Rasmus works from China via Clash Verge TUN VPN (required for GitHub + Anthropic API).
+  No real users yet → live data changes are safe.
+- **File delivery:** Claude zips WHOLE files with `--` as the folder separator in the filename
+  (e.g. `src--app--tools--page.tsx` → `src/app/tools/page.tsx`). Rasmus downloads, extracts,
+  places manually. Deliver complete drop-in files, never partial edits. Every file's first
+  line is its real path comment (or `'use client'` then the path) — verify placed folder
+  matches it. Never PowerShell in-place edits on TSX (corrupts them).
+- **SQL** is run manually in the Supabase SQL editor (autocommit; no bare BEGIN). project id
+  npvajzgciuykugqxedmm.
+- **Git push (PowerShell):** clear NODE_EXTRA_CA_CERTS / NODE_TLS_REJECT_UNAUTHORIZED /
+  HTTPS_PROXY; `git remote set-url origin https://github.com/rasmusrasmusson/soupdog.git`;
+  Clash TUN ON; `git push`. Bracket paths `[id]`/`[slug]` are PowerShell globs — quote them or
+  use `git add -A`. Vercel auto-deploys on push to main; if it misses, empty-commit nudge.
+- Claude's esbuild check (transform-only, NOT full Next type-check):
+  `npx --yes esbuild FILE --bundle --loader:.ts=ts --loader:.tsx=tsx --jsx=automatic
+  --external:react --external:next --external:lucide-react --external:@/* --format=esm
+  --outfile=/dev/null`. Passing esbuild ≠ green Vercel build; watch the first deploy.
+- Stack: Next.js 16, TS, Tailwind v4, Supabase/Postgres, Vercel (syd1, auto-deploy on main).
+- To give Claude current code: zip the `src/` folder and upload it (the live DB is
+  authoritative; schema.sql in repo is a partial snapshot).
