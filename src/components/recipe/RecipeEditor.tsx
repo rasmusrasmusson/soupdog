@@ -1057,7 +1057,7 @@ function StepIngRow({ row, ingredientTree, fromRecipe, onChange, onRemove, overB
   };
 
   return (
-    <div className="grid gap-1.5 mb-1.5" style={{ gridTemplateColumns: '1fr 64px 64px 1fr auto' }}>
+    <div className="grid gap-1.5 mb-1.5" style={{ gridTemplateColumns: 'minmax(0,2fr) 64px 64px minmax(0,3fr) auto' }}>
       {/* Ingredient name — free text with autocomplete */}
       <div style={{ position: 'relative' }}>
         <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
@@ -2453,7 +2453,8 @@ export function RecipeEditor({ initial, onSave, saving, fillWidth = false }: Pro
   ]);
 
   return (
-<div className={fillWidth ? "max-w-3xl px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>      {/* Meta */}
+    <div className={fillWidth ? "w-full px-4 md:px-8 py-10 space-y-10" : "max-w-3xl mx-auto px-4 md:px-8 py-10 space-y-10"}>
+      {/* Meta */}
       <section>
         <input value={title} onChange={e => setTitle(e.target.value)} placeholder="Recipe title"
           className="w-full bg-transparent border-none outline-none font-display text-[28px] md:text-[36px] font-light text-[var(--fg)] placeholder:text-[var(--border)] mb-4" />
@@ -2561,13 +2562,13 @@ export function RecipeEditor({ initial, onSave, saving, fillWidth = false }: Pro
         </div>
         {ingredients.length > 0 && (
           <div className="mb-1 grid gap-2 font-mono text-[9px] uppercase tracking-wider text-[var(--muted)]"
-            style={{ gridTemplateColumns: '1fr 70px 70px 1fr auto' }}>
+            style={{ gridTemplateColumns: 'minmax(0,2fr) 70px 70px minmax(0,3fr) auto' }}>
             <span>Ingredient</span><span className="text-right">Qty</span><span>Unit</span><span>Prep</span><span className="w-5" />
           </div>
         )}
         {ingredients.map((row, i) => (
           <div key={row.id} className="grid gap-2 py-1.5 border-b border-[var(--border-subtle)] last:border-0 items-center"
-            style={{ gridTemplateColumns: '1fr 70px 70px 1fr auto' }}>
+            style={{ gridTemplateColumns: 'minmax(0,2fr) 70px 70px minmax(0,3fr) auto' }}>
             <span className="text-[12px] text-[var(--fg)] px-2 py-1">
               {row.name}{row.ingredientId && <span className="ml-1 text-[var(--accent)] text-[10px]">✓</span>}
             </span>
