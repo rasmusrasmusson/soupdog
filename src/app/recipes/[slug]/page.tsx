@@ -272,14 +272,14 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 }
 
 
-function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: string | null }) {
+function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonicalId?: string | null; concepts?: { memberId: string; conceptId: string; name: string }[] }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
   const toolChecks = useChecklist(recipe.equipment?.length ?? 0);
   const [servings, setServings] = useState(recipe.servings);
   const [addedIngs, setAddedIngs] = useState<Record<string, boolean>>({});
   const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
-  const changeServings = (delta: number) => setServings(prev => Math.max(1, prev + delta));
+  const changeServings = (delta: number) => setServings((prev: number) => Math.max(1, prev + delta));
 
   // Live per-serving nutrition reported up from RecipeNutritionSection (the same
   // figures shown on the page). Falls back to stored nutrition if present.
@@ -353,6 +353,14 @@ function RecipeView({ recipe, canonicalId }: { recipe: Recipe; canonicalId?: str
               <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
             </span>
           </div>
+          {(concepts?.length ?? 0) > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mb-4">
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">Also known as</span>
+              {concepts!.map(c => (
+                <span key={c.memberId} className="text-[12px] text-[var(--fg-secondary)] border border-[var(--border)] px-2 py-0.5 bg-[var(--surface)]">{c.name}</span>
+              ))}
+            </div>
+          )}
           <div className="hidden md:grid border border-[var(--border)] text-[11px]"
             style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
             {metaItems.map(([label, value], i) => (
@@ -457,6 +465,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
   const [isAuthor,   setIsAuthor]   = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [canonicalId, setCanonicalId] = useState<string | null>(null);
+  const [concepts, setConcepts] = useState<{ memberId: string; conceptId: string; name: string }[]>([]);
 
   React.useEffect(() => {
     async function load() {
@@ -604,6 +613,15 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
     load();
   }, [slug]);
 
+  // Load concept names (global "also known as") once we know the canonical id.
+  React.useEffect(() => {
+    if (!canonicalId) return;
+    fetch(`/api/admin/concepts?entityType=recipe&entityId=${encodeURIComponent(canonicalId)}`)
+      .then(r => r.ok ? r.json() : { concepts: [] })
+      .then(d => setConcepts(Array.isArray(d.concepts) ? d.concepts : []))
+      .catch(() => {});
+  }, [canonicalId]);
+
   const handlePublish = async () => {
     if (!canonicalId) return;
     setPublishing(true);
@@ -654,7 +672,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           </button>
         </div>
       )}
-      <RecipeView recipe={recipe} canonicalId={canonicalId} />
+      <RecipeView recipe={recipe} canonicalId={canonicalId} concepts={concepts} />
     </>
   );
 }

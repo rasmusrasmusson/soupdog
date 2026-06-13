@@ -19,11 +19,24 @@ const B = '1px solid var(--border)';
 export interface BoundConcept { memberId: string; conceptId: string; name: string; note?: string | null }
 
 export function ConceptBinder({ entityType, entityId, value }: {
-  entityType: 'ingredient' | 'recipe'; entityId: string; value: BoundConcept[];
+  entityType: 'ingredient' | 'recipe'; entityId: string; value?: BoundConcept[];
 }) {
   const [bound, setBound] = useState<BoundConcept[]>(value ?? []);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+
+  // If no initial value was supplied, self-load the current bindings. This lets
+  // the binder be dropped in with just entityType+entityId (e.g. the recipe edit
+  // page) without the host having to pre-fetch.
+  useEffect(() => {
+    if (value !== undefined) return;
+    let live = true;
+    fetch(`/api/admin/concepts?entityType=${entityType}&entityId=${encodeURIComponent(entityId)}`)
+      .then(r => r.ok ? r.json() : { concepts: [] })
+      .then(d => { if (live) setBound(Array.isArray(d.concepts) ? d.concepts : []); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [entityType, entityId, value]);
 
   async function unbind(memberId: string) {
     setStatus(null);

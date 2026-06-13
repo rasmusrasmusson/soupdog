@@ -7,6 +7,7 @@ import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
+import { ConceptBinder } from '@/components/knowledge/ConceptBinder';
 
 const MONO = 'var(--font-mono)';
 const B    = '1px solid var(--border)';
@@ -410,6 +411,16 @@ export default function BasicEditPage() {
         </div>
 
         {recipe && <RecipeWYSIWYG recipe={recipe} onChange={setRecipe} />}
+
+        {/* Concepts (global name bindings) for this recipe */}
+        {recipe?._canonicalId && (
+          <div style={{ marginTop: 28 }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, marginBottom: 10 }}>
+              Concepts — names this is known by
+            </div>
+            <ConceptBinder entityType="recipe" entityId={recipe._canonicalId} />
+          </div>
+        )}
       </div>
 
       {/* Right — Chat panel */}
