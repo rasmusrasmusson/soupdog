@@ -337,12 +337,12 @@ export default function EditRecipePage() {
       ) : error ? (
         <div className="px-8 py-16 text-[var(--error)] text-[12px] font-mono">{error}</div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
 
           {/* Left — Recipe editor. Chat is position:fixed (out of flow); reserve
               its 300px via paddingRight and give the chat slot width:0 below.
               No max-width cap — the editor fills the available space. */}
-          <div style={{ flex: 1, minWidth: 0, paddingRight: 300 }}>
+          <div style={{ flex: 1, minWidth: 0, width: 0, paddingRight: 300 }}>
             <div style={{ width: '100%' }}>
             <RecipeEditor key={editorKey} initial={editorInitial} onSave={handleSave} saving={saving} fillWidth />
 
