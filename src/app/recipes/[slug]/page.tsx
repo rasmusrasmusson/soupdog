@@ -343,26 +343,60 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
     <div className="flex h-full screen-only">
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
 
-        {/* Title + meta */}
+        {/* Title + meta — intro region matches the ingredient page:
+            title + "also known as" + description on the left, hero floated
+            top-right. Meta stats sit BELOW the intro, not between title and
+            description. */}
         <div className="px-4 md:px-8 pt-6 pb-5 border-b border-[var(--border)]">
-          <div className="flex items-start justify-between gap-4 mb-4">
-            <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
-              {recipe.title}
-            </h1>
-            <span className="flex items-center gap-3 flex-shrink-0 no-print">
-              <PrintButton title={recipe.title} />
-              <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
-            </span>
-          </div>
-          {(concepts?.length ?? 0) > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap mb-4">
-              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">Also known as</span>
-              {concepts!.map(c => (
-                <span key={c.memberId} className="text-[12px] text-[var(--fg-secondary)] border border-[var(--border)] px-2 py-0.5 bg-[var(--surface)]">{c.name}</span>
-              ))}
+
+          {/* Intro region: lead left, hero right (when present) */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: recipe.heroImageUrl ? 'minmax(0,1fr) 184px' : '1fr',
+              gap: 24,
+              alignItems: 'start',
+            }}>
+            <div>
+              <div className="flex items-start justify-between gap-4 mb-2">
+                <h1 className="font-display text-[24px] md:text-[28px] font-normal leading-tight text-[var(--fg)]">
+                  {recipe.title}
+                </h1>
+                <span className="flex items-center gap-3 flex-shrink-0 no-print">
+                  <PrintButton title={recipe.title} />
+                  <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
+                </span>
+              </div>
+
+              {(concepts?.length ?? 0) > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-[var(--muted)]">Also known as</span>
+                  {concepts!.map(c => (
+                    <span key={c.memberId} className="text-[12px] text-[var(--fg-secondary)] border border-[var(--border)] px-2 py-0.5 bg-[var(--surface)]">{c.name}</span>
+                  ))}
+                </div>
+              )}
+
+              {recipe.description && (
+                <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--fg-secondary)', margin: 0 }}>
+                  {recipe.description}
+                </p>
+              )}
             </div>
-          )}
-          <div className="hidden md:grid border border-[var(--border)] text-[11px]"
+
+            {/* Hero — same treatment as the ingredient page (square, surface bg) */}
+            {recipe.heroImageUrl && (
+              <div style={{ position: 'relative', width: '100%', aspectRatio: '1/1',
+                overflow: 'hidden', border: B, background: 'var(--surface-hover)' }}>
+                <img src={recipe.heroImageUrl} alt={recipe.title}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover',
+                    objectPosition: 'center', display: 'block' }} />
+              </div>
+            )}
+          </div>
+
+          {/* Meta stats — below the intro */}
+          <div className="hidden md:grid border border-[var(--border)] text-[11px] mt-5"
             style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
             {metaItems.map(([label, value], i) => (
               <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
@@ -373,7 +407,7 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
               </div>
             ))}
           </div>
-          <div className="md:hidden border border-[var(--border)]"
+          <div className="md:hidden border border-[var(--border)] mt-5"
             style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}>
             {metaItems.map(([label, value]) => (
               <div key={label} style={{ background: 'var(--surface)', padding: '8px 12px' }}>
@@ -382,9 +416,6 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
               </div>
             ))}
           </div>
-          {recipe.description && (
-            <p className="mt-3 text-[12px] text-[var(--muted)] leading-relaxed max-w-2xl">{recipe.description}</p>
-          )}
         </div>
 
         {/* Inline controls: servings + progress (desktop). Replaces the old
@@ -410,6 +441,7 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
         <RecipeDisplay
           recipe={recipe}
           linkIngredients
+          showHero={false}
           interactive={{ ingChecks, stepChecks, servings }}
         />
 

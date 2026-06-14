@@ -41,6 +41,8 @@ export interface RecipeDisplayProps {
   interactive?: RecipeDisplayInteractive;
   /** Link ingredient names to their pages (true on the public view; off in preview). */
   linkIngredients?: boolean;
+  /** Show the hero image at the top. Off when the page renders its own hero (e.g. the public recipe view's intro region). Default true. */
+  showHero?: boolean;
 }
 
 // ── small presentational helpers (moved here from the view page) ──
@@ -131,7 +133,7 @@ function StepLine({ instruction, notes }: { instruction: string; notes?: string 
   );
 }
 
-export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: RecipeDisplayProps) {
+export function RecipeDisplay({ recipe, interactive, linkIngredients = false, showHero = true }: RecipeDisplayProps) {
   const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
   const td: React.CSSProperties    = { padding: '9px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
@@ -202,7 +204,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: 
     <div className="px-4 md:px-8 py-6 space-y-8">
 
       {/* ── Hero image (optional) ── */}
-      {recipe.heroImageUrl && (
+      {showHero && recipe.heroImageUrl && (
         <div className="border border-[var(--border)] overflow-hidden">
           <img src={recipe.heroImageUrl} alt={recipe.title}
             style={{ display: 'block', width: '100%', maxHeight: 360, objectFit: 'cover' }} />
