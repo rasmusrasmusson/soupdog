@@ -204,17 +204,7 @@ export default function MealRecipePage() {
           {mode === 'cook' && hasMerge && (
             <>
               <section style={{ marginBottom: 30 }}>
-                <SectionTitle>Everything you need</SectionTitle>
-                <div style={{ borderTop: B }}>
-                  {data.combinedIngredients.map((ing, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 2px', borderBottom: B }}>
-                      <span style={{ fontSize: 14.5, color: 'var(--fg)' }}>{ing.name}</span>
-                      <span style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
-                        {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <CombinedIngredients items={data.combinedIngredients} />
               </section>
 
               {/* Method: prose (L2) by default; toggle to the timed step list (L1). */}
@@ -274,17 +264,7 @@ export default function MealRecipePage() {
           {(mode === 'sections' || (mode === 'cook' && !hasMerge)) && (
             <>
               <section style={{ marginBottom: 36 }}>
-                <SectionTitle>Everything you need</SectionTitle>
-                <div style={{ borderTop: B }}>
-                  {data.combinedIngredients.map((ing, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '8px 2px', borderBottom: B }}>
-                      <span style={{ fontSize: 14.5, color: 'var(--fg)' }}>{ing.name}</span>
-                      <span style={{ ...MONO, fontSize: 12, color: 'var(--muted)' }}>
-                        {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                <CombinedIngredients items={data.combinedIngredients} />
               </section>
               {data.components.map(c => <DishSection key={c.componentId} c={c} showIngredients={false} />)}
             </>
@@ -393,6 +373,64 @@ function CookTimeline({ merged, bare }: { merged: MergedPayload; bare?: boolean 
         })}
       </div>
     </section>
+  );
+}
+
+// Combined shopping list rendered as the recipe page's bordered table
+// (mirrors RecipeDisplay's Ingredients table: # · Product · Qty · Unit), so the
+// meal recipe shares the real recipe's visual language instead of a bare list.
+function CombinedIngredients({ items }: { items: CombinedIng[] }) {
+  const th: React.CSSProperties = {
+    padding: '8px 14px', ...MONO, fontSize: 9, textTransform: 'uppercase',
+    letterSpacing: '0.18em', color: 'var(--muted)', borderRight: B, textAlign: 'left',
+    whiteSpace: 'nowrap',
+  };
+  const td: React.CSSProperties = { padding: '9px 14px', color: 'var(--fg)', verticalAlign: 'middle', borderRight: B };
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+        <span style={{ ...MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.22em', color: 'var(--muted)' }}>Ingredients</span>
+        <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+        <span style={{ ...MONO, fontSize: 9, color: 'var(--muted)' }}>{items.length} items · everything you need</span>
+      </div>
+
+      {/* mobile: stacked rows */}
+      <div className="md:hidden" style={{ border: B }}>
+        {items.map((ing, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderBottom: i < items.length - 1 ? B : 'none' }}>
+            <span style={{ ...MONO, fontSize: 10, color: 'var(--muted)', width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+            <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
+            <span style={{ ...MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>
+              {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* desktop: bordered table */}
+      <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12, minWidth: 420 }}>
+          <thead>
+            <tr style={{ background: 'var(--surface-hover)' }}>
+              <th style={{ ...th, width: 36 }}>#</th>
+              <th style={th}>Product</th>
+              <th style={{ ...th, width: 120, textAlign: 'right', borderRight: 'none' }}>Quantity</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((ing, i) => (
+              <tr key={i} style={{ borderTop: B }}>
+                <td style={{ ...td, ...MONO, fontSize: 11, color: 'var(--muted)', textAlign: 'right', width: 36 }}>{i + 1}</td>
+                <td style={{ ...td, fontWeight: 500 }}>{ing.name}</td>
+                <td style={{ ...td, ...MONO, color: ing.mixedUnits ? 'var(--muted)' : 'var(--fg)', textAlign: 'right', borderRight: 'none' }}>
+                  {ing.mixedUnits ? 'across dishes' : fmtQty(ing.quantityValue, ing.quantityUnit)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
