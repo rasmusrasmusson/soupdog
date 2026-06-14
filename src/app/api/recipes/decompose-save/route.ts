@@ -263,6 +263,8 @@ export async function POST(req: NextRequest) {
     //    dependency edges after all steps exist. ──
     const stepIdByNode = new Map<string, string>();
     let ingOrderIndex = 0;
+    let ingredientsInserted = 0;
+    const ingredientInsertErrors: string[] = [];
     const stepIngredientIds = new Set<string>();
 
     for (let i = 0; i < dag.nodes.length; i++) {
@@ -303,9 +305,17 @@ export async function POST(req: NextRequest) {
       const ing = (n.ingredients ?? [])[0];
       if (ing?.name?.trim()) {
         const ingredientId = await findOrCreateIngredient(db, ing.name, createdIngredients);
-        if (ingredientId) {
+        if (!ingredientId) {
+          // findOrCreate failed — record so we can report instead of silently
+          // saving a recipe that's missing this ingredient.
+          ingredientInsertErrors.push(`could not resolve ingredient "${ing.name}"`);
+        } else {
           stepIngredientIds.add(ingredientId);
-          await db.from('version_ingredients').insert({
+          // CHECK the insert — previously this was fire-and-forget, so an RLS /
+          // grant / constraint failure produced a recipe with steps but ZERO
+          // ingredients and NO error surfaced to the user (the exact "blank
+          // Product/Qty" bug). Now we capture and report any failure.
+          const { error: viErr } = await db.from('version_ingredients').insert({
             version_id:     version.id,
             step_id:        step.id,
             ingredient_id:  ingredientId,
@@ -315,6 +325,11 @@ export async function POST(req: NextRequest) {
             optional:       false,
             order_index:    ++ingOrderIndex,
           });
+          if (viErr) {
+            ingredientInsertErrors.push(`"${ing.name}": ${viErr.code ?? ''} ${viErr.message ?? viErr}`.trim());
+          } else {
+            ingredientsInserted++;
+          }
         }
       }
     }
@@ -355,6 +370,22 @@ export async function POST(req: NextRequest) {
       recipe_version_id: version.id,
     });
 
+    // The recipe is saved with steps but its ingredients failed to persist —
+    // exactly the "blank Product/Qty" bug. Fail loudly with the captured Postgres
+    // error(s) rather than returning a broken recipe. (We require that at least
+    // one ingredient landed when the DAG carried ingredient-bearing nodes.)
+    const dagHadIngredients = dag.nodes.some(
+      (n: any) => Array.isArray(n.ingredients) && n.ingredients.some((ig: any) => ig?.name?.trim())
+    );
+    if (dagHadIngredients && ingredientsInserted === 0) {
+      return NextResponse.json({
+        error: 'The recipe was structured correctly but its ingredients could not be saved. '
+             + 'Please try again.',
+        retryable: true,
+        detail: ingredientInsertErrors.slice(0, 5),
+      }, { status: 500 });
+    }
+
     if (createdIngredients.length > 0) {
       after(() => backfillNutrition(db, user.id, createdIngredients));
     }
@@ -363,6 +394,8 @@ export async function POST(req: NextRequest) {
       id: canonical.id,
       slug,
       stepsWritten: stepIdByNode.size,
+      ingredientsWritten: ingredientsInserted,
+      ingredientErrors: ingredientInsertErrors.slice(0, 5),
       tasksCreated: createdTasks,         // surfaced so you can see what entered the library unverified
       ingredientsCreated: createdIngredients.map((c) => c.name),
     }, { status: 201 });
