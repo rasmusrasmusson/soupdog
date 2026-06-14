@@ -201,6 +201,14 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false }: 
   return (
     <div className="px-4 md:px-8 py-6 space-y-8">
 
+      {/* ── Hero image (optional) ── */}
+      {recipe.heroImageUrl && (
+        <div className="border border-[var(--border)] overflow-hidden">
+          <img src={recipe.heroImageUrl} alt={recipe.title}
+            style={{ display: 'block', width: '100%', maxHeight: 360, objectFit: 'cover' }} />
+        </div>
+      )}
+
       {/* ── Ingredients ── */}
       <section>
         <SectionHeader title="Ingredients" meta={`${displayIngredients.length} items · ${servings} servings`} />

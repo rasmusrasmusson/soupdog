@@ -32,6 +32,7 @@ export interface DagRecipeMeta {
   title?: string;
   description?: string;
   cuisine?: string;
+  heroImageUrl?: string;
   tags?: string[];
   servings?: number;
   difficulty?: string;
@@ -126,6 +127,7 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
     title:            meta.title ?? dag.title ?? 'Untitled recipe',
     description:      meta.description || undefined,
     cuisine:          meta.cuisine || undefined,
+    heroImageUrl:     meta.heroImageUrl || undefined,
     tags:             meta.tags && meta.tags.length ? meta.tags : undefined,
     servings:         meta.servings ?? dag.servings ?? 4,
     difficulty:       (meta.difficulty as DifficultyLevel) ?? 'medium',

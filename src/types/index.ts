@@ -331,6 +331,7 @@ export interface Recipe {
   totalTimeSeconds:    number;
   activeTimeSeconds?:  number;
   passiveTimeSeconds?: number;
+  heroImageUrl?:       string;
   ingredients:         RecipeIngredientRef[];
   steps:               RecipeStep[];
   subRecipes?:         SubRecipeRef[];

@@ -135,6 +135,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
     totalTimeSeconds:   rv?.total_time_seconds   ?? row.total_time_seconds   ?? 0,
     activeTimeSeconds:  rv?.active_time_seconds  ?? row.active_time_seconds  ?? undefined,
     passiveTimeSeconds: rv?.passive_time_seconds ?? row.passive_time_seconds ?? undefined,
+    heroImageUrl:       rv?.hero_image_url ?? row.hero_image_url ?? undefined,
     ingredients,
     steps,
     equipment,
@@ -486,7 +487,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
             *,
             recipe_versions (
               id, title, description, cuisine, tags, base_servings,
-              difficulty, total_time_seconds, active_time_seconds,
+              difficulty, total_time_seconds, active_time_seconds, hero_image_url,
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,
                 food_state, prep_note, optional, step_id,
@@ -568,7 +569,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
             .from('recipe_versions')
             .select(`
               id, title, description, cuisine, tags, base_servings,
-              difficulty, total_time_seconds, active_time_seconds,
+              difficulty, total_time_seconds, active_time_seconds, hero_image_url,
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,
                 food_state, prep_note, optional, step_id,

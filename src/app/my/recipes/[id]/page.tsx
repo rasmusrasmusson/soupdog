@@ -6,6 +6,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
+import { ImageUpload } from '@/components/admin/ImageUpload';
 import { SoupdogIcon } from '@/components/icons/SoupdogIcon';
 import { ConceptBinder } from '@/components/knowledge/ConceptBinder';
 
@@ -54,6 +55,7 @@ function editorToImportJson(data: any): any {
     _canonicalId: data.canonicalId, _versionId: data.versionId,
     _equipmentIds: data.equipmentIds ?? [], _isPublished: data.isPublished ?? false,
     title: data.title ?? '', description: data.description ?? '', cuisine: data.cuisine ?? null,
+    heroImageUrl: data.heroImageUrl ?? null,
     difficulty: data.difficulty ?? 'medium', servings: data.servings ?? 4,
     totalTimeMinutes: data.totalTimeMinutes ?? 0, activeTimeMinutes: data.activeTimeMinutes ?? null,
     tags: data.tags ? data.tags.split(',').map((t: string) => t.trim()).filter(Boolean) : [],
@@ -99,6 +101,25 @@ function RecipeWYSIWYG({ recipe, onChange }: { recipe: any; onChange: (r: any) =
         {recipe.description && (
           <p style={{ marginTop: 8, fontFamily: MONO, fontSize: 11, color: MUT, lineHeight: 1.6 }}>{recipe.description}</p>
         )}
+      </div>
+
+      {/* Hero image — shown if set; uploader always available */}
+      <div style={{ marginBottom: 24 }}>
+        {recipe.heroImageUrl && (
+          <div style={{ marginBottom: 10, border: B, overflow: 'hidden' }}>
+            <img src={recipe.heroImageUrl} alt={recipe.title || 'Recipe'}
+              style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'cover' }} />
+          </div>
+        )}
+        <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: MUT, marginBottom: 8 }}>
+          {recipe.heroImageUrl ? 'Replace hero image' : 'Add a hero image'}
+        </div>
+        <ImageUpload
+          kind="recipes"
+          slug={recipe._canonicalId || 'recipe'}
+          value={recipe.heroImageUrl ?? ''}
+          onChange={(url: string) => onChange({ ...recipe, heroImageUrl: url || null })}
+        />
       </div>
 
       {/* Meta grid — editable */}
@@ -315,6 +336,7 @@ export default function BasicEditPage() {
           tags:              Array.isArray(recipe.tags) ? recipe.tags.join(', ') : (recipe.tags ?? ''),
           servings:          recipe.servings,
           difficulty:        recipe.difficulty,
+          heroImageUrl:      recipe.heroImageUrl ?? null,
           totalTimeMinutes:  recipe.totalTimeMinutes ?? 0,
           activeTimeMinutes: recipe.activeTimeMinutes ?? 0,
           steps:             flatSteps,
@@ -356,7 +378,7 @@ export default function BasicEditPage() {
             if (event.type === 'chunk') { setStreamingText(t => t + event.text); }
             else if (event.type === 'done') {
               setStreamingText('');
-              const meta = { _canonicalId: recipe._canonicalId, _versionId: recipe._versionId, _equipmentIds: recipe._equipmentIds, _isPublished: recipe._isPublished };
+              const meta = { _canonicalId: recipe._canonicalId, _versionId: recipe._versionId, _equipmentIds: recipe._equipmentIds, _isPublished: recipe._isPublished, heroImageUrl: recipe.heroImageUrl };
               if (event.responseType === 'answer') {
                 setChatHistory(prev => [...prev, { type: 'answer', user: message, recipe, assistantSummary: event.answer }]);
               } else if (event.requiresConfirmation) {

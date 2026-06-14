@@ -66,7 +66,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
       id, slug, is_published,
       recipe_versions!current_version_id (
         id, title, description, cuisine, tags, base_servings,
-        difficulty, total_time_seconds, active_time_seconds,
+        difficulty, total_time_seconds, active_time_seconds, hero_image_url,
         version_steps (
           id, order_index, step_type, group_label, instruction,
           duration_seconds, temperature_celsius, appliance_settings
@@ -150,6 +150,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
     difficulty:        rv?.difficulty ?? 'medium',
     totalTimeMinutes:  Math.round((rv?.total_time_seconds ?? 0) / 60),
     activeTimeMinutes: Math.round((rv?.active_time_seconds ?? 0) / 60),
+    heroImageUrl:      rv?.hero_image_url ?? null,
     ingredients,
     steps,
     equipmentIds:      (rv?.version_equipment ?? []).map((ve: any) => ve.equipment?.id).filter(Boolean),
@@ -202,6 +203,7 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
       total_time_seconds:   totalTimeSeconds,
       active_time_seconds:  (data.activeTimeMinutes ?? 0) * 60,
       passive_time_seconds: Math.max(0, totalTimeSeconds - (data.activeTimeMinutes ?? 0) * 60),
+      hero_image_url:       data.heroImageUrl?.trim() || null,
     })
     .select('id')
     .single();
