@@ -162,6 +162,15 @@ export default function ImportRecipePage() {
   const [chatError,   setChatError]   = useState<string|null>(null);
   const [pending,     setPending]     = useState<PendingChange|null>(null);
 
+  // ── Create-with-AI butler (generate from a prompt) ──
+  const [genPrompt,   setGenPrompt]   = useState('');
+  const [genLoading,  setGenLoading]  = useState(false);
+  const [genError,    setGenError]    = useState<string|null>(null);
+  // The butler's non-generate responses (clarify / existing). When it generates,
+  // we feed the text straight into the import pipeline and clear these.
+  const [genClarify,  setGenClarify]  = useState<{ question: string; suggestions: string[] }|null>(null);
+  const [genExisting, setGenExisting] = useState<{ id: string; slug: string|null; title: string; isPublished: boolean }[]|null>(null);
+
   const chatEndRef   = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -290,6 +299,52 @@ export default function ImportRecipePage() {
     await handleImportFile(new File([text], 'recipe.txt', { type: 'text/plain' }));
   };
 
+  // Create-with-AI: ask the butler. Three outcomes —
+  //  • clarify  → show the question + tappable options (re-submits on tap)
+  //  • existing → show links to the user's matching recipe(s); don't regenerate
+  //  • generate → feed the returned recipe text into the normal import pipeline
+  const handleGenerate = async (overridePrompt?: string) => {
+    const p = (overridePrompt ?? genPrompt).trim();
+    if (!p || genLoading) return;
+    setGenLoading(true);
+    setGenError(null);
+    setGenClarify(null);
+    setGenExisting(null);
+    try {
+      const res  = await fetch('/api/recipes/generate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: p }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Generation failed');
+
+      if (data.clarifyingQuestion) {
+        setGenClarify(data.clarifyingQuestion);
+        return;
+      }
+      if (Array.isArray(data.existing) && data.existing.length) {
+        setGenExisting(data.existing);
+        return;
+      }
+      if (typeof data.recipeText === 'string' && data.recipeText.trim()) {
+        // Seed the detected title (so the parser/preview keeps it) and run the
+        // generated text through the exact same path as pasted text.
+        if (typeof data.title === 'string' && data.title.trim()) setManualTitle(data.title.trim());
+        await handleImportFile(new File([data.recipeText], 'recipe.txt', { type: 'text/plain' }));
+        return;
+      }
+      throw new Error('Could not generate a recipe — try rephrasing.');
+    } catch (err: any) {
+      setGenError(err.message ?? 'Generation failed');
+    } finally {
+      setGenLoading(false);
+    }
+  };
+
+  const handleGenKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(); }
+  };
+
   const handleChatSend = async () => {
     if (!chatInput.trim() || chatLoading || !preview) return;
     const message = chatInput.trim();
@@ -404,11 +459,103 @@ export default function ImportRecipePage() {
         Add recipe
       </h1>
       <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
-        Upload a photo, screenshot, or PDF — or paste the recipe text below.
+        Ask the AI to create one, upload a photo or PDF, or paste the recipe text.
       </p>
 
       {status !== 'done' && (
         <>
+          {/* ── Create with AI (the butler) — first entry point ── */}
+          <div style={{ border: B, padding: '16px 18px', marginBottom: 20, background: 'var(--accent-subtle)' }}>
+            <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)', marginBottom: 8 }}>
+              Create with AI
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+              <textarea
+                value={genPrompt}
+                onChange={e => setGenPrompt(e.target.value)}
+                onKeyDown={handleGenKeyDown}
+                rows={2}
+                disabled={genLoading}
+                placeholder={'Tell me what to make — e.g. "a recipe for a Negroni" or "a quick weeknight dhal"'}
+                style={{ flex: 1, padding: '9px 12px', border: B, background: 'var(--bg)', color: 'var(--fg)',
+                  fontFamily: MONO, fontSize: 12, outline: 'none', resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' as const }}
+              />
+              <button
+                onClick={() => handleGenerate()}
+                disabled={genLoading || !genPrompt.trim()}
+                style={{ flexShrink: 0, padding: '9px 16px', border: 'none', background: 'var(--accent)', color: 'var(--bg)',
+                  fontFamily: MONO, fontSize: 11, cursor: genLoading || !genPrompt.trim() ? 'default' : 'pointer',
+                  opacity: genLoading || !genPrompt.trim() ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6, height: 38 }}>
+                {genLoading ? <><Loader2 size={13} className="animate-spin" /> Working</> : <><Send size={13} /> Make it</>}
+              </button>
+            </div>
+
+            {genError && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10,
+                fontFamily: MONO, fontSize: 11, color: '#92400e' }}>
+                <AlertTriangle size={12} /> {genError}
+              </div>
+            )}
+
+            {/* Butler asked a clarifying question */}
+            {genClarify && (
+              <div style={{ marginTop: 12, padding: '10px 12px', border: B, background: 'var(--bg)' }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--fg)', lineHeight: 1.5, marginBottom: genClarify.suggestions.length ? 8 : 0 }}>
+                  {genClarify.question}
+                </div>
+                {genClarify.suggestions.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {genClarify.suggestions.map((s, i) => (
+                      <button key={i}
+                        onClick={() => { const np = `${genPrompt} — ${s}`.trim(); setGenPrompt(np); handleGenerate(np); }}
+                        style={{ fontFamily: MONO, fontSize: 10, padding: '4px 10px', border: B,
+                          background: 'var(--surface)', color: 'var(--accent)', cursor: 'pointer' }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Butler found existing recipe(s) — don't regenerate, link to them */}
+            {genExisting && (
+              <div style={{ marginTop: 12, padding: '10px 12px', border: B, background: 'var(--bg)' }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--fg)', lineHeight: 1.5, marginBottom: 8 }}>
+                  You already have {genExisting.length === 1 ? 'this recipe' : 'recipes like this'}:
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {genExisting.map(rec => (
+                    <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Link href={`/my/recipes/${rec.id}`}
+                        style={{ fontFamily: MONO, fontSize: 12, color: 'var(--accent)', textDecoration: 'underline' }}>
+                        {rec.title}
+                      </Link>
+                      {rec.isPublished && rec.slug && (
+                        <Link href={`/recipes/${rec.slug}`}
+                          style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
+                          view live →
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={() => { setGenExisting(null); handleGenerate(`${genPrompt} (make a new one anyway)`); }}
+                  style={{ marginTop: 10, fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
+                    background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                  Make a new one anyway
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+            <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.15em' }}>or add your own</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+          </div>
+
           {/* Optional recipe name */}
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 4 }}>

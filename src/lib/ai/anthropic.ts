@@ -15,6 +15,7 @@ export type AiFeature =
   | 'nutrition_backfill'
   | 'meal_plan'
   | 'meal_merge'
+  | 'recipe_generate'
   | 'other';
 
 type LogArgs = {

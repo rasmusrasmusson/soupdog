@@ -1972,3 +1972,16 @@ meal page is otherwise sparse). Don't build until images exist to design against
 - Stack: Next.js 16, TS, Tailwind v4, Supabase/Postgres, Vercel (syd1, auto-deploy on main).
 - To give Claude current code: zip the `src/` folder and upload it (the live DB is
   authoritative; schema.sql in repo is a partial snapshot).
+
+## 2026-06-14 — AI compose + design arc
+- SHIPPED: AI compose meal feature — route `src/app/api/my/meals/[id]/compose/route.ts`
+  (Slice A) + `src/components/meal/MealComposer.tsx` wired into the meal editor (Slice B).
+  Working & deployed. Selection-not-invention; grounded butler.
+- SHIPPED: meal recipe view ingredient table (CombinedIngredients) matching RecipeDisplay.
+- DESIGN NOTES added to /docs (design-only, parked — downstream of atomic decomposition):
+  - Skill_Aware_Cooking_Together_v0.2 (canonical; 0–3 competency scale settled)
+  - Active_Cooking_Sessions_v0.1 (resumable multi-device session; Layer 1 = next buildable)
+  - Consumption_Tracking_v0.1 (plan-as-default-log)
+  - TODO: Behavioral_Data_And_Insights note (not yet written)
+- NEXT: (1) test AI compose vs real catalogue; (2) build resumable session Layer 1 (schema first).
+- See HANDOVER_next_chat_2026-06-14.md for full detail.
