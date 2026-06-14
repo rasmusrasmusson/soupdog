@@ -165,7 +165,7 @@ Rules:
   //    (selection-not-invention: we only ever return real, owned recipes). Match
   //    loosely on normalised title so minor wording differences still resolve.
   if (parsed.action === 'existing' && Array.isArray(parsed.matches)) {
-    const wanted = parsed.matches.map((m: any) => norm(String(m))).filter(Boolean);
+    const wanted: string[] = parsed.matches.map((m: any) => norm(String(m))).filter(Boolean);
     const existing = catalogue
       .filter(c => wanted.some(w => norm(c.title) === w || norm(c.title).includes(w) || w.includes(norm(c.title))))
       .slice(0, 4)
