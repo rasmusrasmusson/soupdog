@@ -298,6 +298,11 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
 }
 
 // DELETE /api/my/recipes/[id]
+// ARCHIVE, not hard-delete. Recipes are nodes in a connected graph — a meal
+// references its component dishes via meal_component (ON DELETE CASCADE), so a
+// hard delete would silently gut any meal that uses the dish. Archiving sets
+// archived_at: the row and all references stay intact; the recipe just drops out
+// of My Recipes / browse / search. Mirrors the ingredient archive model.
 export async function DELETE(_: NextRequest, context: { params: Promise<{ id: string }> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -306,27 +311,60 @@ export async function DELETE(_: NextRequest, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const db = supabase as any;
 
-  // Get the slug first so we can clean up legacy table
+  // Confirm ownership + get slug (to drop the public mirror row).
   const { data: canonical } = await db
     .from('recipe_canonicals')
-    .select('slug')
+    .select('id, slug')
     .eq('id', id)
     .eq('author_id', user.id)
     .single();
 
   if (!canonical) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Delete from legacy recipes table first
+  // Remove the public mirror row so the archived recipe leaves the public
+  // /recipes browse (which reads the `recipes` mirror by is_published). The
+  // canonical + versions + meal references all stay intact.
   await db.from('recipes').delete().eq('slug', canonical.slug);
 
-  // Delete canonical (cascades to versions, steps, ingredients)
+  // Informational: how many meals reference this dish (archiving leaves them
+  // intact — this is just so the UI can tell the user the recipe is still live
+  // inside those meals).
+  const { count: usedInMeals } = await db
+    .from('meal_component')
+    .select('id', { count: 'exact', head: true })
+    .eq('component_canonical_id', id);
+
   const { error } = await db
     .from('recipe_canonicals')
-    .delete()
+    .update({ archived_at: new Date().toISOString() })
     .eq('id', id)
     .eq('author_id', user.id);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, archived: true, usedInMeals: usedInMeals ?? 0 });
+}
+
+// PATCH /api/my/recipes/[id] with { unarchive: true } — restore an archived recipe.
+export async function PATCH(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const { id } = await context.params;
+  const db = supabase as any;
+  const body = await req.json().catch(() => ({}));
+
+  if (body?.unarchive !== true) {
+    return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 });
+  }
+
+  const { error } = await db
+    .from('recipe_canonicals')
+    .update({ archived_at: null })
+    .eq('id', id)
+    .eq('author_id', user.id);
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true, archived: false });
 }

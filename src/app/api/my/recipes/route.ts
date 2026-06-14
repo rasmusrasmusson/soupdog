@@ -104,7 +104,7 @@ function slugify(text: string) {
 }
 
 // GET /api/my/recipes
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -112,16 +112,24 @@ export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any;
 
-  const { data, error } = await db
+  // ?archived=1 lists archived recipes; default lists only non-archived.
+  const wantArchived = new URL(req.url).searchParams.get('archived') === '1';
+
+  let query = db
     .from('recipe_canonicals')
     .select(`
-      id, slug, is_published, created_at,
+      id, slug, is_published, created_at, archived_at,
       recipe_versions!current_version_id (
         title, cuisine, difficulty, base_servings, total_time_seconds
       )
     `)
-    .eq('author_id', user.id)
-    .order('created_at', { ascending: false });
+    .eq('author_id', user.id);
+
+  query = wantArchived
+    ? query.not('archived_at', 'is', null)
+    : query.is('archived_at', null);
+
+  const { data, error } = await query.order('created_at', { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -137,6 +145,7 @@ export async function GET() {
       totalTime:   v?.total_time_seconds ?? 0,
       isPublished: r.is_published,
       createdAt:   r.created_at,
+      archivedAt:  r.archived_at ?? null,
     };
   });
 
