@@ -11,6 +11,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, Trash2, Loader2, BookOpen, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 import MealFitPanel from '@/components/meal/MealFitPanel';
+import MealComposer from '@/components/meal/MealComposer';
 
 type CompType = 'dish' | 'side' | 'drink';
 interface Component {
@@ -150,6 +151,14 @@ export default function MealEditorPage() {
           placeholder="—" style={{ ...MONO, fontSize: 13, width: 56, padding: '4px 8px', border: B, background: 'var(--bg)', color: 'var(--fg)' }} />
         <span style={{ fontSize: 12, color: 'var(--muted)' }}>Soupdog will size each component to the meal (override per component below).</span>
       </div>
+
+      {/* AI compose — the butler. Suggests dishes/drinks from the user's own
+          catalogue; accepting calls the same addComponent as the manual picker. */}
+      <MealComposer
+        mealId={id as string}
+        currentComponentIds={components.map(c => c.componentCanonicalId)}
+        onAdd={(type, opt) => addComponent(type, opt)}
+      />
 
       {/* Components grouped by type. Render dish & drink always, plus any other
           type (e.g. a legacy 'side') that has rows, so nothing is hidden. */}
