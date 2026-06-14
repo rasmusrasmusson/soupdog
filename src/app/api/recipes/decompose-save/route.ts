@@ -191,6 +191,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'dag with nodes required' }, { status: 400 });
   }
 
+  // Guard against a known AI non-determinism: the decomposer sometimes bakes the
+  // quantity into the instruction text ("Add 3 l water") and leaves the node's
+  // structured `ingredients` array empty. That produces a recipe with steps but
+  // ZERO ingredient rows (blank Product/Qty columns). Detect it here and reject
+  // as retryable, so the user re-decomposes instead of silently saving a broken
+  // recipe. (We require at least one node to carry a structured ingredient.)
+  const nodesWithIngredient = dag.nodes.filter(
+    (n: any) => Array.isArray(n.ingredients) && n.ingredients.some((ig: any) => ig?.name?.trim())
+  ).length;
+  if (nodesWithIngredient === 0) {
+    return NextResponse.json(
+      {
+        error: 'The decomposition did not capture any ingredients. Please try again.',
+        retryable: true,
+      },
+      { status: 422 }
+    );
+  }
+
   // ── Validate the DAG before touching the DB (cheap guard against bad input) ──
   const ids = new Set<string>(dag.nodes.map((n: any) => n.id));
   for (const n of dag.nodes) {
