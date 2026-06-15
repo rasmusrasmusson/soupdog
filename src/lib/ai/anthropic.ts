@@ -65,39 +65,75 @@ type CommonArgs = {
 // ---- Non-streaming call ----------------------------------------------------
 // Mirrors the existing raw fetch. Returns the parsed Anthropic response object
 // (so callers keep using data.content[0].text). Logs usage from data.usage.
+// Transient HTTP statuses worth retrying (rate limit, overloaded, gateway/server
+// blips). 4xx other than 429 are NOT retried — they won't succeed on retry.
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529]);
+const MAX_ATTEMPTS = 4;
+
+function backoffMs(attempt: number): number {
+  // 0.5s, 1s, 2s (+ up to 250ms jitter) before attempts 2, 3, 4.
+  const base = 500 * 2 ** (attempt - 1);
+  return base + Math.floor(Math.random() * 250);
+}
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export async function aiMessage(args: CommonArgs): Promise<{ ok: boolean; status: number; data?: any; errorText?: string }> {
   const { model, feature, accountId, personId, system, messages, max_tokens } = args;
-  let res: Response;
-  try {
-    res = await fetch(ANTHROPIC_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY!,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({ model, max_tokens, ...(system ? { system } : {}), messages }),
+
+  let lastErrorText = 'AI request failed';
+  let lastStatus = 500;
+
+  // Retry transient failures (network errors + 429/5xx/529). A single overloaded
+  // or rate-limited response no longer surfaces as a user-facing error — the most
+  // common cause of intermittent "AI parsing failed" / lost ingredients on save.
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(ANTHROPIC_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': process.env.ANTHROPIC_API_KEY!,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({ model, max_tokens, ...(system ? { system } : {}), messages }),
+      });
+    } catch (e: any) {
+      // Network/transport error — retry if attempts remain.
+      lastErrorText = e?.message ?? 'fetch failed';
+      lastStatus = 500;
+      if (attempt < MAX_ATTEMPTS) { await sleep(backoffMs(attempt)); continue; }
+      void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: `${lastErrorText} (after ${attempt} attempts)` });
+      return { ok: false, status: lastStatus, errorText: lastErrorText };
+    }
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      lastErrorText = errorText;
+      lastStatus = res.status;
+      if (RETRYABLE_STATUS.has(res.status) && attempt < MAX_ATTEMPTS) {
+        await sleep(backoffMs(attempt));
+        continue;
+      }
+      void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: errorText.slice(0, 500) });
+      return { ok: false, status: res.status, errorText };
+    }
+
+    const data = await res.json();
+    const usage = data?.usage ?? {};
+    void logAiUsage({
+      accountId, personId, model, feature,
+      inputTokens: usage.input_tokens ?? 0,
+      outputTokens: usage.output_tokens ?? 0,
+      success: true,
     });
-  } catch (e: any) {
-    void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: e?.message ?? 'fetch failed' });
-    return { ok: false, status: 500, errorText: e?.message ?? 'fetch failed' };
+    return { ok: true, status: 200, data };
   }
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: errorText.slice(0, 500) });
-    return { ok: false, status: res.status, errorText };
-  }
-
-  const data = await res.json();
-  const usage = data?.usage ?? {};
-  void logAiUsage({
-    accountId, personId, model, feature,
-    inputTokens: usage.input_tokens ?? 0,
-    outputTokens: usage.output_tokens ?? 0,
-    success: true,
-  });
-  return { ok: true, status: 200, data };
+  // Exhausted all attempts on retryable failures.
+  void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: `${String(lastErrorText).slice(0, 480)} (after ${MAX_ATTEMPTS} attempts)` });
+  return { ok: false, status: lastStatus, errorText: lastErrorText };
 }
 
 // ---- Streaming call --------------------------------------------------------

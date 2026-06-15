@@ -179,8 +179,17 @@ export async function POST(req: NextRequest) {
     });
 
     if (!result.ok) {
-      console.error('[import] Anthropic error:', result.errorText);
-      return NextResponse.json({ error: 'AI parsing failed' }, { status: 502 });
+      console.error('[import] Anthropic error:', result.status, result.errorText);
+      // Transient upstream failures (429/5xx/529) are already retried in aiMessage;
+      // reaching here means it stayed down. Tell the user it's temporary + retryable
+      // rather than the opaque "AI parsing failed".
+      const transient = [429, 500, 502, 503, 529].includes(result.status);
+      return NextResponse.json({
+        error: transient
+          ? 'The recipe service is busy right now. Please try again in a moment.'
+          : 'Could not parse that recipe. Please try again.',
+        retryable: true,
+      }, { status: 502 });
     }
 
     const data  = result.data;
