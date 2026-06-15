@@ -26,7 +26,7 @@ export function ActiveCookBanner() {
   const router = useRouter();
   const pathname = usePathname();
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [ended, setEnded] = useState<Set<string>>(new Set());
 
   // Fetch the caller's active/paused cooks. Refreshes on navigation so finishing a
   // cook removes the strip without a manual reload.
@@ -45,11 +45,23 @@ export function ActiveCookBanner() {
     return () => { cancelled = true; };
   }, [pathname]);
 
+  // Stop a session from anywhere — the "I walked away and it's still running, end it"
+  // case. Marks it abandoned and removes the strip immediately.
+  const stop = async (sid: string) => {
+    setEnded(e => new Set(e).add(sid));   // optimistic remove
+    try {
+      await fetch(`/api/my/cooking-sessions/${sid}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionStatus: 'abandoned' }),
+      });
+    } catch { /* if it fails it reappears on next navigation */ }
+  };
+
   // Hide the banner entirely while the user is anywhere in the cooking area — they're
   // already looking at a session, so a "resume" prompt is noise. (Covers the session
   // screen and any future cooking sub-pages.)
   const inCookingArea = pathname?.startsWith('/my/cooking-sessions');
-  const visible = inCookingArea ? [] : sessions.filter(s => !dismissed.has(s.id));
+  const visible = inCookingArea ? [] : sessions.filter(s => !ended.has(s.id));
   if (visible.length === 0) return null;
 
   // Only ever surface ONE session (the most recent live cook). When the multi-session
@@ -57,29 +69,33 @@ export function ActiveCookBanner() {
   const s = visible[0];
 
   return (
-    <button
-      onClick={() => router.push(`/my/cooking-sessions/${s.id}`)}
+    <div
       style={{
         position: 'fixed', left: '50%', transform: 'translateX(-50%)', bottom: 16, zIndex: 60,
         display: 'inline-flex', alignItems: 'center', gap: 10,
-        background: 'var(--accent)', color: 'var(--bg)', border: 'none',
-        borderRadius: 999, padding: '10px 16px 10px 18px', cursor: 'pointer',
+        background: 'var(--accent)', color: 'var(--bg)',
+        borderRadius: 999, padding: '8px 10px 8px 18px',
         boxShadow: '0 6px 24px rgba(0,0,0,0.18)', fontFamily: 'var(--font-mono)', fontSize: 12,
         maxWidth: 'calc(100vw - 32px)',
       }}
     >
-      <ChefHat size={15} />
-      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {s.status === 'paused' ? 'Paused' : 'Cooking'} · {s.title} — tap to resume
-      </span>
-      <span
-        role="button"
-        aria-label="Dismiss"
-        onClick={(e) => { e.stopPropagation(); setDismissed(d => new Set(d).add(s.id)); }}
-        style={{ display: 'inline-flex', marginLeft: 2, opacity: 0.8 }}
+      <button
+        onClick={() => router.push(`/my/cooking-sessions/${s.id}`)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 9, background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'inherit', padding: 0, minWidth: 0 }}
       >
-        <X size={14} />
-      </span>
-    </button>
+        <ChefHat size={15} style={{ flexShrink: 0 }} />
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {s.status === 'paused' ? 'Paused' : 'Cooking'} · {s.title} — tap to resume
+        </span>
+      </button>
+      <button
+        aria-label="Stop cooking"
+        title="Stop cooking"
+        onClick={() => stop(s.id)}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 24, height: 24, borderRadius: 999, background: 'rgba(255,255,255,0.18)', border: 'none', color: 'inherit', cursor: 'pointer', flexShrink: 0 }}
+      >
+        <X size={13} />
+      </button>
+    </div>
   );
 }

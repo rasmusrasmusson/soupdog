@@ -1,18 +1,18 @@
 // src/app/my/cooking-sessions/[id]/page.tsx
 'use client';
 
-// The active cooking screen — the meal's recipe, shown live. It renders the SAME
-// <RecipeDisplay> table (ingredients · tools · procedure) as every other recipe, fed
-// from the session's frozen snapshot via snapshotToRecipe. The difference from a
-// read-only recipe is only interactivity: the procedure checkboxes are wired to the
-// session's per-step progress and persist to the server (resumable across devices).
+// The active cooking screen — the meal's recipe, shown live, via the same <RecipeDisplay>
+// table as every other recipe. The difference is interactivity: ingredient and step
+// checkboxes are wired to the session's persisted progress (resumable across devices).
 //
-// A meal is a recipe — one list of items. Before a session is started the recipe shows
-// without checkboxes (the meal recipe page); once cooking, the same list becomes the
-// interactive work order here.
+// Lifecycle:
+//   • Gathering an ingredient is a task too — ingredient checks persist (keyed "ing:i").
+//   • Completion is DERIVED from step progress: tick the last step → offer to finish;
+//     untick it → back to cooking (no stuck "finished" state).
+//   • Two explicit endings, always available: Finish (completed) and Stop (abandoned).
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, ChevronLeft } from 'lucide-react';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
@@ -35,11 +35,13 @@ interface Session {
 
 export default function ActiveCookingPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Done-state keyed by step_id, mirrored from the server and updated optimistically.
+  // Done-state keyed by item key (step id, or "ing:<index>"), mirrored from the server.
   const [doneById, setDoneById] = useState<Record<string, boolean>>({});
+  const [ending, setEnding] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -56,30 +58,42 @@ export default function ActiveCookingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Build the recipe from the frozen snapshot — same shape RecipeDisplay renders.
   const recipe = useMemo(
     () => session ? snapshotToRecipe(session.timeline, { title: session.title }) : null,
     [session]
   );
-  // checklist index i <-> this step id (snapshotToRecipe preserves order, drops holds).
   const stepIds = useMemo(() => recipe ? stepIdsInDisplayOrder(recipe) : [], [recipe]);
 
-  const persistStep = async (stepId: string, status: StepStatus) => {
+  // Persist any item (step or ingredient) by its key.
+  const persist = async (key: string, done: boolean) => {
     try {
       const res = await fetch(`/api/my/cooking-sessions/${id}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stepId, status }),
+        body: JSON.stringify({ stepId: key, status: done ? 'done' : 'pending' }),
       });
       if (!res.ok) await load();
     } catch { await load(); }
   };
 
-  const setSessionStatus = async (sessionStatus: Session['status']) => {
-    setSession(s => s ? { ...s, status: sessionStatus } : s);
-    await fetch(`/api/my/cooking-sessions/${id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sessionStatus }),
-    }).catch(() => {});
+  const toggleItem = (key: string) => {
+    if (!session || session.status === 'completed' || session.status === 'abandoned') return;
+    const next = !doneById[key];
+    setDoneById(m => ({ ...m, [key]: next }));   // optimistic
+    persist(key, next);
+  };
+
+  const endSession = async (status: 'completed' | 'abandoned') => {
+    if (ending) return;
+    setEnding(true);
+    setSession(s => s ? { ...s, status } : s);
+    try {
+      await fetch(`/api/my/cooking-sessions/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionStatus: status }),
+      });
+    } catch { /* optimistic; banner will reconcile elsewhere */ }
+    // After ending, leave the cooking surface — back to the recipe.
+    router.push(`/my/meals/${session?.mealCanonicalId}/recipe`);
   };
 
   if (loading) {
@@ -97,90 +111,79 @@ export default function ActiveCookingPage() {
   const total = stepIds.length;
   const doneCount = stepIds.filter(sid => doneById[sid]).length;
   const pct = total ? Math.round((doneCount / total) * 100) : 0;
-  const allDone = total > 0 && doneCount === total;
-  const isFinished = session.status === 'completed';
+  // Completion is DERIVED: all steps done → finished-ready. Unticking reverts it.
+  const allStepsDone = total > 0 && doneCount === total;
+  const isOver = session.status === 'completed' || session.status === 'abandoned';
 
-  // RecipeDisplay's interactive contract: checked[] + toggle(i) by checklist index.
+  // RecipeDisplay's interactive contract: checked[] + toggle(i) by index.
   const interactive = {
     ingChecks: {
-      // Ingredient ticking is local-only convenience (not part of session progress).
-      checked: recipe.ingredients.map(() => false),
-      toggle: () => {},
+      checked: recipe.ingredients.map((_, i) => !!doneById[`ing:${i}`]),
+      toggle: (i: number) => toggleItem(`ing:${i}`),
     },
     stepChecks: {
       checked: stepIds.map(sid => !!doneById[sid]),
-      toggle: (i: number) => {
-        if (isFinished) return;
-        const sid = stepIds[i];
-        if (!sid) return;
-        const next = !doneById[sid];
-        setDoneById(m => ({ ...m, [sid]: next }));            // optimistic
-        persistStep(sid, next ? 'done' : 'pending');
-      },
+      toggle: (i: number) => { const sid = stepIds[i]; if (sid) toggleItem(sid); },
     },
     servings: recipe.servings,
   };
 
   return (
     <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-10">
-      {/* Breadcrumb / back to the recipe */}
       <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
         <Link href={`/my/meals/${session.mealCanonicalId}/recipe`} style={{ color: 'var(--muted)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }} className="hover:text-[var(--accent)]">
           <ChevronLeft size={12} /> Recipe
         </Link>
       </div>
 
-      {/* Title + progress */}
       <h1 style={{ ...SERIF, fontSize: 30, lineHeight: 1.15, marginBottom: 4, color: 'var(--fg)' }}>{session.title}</h1>
       <div style={{ ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
-        {isFinished ? 'Finished' : session.status === 'paused' ? 'Paused' : 'Cooking now'} · {doneCount} of {total} steps done
+        {session.status === 'completed' ? 'Finished'
+          : session.status === 'abandoned' ? 'Stopped'
+          : 'Cooking now'} · {doneCount} of {total} steps done
       </div>
       <div style={{ height: 6, background: 'var(--border)', borderRadius: 999, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 999, transition: 'width 240ms ease' }} />
       </div>
 
-      {/* "Recipe updated" notice — the session keeps its frozen list; this just informs. */}
-      {session.recipeUpdated && (
+      {session.recipeUpdated && !isOver && (
         <div style={{ border: B, borderRadius: 8, padding: '10px 14px', marginBottom: 20, background: 'var(--accent-subtle)', fontSize: 12.5, color: 'var(--fg)', lineHeight: 1.5 }}>
           One of these recipes has been updated since you started cooking. You&apos;re following the version you began with — finish this cook, then start a fresh one to use the latest.
         </div>
       )}
 
-      {allDone && !isFinished && (
-        <button onClick={() => setSessionStatus('completed')}
-          style={{ width: '100%', marginBottom: 20, padding: '12px', border: 'none', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg)', ...MONO, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: 'pointer' }}>
-          Everything&apos;s done — finish cooking
+      {/* Derived completion: when every step is ticked, offer to finish. Unticking a
+          step hides this again (no stuck "finished" state). */}
+      {allStepsDone && !isOver && (
+        <button onClick={() => endSession('completed')} disabled={ending}
+          style={{ width: '100%', marginBottom: 20, padding: '12px', border: 'none', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg)', ...MONO, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: ending ? 'default' : 'pointer' }}>
+          {ending ? 'Finishing…' : "Everything's done — finish cooking"}
         </button>
       )}
-      {isFinished && (
-        <div style={{ border: B, borderRadius: 8, padding: '14px', marginBottom: 20, textAlign: 'center', ...MONO, fontSize: 12, color: 'var(--accent)' }}>
-          ✓ Cooked and done. Enjoy!
-        </div>
-      )}
 
-      {/* The recipe, live. Same table as everywhere — interactive checkboxes wired to
-          session progress. Bordered to match the recipe page's central column. */}
       <div style={{ border: B, borderRadius: 10, overflow: 'hidden' }}>
         <RecipeDisplay recipe={recipe} interactive={interactive} />
       </div>
 
-      {/* Pause / resume */}
-      {!isFinished && (
-        <div style={{ marginTop: 24, display: 'flex', gap: 12 }}>
-          {session.status === 'active' ? (
-            <button onClick={() => setSessionStatus('paused')} style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent', border: B, borderRadius: 6, padding: '8px 14px', cursor: 'pointer' }}>
-              Pause cooking
-            </button>
-          ) : (
-            <button onClick={() => setSessionStatus('active')} style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)', borderRadius: 6, padding: '8px 14px', cursor: 'pointer' }}>
-              Resume cooking
+      {/* Always-available endings. Finish = completed (you cooked it). Stop =
+          abandoned (no longer relevant). Both leave the cooking surface. */}
+      {!isOver && (
+        <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          {!allStepsDone && (
+            <button onClick={() => endSession('completed')} disabled={ending}
+              style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--bg)', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '9px 16px', cursor: ending ? 'default' : 'pointer' }}>
+              Finish cooking
             </button>
           )}
+          <button onClick={() => endSession('abandoned')} disabled={ending}
+            style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent', border: B, borderRadius: 6, padding: '9px 16px', cursor: ending ? 'default' : 'pointer' }}>
+            Stop cooking
+          </button>
         </div>
       )}
 
       <p style={{ ...MONO, fontSize: 10, color: 'var(--muted)', marginTop: 18, lineHeight: 1.6 }}>
-        Tick a step as you finish it. Your progress is saved — you can close this and pick up where you left off.
+        Tick ingredients as you gather them and steps as you finish them. Your progress is saved — close this and pick up where you left off.
       </p>
     </div>
   );

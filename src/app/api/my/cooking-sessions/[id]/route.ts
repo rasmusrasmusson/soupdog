@@ -97,22 +97,25 @@ export async function PATCH(req: NextRequest, context: { params: Promise<{ id: s
     .from('cooking_session').select('id').eq('id', id).eq('started_by', user.id).single();
   if (!session) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // ── Update one step's progress ──
+  // ── Update one item's progress (a step, or an ingredient keyed "ing:...") ──
+  // Upsert, not update: step rows are pre-created at session start, but ingredient-check
+  // rows are created lazily on first tick. Both live in session_step_state keyed by
+  // (session_id, step_id); unique(session_id, step_id) backs the upsert.
   if (typeof body.stepId === 'string' && typeof body.status === 'string') {
     if (!STEP_STATUSES.has(body.status)) {
       return NextResponse.json({ error: 'Invalid step status.' }, { status: 400 });
     }
     const now = new Date().toISOString();
-    const patch: Record<string, any> = { status: body.status };
-    if (body.status === 'in_progress') patch.started_at = now;
-    if (body.status === 'done')        patch.completed_at = now;
-    if (body.status === 'pending')     { patch.started_at = null; patch.completed_at = null; }
-
+    const row: Record<string, any> = {
+      session_id: id,
+      step_id: body.stepId,
+      status: body.status,
+      started_at: body.status === 'in_progress' ? now : null,
+      completed_at: body.status === 'done' ? now : null,
+    };
     const { error } = await db
       .from('session_step_state')
-      .update(patch)
-      .eq('session_id', id)
-      .eq('step_id', body.stepId);
+      .upsert(row, { onConflict: 'session_id,step_id' });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
