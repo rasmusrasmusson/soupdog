@@ -19,6 +19,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
 
+// Allow time for the (possibly slow) Anthropic call — without this the
+// serverless function can be killed mid-request and return a 502 intermittently.
+export const maxDuration = 60;
+
 // Hardened step-2 system prompt — kept in sync with
 // prompts/decomposition_step2_prompt.md and eval/run-case.mjs. Strict atomicity
 // (one ingredient per node, incl. cooking liquids + finishing squeezes; introduce

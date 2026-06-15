@@ -9,6 +9,10 @@ import { aiMessage } from '@/lib/ai/anthropic';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
 
+// Allow time for the (possibly slow) Anthropic call — without this the
+// serverless function can be killed mid-request and return a 502 intermittently.
+export const maxDuration = 60;
+
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const XLS_MIME  = 'application/vnd.ms-excel';
