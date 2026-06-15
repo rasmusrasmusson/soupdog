@@ -14,7 +14,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Pencil, Flame, Clock } from 'lucide-react';
 import { PrintButton, PrintHeader } from '@/components/recipe/PrintRecipe';
-
+import { StartCookingButton } from '@/components/cooking/StartCookingButton';
 type CompType = 'dish' | 'side' | 'drink';
 interface StepIng { name: string; quantityValue: number; quantityUnit: string; prep: string | null }
 interface Step {
@@ -163,6 +163,7 @@ export default function MealRecipePage() {
             <Pencil size={12} /> Edit meal
           </Link>
         </span>
+        <StartCookingButton mealId={id} compact />
       </div>
 
       {/* Hero */}
