@@ -120,6 +120,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Could not build a cooking timeline for this meal.' }, { status: 400 });
   }
 
+  // The merge drops per-step tools; the cooking screen wants them (tools column).
+  // Build a stepId -> tools map from the raw component steps' appliance_settings
+  // (where stepTools live) and attach onto each snapshot step. This keeps the
+  // session snapshot a COMPLETE recipe-shaped list without touching the merge code.
+  const toolsByStepId: Record<string, { name: string }[]> = {};
+  for (const c of comps) {
+    const can = Array.isArray(c.recipe_canonicals) ? c.recipe_canonicals[0] : c.recipe_canonicals;
+    const cv = can && (Array.isArray(can.recipe_versions) ? can.recipe_versions[0] : can.recipe_versions);
+    const vsteps = cv?.version_steps ?? [];
+    for (const vs of vsteps) {
+      const settings = vs.appliance_settings ?? {};
+      const st = Array.isArray(settings.stepTools) ? settings.stepTools : [];
+      const names = st.map((t: any) => ({ name: t?.name })).filter((t: any) => t.name);
+      if (names.length) toolsByStepId[vs.id] = names;
+    }
+  }
+  // Attach tools onto the frozen snapshot steps (by their original step id).
+  for (const st of merge.scheduled as any[]) {
+    if (toolsByStepId[st.id]) st.tools = toolsByStepId[st.id];
+  }
+
   // source_version_ids: { dishCanonicalId -> current recipe_version id } at snapshot time.
   const sourceVersionIds: Record<string, string> = {};
   for (const c of comps) {
