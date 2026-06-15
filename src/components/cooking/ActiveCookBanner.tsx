@@ -45,13 +45,15 @@ export function ActiveCookBanner() {
     return () => { cancelled = true; };
   }, [pathname]);
 
-  // Don't show the strip for a session while you're already on its screen.
-  const onSessionScreen = (sid: string) => pathname === `/my/cooking-sessions/${sid}`;
-  const visible = sessions.filter(s => !dismissed.has(s.id) && !onSessionScreen(s.id));
+  // Hide the banner entirely while the user is anywhere in the cooking area — they're
+  // already looking at a session, so a "resume" prompt is noise. (Covers the session
+  // screen and any future cooking sub-pages.)
+  const inCookingArea = pathname?.startsWith('/my/cooking-sessions');
+  const visible = inCookingArea ? [] : sessions.filter(s => !dismissed.has(s.id));
   if (visible.length === 0) return null;
 
-  // v1: surface the most recent live cook. (When the multi-session view lands, this
-  // becomes a list/dashboard — same data, wider scope.)
+  // Only ever surface ONE session (the most recent live cook). When the multi-session
+  // view lands, this becomes a list/dashboard — same data, wider scope.
   const s = visible[0];
 
   return (
@@ -70,11 +72,6 @@ export function ActiveCookBanner() {
       <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
         {s.status === 'paused' ? 'Paused' : 'Cooking'} · {s.title} — tap to resume
       </span>
-      {visible.length > 1 && (
-        <span style={{ background: 'var(--bg)', color: 'var(--accent)', borderRadius: 999, padding: '1px 7px', fontSize: 10.5 }}>
-          +{visible.length - 1}
-        </span>
-      )}
       <span
         role="button"
         aria-label="Dismiss"
