@@ -1,9 +1,11 @@
+// src/components/layout/AppShell.tsx
 'use client';
 import { Header } from './Header';
 import { Sidebar } from './Sidebar';
 import { MobileNav } from './MobileNav';
 import { AssistantProvider } from '@/components/assistant/AssistantProvider';
 import { AssistantDock } from '@/components/assistant/AssistantDock';
+import { ActiveCookBanner } from '@/components/cooking/ActiveCookBanner';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
@@ -19,6 +21,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AssistantDock />
       </div>
       <MobileNav />
+      {/* Persistent "you're cooking" strip — the way back to a live session from
+          anywhere. Seed of the future multi-session / head-chef view. */}
+      <ActiveCookBanner />
     </AssistantProvider>
   );
 }
