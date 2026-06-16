@@ -127,7 +127,7 @@ export default function ActiveCookingPage() {
   // RecipeDisplay's interactive contract: checked[] + toggle(i) by index.
   const interactive = {
     ingChecks: {
-      checked: recipe.ingredients.map((_, i) => !!doneById[`ing:${i}`]),
+      checked: recipe.ingredients.map((_: unknown, i: number) => !!doneById[`ing:${i}`]),
       toggle: (i: number) => toggleItem(`ing:${i}`),
     },
     stepChecks: {
@@ -138,7 +138,7 @@ export default function ActiveCookingPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-10">
+    <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-10" style={{ paddingBottom: isOver ? undefined : 90 }}>
       <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 6 }}>
         <Link href={`/my/meals/${session.mealCanonicalId}/recipe`} style={{ color: 'var(--muted)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }} className="hover:text-[var(--accent)]">
           <ChevronLeft size={12} /> Recipe
@@ -146,13 +146,10 @@ export default function ActiveCookingPage() {
       </div>
 
       <h1 style={{ ...SERIF, fontSize: 30, lineHeight: 1.15, marginBottom: 4, color: 'var(--fg)' }}>{session.title}</h1>
-      <div style={{ ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 12 }}>
+      <div style={{ ...MONO, fontSize: 11, color: 'var(--muted)', marginBottom: 20 }}>
         {session.status === 'completed' ? 'Finished'
           : session.status === 'abandoned' ? 'Stopped'
-          : 'Cooking now'} · {doneCount} of {total} steps done
-      </div>
-      <div style={{ height: 6, background: 'var(--border)', borderRadius: 999, overflow: 'hidden', marginBottom: 20 }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 999, transition: 'width 240ms ease' }} />
+          : 'Cooking now'}
       </div>
 
       {/* Who's cooking — shown when more than one cook. Per-task avatars +
@@ -175,39 +172,43 @@ export default function ActiveCookingPage() {
         </div>
       )}
 
-      {/* Derived completion: when every step is ticked, offer to finish. Unticking a
-          step hides this again (no stuck "finished" state). */}
-      {allStepsDone && !isOver && (
-        <button onClick={() => endSession('completed')} disabled={ending}
-          style={{ width: '100%', marginBottom: 20, padding: '12px', border: 'none', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg)', ...MONO, fontSize: 12, letterSpacing: '0.06em', textTransform: 'uppercase', cursor: ending ? 'default' : 'pointer' }}>
-          {ending ? 'Finishing…' : "Everything's done — finish cooking"}
-        </button>
-      )}
-
       <div style={{ border: B, borderRadius: 10, overflow: 'hidden' }}>
         <RecipeDisplay recipe={recipe} interactive={interactive} />
       </div>
 
-      {/* Always-available endings. Finish = completed (you cooked it). Stop =
-          abandoned (no longer relevant). Both leave the cooking surface. */}
-      {!isOver && (
-        <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          {!allStepsDone && (
-            <button onClick={() => endSession('completed')} disabled={ending}
-              style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--bg)', background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '9px 16px', cursor: ending ? 'default' : 'pointer' }}>
-              Finish cooking
-            </button>
-          )}
-          <button onClick={() => endSession('abandoned')} disabled={ending}
-            style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent', border: B, borderRadius: 6, padding: '9px 16px', cursor: ending ? 'default' : 'pointer' }}>
-            Stop cooking
-          </button>
-        </div>
-      )}
-
       <p style={{ ...MONO, fontSize: 10, color: 'var(--muted)', marginTop: 18, lineHeight: 1.6 }}>
         Tick ingredients as you gather them and steps as you finish them. Your progress is saved — close this and pick up where you left off.
       </p>
+
+      {/* ── Fixed footer: progress + endings, always visible while cooking. ──
+          Stop (abandon) sits low-key on the left; progress in the middle; Finish
+          on the right, becoming prominent once every step is done. */}
+      {!isOver && (
+        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, borderTop: B, background: 'var(--surface)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 16, zIndex: 50 }}>
+          <button onClick={() => endSession('abandoned')} disabled={ending}
+            style={{ ...MONO, fontSize: 10.5, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'var(--muted)', background: 'transparent', border: 'none', cursor: ending ? 'default' : 'pointer', flexShrink: 0 }}>
+            Stop
+          </button>
+
+          {/* Progress: count + bar, takes the middle. */}
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <span style={{ ...MONO, fontSize: 11, color: 'var(--muted)', flexShrink: 0 }}>{doneCount} / {total}</span>
+            <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 999, overflow: 'hidden', minWidth: 60 }}>
+              <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 999, transition: 'width 240ms ease' }} />
+            </div>
+          </div>
+
+          <button onClick={() => endSession('completed')} disabled={ending}
+            style={{ ...MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', flexShrink: 0,
+              color: allStepsDone ? 'var(--bg)' : 'var(--accent)',
+              background: allStepsDone ? 'var(--accent)' : 'transparent',
+              border: allStepsDone ? 'none' : '1px solid var(--border)',
+              borderRadius: 8, padding: allStepsDone ? '10px 20px' : '9px 16px',
+              cursor: ending ? 'default' : 'pointer' }}>
+            {ending ? 'Finishing…' : allStepsDone ? "Everything's done — finish" : 'Finish'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
