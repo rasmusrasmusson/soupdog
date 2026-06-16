@@ -257,6 +257,17 @@ export async function POST(req: NextRequest) {
   const createdIngredients: { id: string; name: string }[] = [];
   const createdTasks: string[] = [];
   const taskCache = new Map<string, string>();
+
+  // Recompute total time from the NEW DAG's per-step durations — the legacy
+  // total_time_seconds is often 0/stale, which surfaced as "TOTAL 0s" on the page.
+  // (Sum is an upper bound; a true critical-path total is a later refinement.)
+  let computedTotalSeconds = 0;
+  for (const n of dag.nodes) {
+    computedTotalSeconds +=
+      (durationToSeconds(n.completion) ?? naturalDurationToSeconds(n.completion) ?? naturalDurationToSeconds(n.notes) ?? 0);
+  }
+  const totalSeconds = computedTotalSeconds > 0 ? computedTotalSeconds : (curVersion.total_time_seconds ?? 0);
+
   try {
     // next version_number
     const { data: existing } = await db.from('recipe_versions')
@@ -275,7 +286,7 @@ export async function POST(req: NextRequest) {
         tags:                curVersion.tags ?? [],
         base_servings:       dag.servings ?? curVersion.base_servings ?? 4,
         difficulty:          curVersion.difficulty ?? 'medium',
-        total_time_seconds:  curVersion.total_time_seconds ?? 0,
+        total_time_seconds:  totalSeconds,
         is_canonical_version: true,
         source_extraction:   extraction,
       })
@@ -351,6 +362,7 @@ export async function POST(req: NextRequest) {
     await db.from('recipes').update({
       recipe_version_id: version.id,
       title: dag.title ?? curVersion.title,
+      total_time_seconds: totalSeconds,
     }).eq('slug', canonical.slug);
 
     return NextResponse.json({
