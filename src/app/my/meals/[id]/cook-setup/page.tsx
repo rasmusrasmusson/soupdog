@@ -23,6 +23,7 @@ const B = '1px solid var(--border)';
 
 interface MergedStep { id: string; dishTitle: string; type: string; instruction: string; isHold: boolean }
 interface Person { id: string; name: string; avatarColor: string | null; avatarInitials: string | null }
+interface Eater { id: string; name: string; avatarColor: string | null; avatarInitials: string | null; status: string }
 
 export default function CookSetupPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +32,7 @@ export default function CookSetupPage() {
   const [title, setTitle] = useState('Meal');
   const [steps, setSteps] = useState<MergedStep[]>([]);
   const [owned, setOwned] = useState<Person[]>([]);     // people you can add as cooks
+  const [eaters, setEaters] = useState<Eater[]>([]);    // who's eating (from meal plan)
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -41,9 +43,10 @@ export default function CookSetupPage() {
 
   const load = useCallback(async () => {
     try {
-      const [recipeRes, peopleRes] = await Promise.all([
+      const [recipeRes, peopleRes, eatersRes] = await Promise.all([
         fetch(`/api/my/meals/${id}/recipe`),
         fetch('/api/my/meal-plan/group'),
+        fetch(`/api/my/meals/${id}/eaters`),
       ]);
       if (!recipeRes.ok) { setError('Could not load this meal.'); return; }
       const r = await recipeRes.json();
@@ -55,6 +58,10 @@ export default function CookSetupPage() {
         setOwned(people ?? []);
         // Default the lead cook = the first owned person (self).
         if ((people ?? []).length) setCooks([people[0].id]);
+      }
+      if (eatersRes.ok) {
+        const { eaters: e } = await eatersRes.json();
+        setEaters(e ?? []);
       }
     } catch { setError('Could not load this meal.'); }
     finally { setLoading(false); }
@@ -150,11 +157,53 @@ export default function CookSetupPage() {
         </div>
       </section>
 
-      {/* ── Task assignment (only meaningful with >1 cook) ── */}
+      {/* ── Who's eating ── */}
+      <section style={{ marginBottom: 32 }}>
+        <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Users size={12} /> Who's eating
+        </div>
+        {eaters.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+            No one set yet — that&apos;s fine. Eaters come from your meal plan, and you can cook without setting them.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {eaters.map(e => (
+              <span key={e.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px 6px 6px', borderRadius: 999, border: B }}>
+                <Avatar id={e.id} name={e.name} colorKey={e.avatarColor} initials={e.avatarInitials} size={26} />
+                <span style={{ fontSize: 13, color: 'var(--fg)' }}>{e.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* ── The recipe (always shown, read-only) — so a solo cook sees what they're
+            about to make. With 2+ cooks, the task-division block below adds assignment. */}
+      {steps.length > 0 && (
+        <section style={{ marginBottom: 32 }}>
+          <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>
+            The plan · {steps.length} steps
+          </div>
+          {!multipleCooks && (
+            <div style={{ borderTop: B }}>
+              {steps.map((s, i) => (
+                <div key={s.id} style={{ display: 'flex', gap: 12, padding: '10px 2px', borderBottom: B }}>
+                  <span style={{ ...MONO, fontSize: 11, color: '#b3b0a8', width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ ...MONO, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 2 }}>{s.dishTitle}</div>
+                    <div style={{ fontSize: 13.5, color: 'var(--fg)', lineHeight: 1.5 }}>{s.instruction}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
       {multipleCooks && (
         <section style={{ marginBottom: 32 }}>
           <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Users size={12} /> Divide the tasks <span style={{ textTransform: 'none', letterSpacing: 0, color: '#b3b0a8' }}>— optional; unassigned tasks are shared</span>
+            <Users size={12} /> The plan — who does what <span style={{ textTransform: 'none', letterSpacing: 0, color: '#b3b0a8' }}>· tap an avatar to assign; unassigned tasks are shared</span>
           </div>
           <div style={{ borderTop: B }}>
             {steps.map((s, i) => (
