@@ -157,11 +157,14 @@ export default function MealRecipePage() {
         <Link href="/my/meals" style={{ color: 'var(--muted)', textDecoration: 'none' }} className="hover:text-[var(--accent)]">Meals</Link>
         <span>/</span>
         <span>Recipe</span>
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
           <PrintButton title={data.title} />
-          <Link href={`/my/meals/${id}`} style={{ color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }} className="hover:underline">
+          <Link href={`/my/meals/${id}`}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--muted)', background: 'none', border: '1px solid var(--border)', borderRadius: 6, padding: '5px 12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            className="hover:text-[var(--accent)]">
             <Pencil size={12} /> Edit meal
           </Link>
+          <StartCookingButton mealId={id} />
         </span>
         <StartCookingButton mealId={id} compact />
       </div>
