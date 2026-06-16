@@ -12,9 +12,9 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, Pencil, Flame, Clock } from 'lucide-react';
+import { Loader2, Pencil, Flame, Clock, ChefHat } from 'lucide-react';
 import { PrintButton, PrintHeader } from '@/components/recipe/PrintRecipe';
-import { StartCookingButton } from '@/components/cooking/StartCookingButton';
+
 type CompType = 'dish' | 'side' | 'drink';
 interface StepIng { name: string; quantityValue: number; quantityUnit: string; prep: string | null }
 interface Step {
@@ -164,9 +164,12 @@ export default function MealRecipePage() {
             className="hover:text-[var(--accent)]">
             <Pencil size={12} /> Edit meal
           </Link>
-          <StartCookingButton mealId={id} />
+          <Link href={`/my/meals/${id}/cook-setup`}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--bg)', background: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 6, padding: '5px 12px', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+            className="hover:opacity-90">
+            <ChefHat size={12} /> Start cooking
+          </Link>
         </span>
-        <StartCookingButton mealId={id} compact />
       </div>
 
       {/* Hero */}
