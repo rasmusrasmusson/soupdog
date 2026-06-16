@@ -19,7 +19,7 @@ export function StartCookingButton({ mealId, compact = false }: { mealId: string
     if (busy) return;
     setBusy(true); setError(null);
     try {
-      // Resume an existing active session for this meal if there is one.
+      // If an active session already exists for this meal, resume it directly.
       const listRes = await fetch('/api/my/cooking-sessions');
       if (listRes.ok) {
         const { sessions } = await listRes.json();
@@ -28,21 +28,11 @@ export function StartCookingButton({ mealId, compact = false }: { mealId: string
         );
         if (existing) { router.push(`/my/cooking-sessions/${existing.id}`); return; }
       }
-      // Otherwise start a fresh one.
-      const res = await fetch('/api/my/cooking-sessions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mealId }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.id) {
-        setError(data.error ?? 'Could not start cooking.');
-        setBusy(false);
-        return;
-      }
-      router.push(`/my/cooking-sessions/${data.id}`);
+      // Otherwise go to setup (who's cooking / who does what), which starts the session.
+      router.push(`/my/meals/${mealId}/cook-setup`);
     } catch {
-      setError('Could not start cooking.');
-      setBusy(false);
+      // Even if the check fails, setup can proceed.
+      router.push(`/my/meals/${mealId}/cook-setup`);
     }
   };
 

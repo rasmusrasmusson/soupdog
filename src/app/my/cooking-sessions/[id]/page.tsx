@@ -17,19 +17,23 @@ import Link from 'next/link';
 import { Loader2, ChevronLeft } from 'lucide-react';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { snapshotToRecipe, stepIdsInDisplayOrder } from '@/lib/snapshot-to-recipe';
+import { Avatar } from '@/components/people/Avatar';
 
 const MONO = { fontFamily: 'var(--font-mono)' } as const;
 const SERIF = { fontFamily: 'var(--font-serif, Georgia, serif)' } as const;
 const B = '1px solid var(--border)';
 
 type StepStatus = 'pending' | 'in_progress' | 'done' | 'skipped';
-interface StepState { step_id: string; status: StepStatus }
+interface StepState { step_id: string; status: StepStatus; assigned_to?: string | null }
+interface PersonInfo { id: string; name: string; avatarColor: string | null; avatarInitials: string | null }
 interface Session {
   id: string; mealCanonicalId: string; mealSlug: string | null; title: string;
   status: 'active' | 'paused' | 'completed' | 'abandoned';
   serveTargetTime: string | null; startedAt: string; completedAt: string | null;
   timeline: { totalSeconds: number; scheduled: any[]; hasDurations?: boolean };
   steps: StepState[];
+  participants: { person_id: string | null; role: string }[];
+  people: Record<string, PersonInfo>;
   recipeUpdated: boolean; updatedDishes: string[];
 }
 
@@ -115,6 +119,11 @@ export default function ActiveCookingPage() {
   const allStepsDone = total > 0 && doneCount === total;
   const isOver = session.status === 'completed' || session.status === 'abandoned';
 
+  // The cooks in this session (for the "cooking together" strip).
+  const cookList = (session.participants ?? [])
+    .map(p => p.person_id ? session.people?.[p.person_id] : null)
+    .filter(Boolean) as PersonInfo[];
+
   // RecipeDisplay's interactive contract: checked[] + toggle(i) by index.
   const interactive = {
     ingChecks: {
@@ -145,6 +154,20 @@ export default function ActiveCookingPage() {
       <div style={{ height: 6, background: 'var(--border)', borderRadius: 999, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ height: '100%', width: `${pct}%`, background: 'var(--accent)', borderRadius: 999, transition: 'width 240ms ease' }} />
       </div>
+
+      {/* Who's cooking — shown when more than one cook. Per-task avatars +
+          reassignment + per-cook filter are the next layer (see design note). */}
+      {cookList.length > 1 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          <span style={{ ...MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)' }}>Cooking together:</span>
+          {cookList.map(p => (
+            <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Avatar id={p.id} name={p.name} colorKey={p.avatarColor} initials={p.avatarInitials} size={24} />
+              <span style={{ fontSize: 12, color: 'var(--fg)' }}>{p.name}</span>
+            </span>
+          ))}
+        </div>
+      )}
 
       {session.recipeUpdated && !isOver && (
         <div style={{ border: B, borderRadius: 8, padding: '10px 14px', marginBottom: 20, background: 'var(--accent-subtle)', fontSize: 12.5, color: 'var(--fg)', lineHeight: 1.5 }}>

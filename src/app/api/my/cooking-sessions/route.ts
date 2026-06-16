@@ -90,6 +90,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const mealId: string = typeof body.mealId === 'string' ? body.mealId : '';
   const serveTargetTime: string | null = typeof body.serveTargetTime === 'string' ? body.serveTargetTime : null;
+  // Setup mode (optional): cooks = person ids participating in the cooking;
+  // assignments = { stepId: personId } division of labour. Both default to empty
+  // (a plain solo cook), so the simple Start path is unchanged.
+  const cooks: string[] = Array.isArray(body.cooks) ? body.cooks.filter((x: any) => typeof x === 'string') : [];
+  const assignments: Record<string, string> =
+    body.assignments && typeof body.assignments === 'object' ? body.assignments : {};
   if (!mealId) return NextResponse.json({ error: 'mealId required' }, { status: 400 });
 
   // Ownership + must be a meal. Also resolve the owner person (self-person) if present.
@@ -177,21 +183,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: sErr?.message ?? 'Could not start the session.' }, { status: 500 });
   }
 
-  // Lead participant (best-effort — a missing person link must not fail the session).
-  if (ownerPersonId) {
-    const { error: pErr } = await db.from('session_participant').insert({
-      session_id: session.id, person_id: ownerPersonId, role: 'lead',
-    });
+  // Participants (cooks). The owner is always lead; any additional cooks chosen in
+  // setup join as helpers. Best-effort — a missing person link must not fail the session.
+  const participantRows: { session_id: string; person_id: string; role: string }[] = [];
+  const seenPersons = new Set<string>();
+  if (ownerPersonId) { participantRows.push({ session_id: session.id, person_id: ownerPersonId, role: 'lead' }); seenPersons.add(ownerPersonId); }
+  for (const pid of cooks) {
+    if (!seenPersons.has(pid)) { participantRows.push({ session_id: session.id, person_id: pid, role: 'helper' }); seenPersons.add(pid); }
+  }
+  if (participantRows.length) {
+    const { error: pErr } = await db.from('session_participant').insert(participantRows);
     if (pErr) console.error('[cooking-session] participant insert failed:', pErr.message);
   }
 
   // Initialise one pending step-state row per scheduled step (checked off as the cook
   // progresses). Keyed to the FROZEN snapshot's step ids — stable for the session's life.
+  // assigned_to carries the setup-mode division of labour (null = unassigned / lead).
   const stepRows = merge.scheduled.map((st: any) => ({
     session_id:        session.id,
     step_id:           st.id,
     dish_canonical_id: st.dishCanonicalId ?? null,
     status:            'pending',
+    assigned_to:       (typeof assignments[st.id] === 'string' ? assignments[st.id] : null),
   }));
   // De-dupe defensively (snapshot ids are unique, but holds are synthesized).
   const seen = new Set<string>();

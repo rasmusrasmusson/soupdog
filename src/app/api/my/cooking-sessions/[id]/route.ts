@@ -38,13 +38,35 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
 
   const { data: steps } = await db
     .from('session_step_state')
-    .select('step_id, dish_canonical_id, status, started_at, completed_at')
+    .select('step_id, dish_canonical_id, status, started_at, completed_at, assigned_to')
     .eq('session_id', id);
 
   const { data: participants } = await db
     .from('session_participant')
     .select('person_id, role, joined_at')
     .eq('session_id', id);
+
+  // Resolve participant person_id → name + avatar so the cooking screen can show
+  // who's assigned to each task without extra round-trips.
+  const personIds = Array.from(new Set([
+    ...(participants ?? []).map((p: any) => p.person_id),
+    ...(steps ?? []).map((s: any) => s.assigned_to),
+  ].filter(Boolean)));
+  const peopleById: Record<string, any> = {};
+  if (personIds.length) {
+    const { data: people } = await db
+      .from('person')
+      .select('id, full_name, display_name, avatar_color, avatar_initials')
+      .in('id', personIds);
+    for (const p of people ?? []) {
+      peopleById[p.id] = {
+        id: p.id,
+        name: p.full_name || p.display_name || 'Someone',
+        avatarColor: p.avatar_color ?? null,
+        avatarInitials: p.avatar_initials ?? null,
+      };
+    }
+  }
 
   // "Recipe updated since snapshot": compare each dish's CURRENT current_version_id
   // against the source_version_ids frozen at start. We only need the dishes that the
@@ -79,6 +101,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
     timeline:        session.timeline_snapshot,         // the frozen MergeResult
     steps:           steps ?? [],                       // per-step progress
     participants:    participants ?? [],
+    people:          peopleById,                         // person_id → {name, avatar...}
     recipeUpdated:   updatedDishes.length > 0,          // flag for the UI
     updatedDishes,                                      // which dishes changed
   });
