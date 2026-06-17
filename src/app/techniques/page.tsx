@@ -118,14 +118,26 @@ export default function TechniquesPage() {
             Techniques
           </h1>
           {isAdmin && (
-            <a href="/techniques/new"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)',
-                border: '1px solid var(--accent)', padding: '6px 12px',
-                textDecoration: 'none', textTransform: 'uppercase',
-                letterSpacing: '0.1em', flexShrink: 0, whiteSpace: 'nowrap' }}>
-              + Add a technique
-            </a>
+            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              {draftCount > 0 && (
+                <a href="/techniques/review"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'var(--font-mono)', fontSize: 10, color: '#fff',
+                    background: 'var(--accent)', border: '1px solid var(--accent)', padding: '6px 12px',
+                    textDecoration: 'none', textTransform: 'uppercase',
+                    letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+                  Review queue ({draftCount})
+                </a>
+              )}
+              <a href="/techniques/new"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)',
+                  border: '1px solid var(--accent)', padding: '6px 12px',
+                  textDecoration: 'none', textTransform: 'uppercase',
+                  letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+                + Add a technique
+              </a>
+            </div>
           )}
         </div>
         <p style={{ color: 'var(--muted)', marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
