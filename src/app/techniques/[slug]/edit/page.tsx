@@ -10,6 +10,17 @@ const COMPLETION_TYPES = ['', 'time','core_temp','surface_temp','color','volume'
 const HEAT_MECHANISMS = ['', 'conduction','convection','radiation','dielectric','combination','none'];
 const HEAT_MEDIA = ['', 'fat','water','steam','air','direct','none'];
 
+// Media manager option lists
+const MEDIA_LANGS: { value: string; label: string }[] = [
+  { value: '',   label: 'Language-neutral' },
+  { value: 'en', label: 'English' },
+  { value: 'zh', label: '中文' },
+  { value: 'sv', label: 'Svenska' },
+  { value: 'ar', label: 'العربية' },
+];
+const MEDIA_ROLES = ['hero', 'step_demo', 'diagram', 'detail'];
+const langLabel = (v: string | null) => MEDIA_LANGS.find(l => l.value === (v ?? ''))?.label ?? (v ?? 'Language-neutral');
+
 const L: React.CSSProperties = {
   fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.1em',
   textTransform: 'uppercase', color: 'var(--muted)', display: 'block', marginBottom: 6,
@@ -136,6 +147,10 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       <div style={FIELD}><label style={L}>Hero image</label>
         <ImageUpload kind="techniques" slug={slug} value={t.image_url} onChange={url => set('image_url', url)} /></div>
 
+      {/* Media manager — multiple images + videos, per language. Saves immediately
+          (its own table), independent of the Save-technique button below. */}
+      <MediaManager taskId={t.id} slug={slug} />
+
       <div style={FIELD}><label style={L}>Tips</label>
         <textarea style={{ ...I, minHeight: 56, resize: 'vertical' }} value={t.tips ?? ''} onChange={e => set('tips', e.target.value)} /></div>
 
@@ -188,6 +203,152 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Media manager: lists / uploads / removes task_media rows for this task.
+// Files go through /api/admin/upload-media (image -> WebP, video stored as-is);
+// the returned url + path are recorded via /api/admin/tasks/{id}/media.
+// Each asset carries a language so the public page can serve the user's locale.
+// ---------------------------------------------------------------------------
+type MediaRow = {
+  id: string; kind: 'image' | 'video'; role: string;
+  language: string | null; url: string; storage_path: string | null;
+  caption: string | null; sort_order: number;
+};
+
+function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
+  const [media, setMedia] = useState<MediaRow[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  // form state for the next upload
+  const [lang, setLang] = useState<string>('en');
+  const [role, setRole] = useState<string>('step_demo');
+  const [caption, setCaption] = useState<string>('');
+
+  const load = async () => {
+    try {
+      const j = await fetch(`/api/admin/tasks/${taskId}/media`).then(r => r.json());
+      setMedia(j.media ?? []);
+    } catch {
+      setMedia([]);
+    }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [taskId]);
+
+  const onPick = async (file: File) => {
+    setBusy(true); setErr(null);
+    try {
+      // 1) upload the file
+      const form = new FormData();
+      form.append('file', file);
+      form.append('kind', 'techniques');
+      form.append('slug', slug);
+      const up = await fetch('/api/admin/upload-media', { method: 'POST', body: form }).then(r => r.json());
+      if (!up.url) { setErr(up.error || 'Upload failed'); setBusy(false); return; }
+      // 2) record the row
+      const row = await fetch(`/api/admin/tasks/${taskId}/media`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind: up.kind,                       // 'image' | 'video' from the upload route
+          role,
+          language: lang || null,
+          url: up.url,
+          storage_path: up.path ?? null,
+          caption: caption.trim() || null,
+          sort_order: (media?.length ?? 0),
+        }),
+      }).then(r => r.json());
+      if (row.error) { setErr(row.error); setBusy(false); return; }
+      setCaption('');
+      await load();
+    } catch (e: any) {
+      setErr(e?.message || 'Upload error');
+    }
+    setBusy(false);
+  };
+
+  const remove = async (id: string) => {
+    setBusy(true); setErr(null);
+    try {
+      await fetch(`/api/admin/tasks/${taskId}/media?mediaId=${id}`, { method: 'DELETE' });
+      await load();
+    } catch (e: any) {
+      setErr(e?.message || 'Delete error');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ ...FIELD, border: '1px solid var(--border)', padding: '16px', background: 'var(--surface)' }}>
+      <label style={L}>Media (images &amp; video, per language)</label>
+      <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 14px', lineHeight: 1.5 }}>
+        Add one or more images or short video clips that explain this technique. Set the
+        language for each — the public page serves the viewer&apos;s language, falling back to
+        language-neutral, then English.
+      </p>
+
+      {/* existing media grid */}
+      {media === null && <p style={{ fontSize: 13, color: 'var(--muted)' }}>Loading media…</p>}
+      {media && media.length === 0 && (
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>No media yet.</p>
+      )}
+      {media && media.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
+          {media.map((m: MediaRow) => (
+            <div key={m.id} style={{ border: '1px solid var(--border)', padding: 8, background: 'var(--bg, #fff)' }}>
+              {m.kind === 'video'
+                ? <video src={m.url} controls style={{ width: '100%', height: 90, objectFit: 'cover', background: '#000' }} />
+                : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: 90, objectFit: 'cover' }} />}
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                {m.kind} · {langLabel(m.language)} · {m.role}
+              </div>
+              {m.caption && <div style={{ fontSize: 11, color: 'var(--fg)', marginTop: 2 }}>{m.caption}</div>}
+              <button onClick={() => remove(m.id)} disabled={busy}
+                style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
+                  textTransform: 'uppercase', color: '#b4413c', background: 'transparent',
+                  border: '1px solid var(--border)', padding: '3px 8px', cursor: busy ? 'default' : 'pointer' }}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* upload controls */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+        <div>
+          <label style={{ ...L, fontSize: 9 }}>Language</label>
+          <select style={{ ...I, width: 'auto', padding: '6px 8px', fontSize: 13 }} value={lang} onChange={e => setLang(e.target.value)}>
+            {MEDIA_LANGS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ ...L, fontSize: 9 }}>Role</label>
+          <select style={{ ...I, width: 'auto', padding: '6px 8px', fontSize: 13 }} value={role} onChange={e => setRole(e.target.value)}>
+            {MEDIA_ROLES.map(r => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label style={{ ...L, fontSize: 9 }}>Caption (optional)</label>
+          <input style={{ ...I, padding: '6px 8px', fontSize: 13 }} value={caption} onChange={e => setCaption(e.target.value)} placeholder='e.g. holding the microplane' />
+        </div>
+      </div>
+
+      <label style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8, cursor: busy ? 'default' : 'pointer',
+        fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: busy ? 'var(--muted)' : 'var(--accent)', border: '1px solid var(--accent)', padding: '8px 14px',
+      }}>
+        {busy ? 'Uploading…' : '+ Add image or video'}
+        <input type="file" accept="image/*,video/mp4,video/webm,video/quicktime" disabled={busy}
+          style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) onPick(f); e.currentTarget.value = ''; }} />
+      </label>
+
+      {err && <div style={{ marginTop: 10, fontSize: 12, color: '#b4413c' }}>{err}</div>}
     </div>
   );
 }
