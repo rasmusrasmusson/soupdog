@@ -16,12 +16,14 @@
 // Page-specific chrome (bookmark, print, right sidebar, mobile sticky bar, nutrition)
 // stays in the PAGE, wrapping this component — it is intentionally NOT here.
 
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDuration } from '@/lib/utils';
 import { Zap } from 'lucide-react';
 import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
 import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
+import { TaskDetailModal } from '@/components/techniques/TaskDetailModal';
+import { useLocale } from '@/lib/locale-context';
 
 const B    = '1px solid var(--border)';
 const MONO = 'var(--font-mono)';
@@ -124,16 +126,35 @@ function ToolCell({ settings }: { settings: any }) {
 // muted suffix ("Fry — until crispy"). `notes` carries observable completion phrases
 // ("until crispy") and human time ranges ("about 8-10 minutes") that don't fit the
 // numeric Time column. Duration (PT#M) lives in the Time column, not here.
-function StepLine({ instruction, notes }: { instruction: string; notes?: string }) {
+function StepLine({ instruction, notes, taskId, onOpenTask }: { instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void }) {
   return (
     <>
       {instruction}
       {notes && <span style={{ color: MUT, fontFamily: MONO, fontSize: 10 }}> — {notes}</span>}
+      {taskId && onOpenTask && (
+        <button
+          type="button"
+          onClick={() => onOpenTask(taskId)}
+          title="How to do this"
+          aria-label="How to do this"
+          style={{
+            marginLeft: 6, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
+            fontFamily: MONO, fontSize: 11, lineHeight: 1, color: 'var(--muted)',
+            verticalAlign: 'baseline', transition: 'color 0.15s',
+          }}
+          onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
+          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
+        >
+          ⓘ
+        </button>
+      )}
     </>
   );
 }
 
 export function RecipeDisplay({ recipe, interactive, linkIngredients = false, showHero = true }: RecipeDisplayProps) {
+  const { locale } = useLocale();
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
   const td: React.CSSProperties    = { padding: '9px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
@@ -300,7 +321,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                     <div className="flex items-start gap-3">
                       {isOn && <Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine instruction={step.instruction} notes={step.notes} /></p>
+                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></p>
                         {stepIngs.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {stepIngs.map((ing: RecipeIngredientRef) => (
@@ -374,7 +395,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                           <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} /></td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>
-                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine instruction={step.instruction} notes={step.notes} /></td>
+                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>
                         </tr>
                       ) : (
                         stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
@@ -389,7 +410,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine instruction={step.instruction} notes={step.notes} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>}
                           </tr>
                         ))
                       );
@@ -407,6 +428,10 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           </table>
         </div>
       </section>
+
+      {openTaskId && (
+        <TaskDetailModal taskId={openTaskId} locale={locale} onClose={() => setOpenTaskId(null)} />
+      )}
     </div>
   );
 }

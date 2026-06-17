@@ -331,7 +331,6 @@ export interface Recipe {
   totalTimeSeconds:    number;
   activeTimeSeconds?:  number;
   passiveTimeSeconds?: number;
-  heroImageUrl?:       string;
   ingredients:         RecipeIngredientRef[];
   steps:               RecipeStep[];
   subRecipes?:         SubRecipeRef[];
@@ -368,6 +367,7 @@ export interface RecipeStep {
   temperature?:     Measurement;
   notes?:           string;
   applianceSettings?: ApplianceStepSettings;  // new
+  taskId?:          string;  // FK to tasks — enables the task-detail modal in recipes
 }
 
 export interface SubRecipeRef {
