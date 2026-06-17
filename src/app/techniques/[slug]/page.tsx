@@ -15,6 +15,31 @@ type Task = {
   archived_at: string | null;
 };
 
+type MediaRow = {
+  id: string; kind: 'image' | 'video'; role: string;
+  language: string | null; url: string; caption: string | null; sort_order: number;
+};
+
+// Resolve media for the viewer's language, per role group:
+//   exact locale -> language-neutral (null) -> English -> whatever exists.
+function pickForLocale(rows: MediaRow[], locale: string): MediaRow[] {
+  if (!rows.length) return [];
+  const tier = (r: MediaRow) =>
+    r.language === locale ? 0 : r.language == null ? 1 : r.language === 'en' ? 2 : 3;
+  const groups = new Map<string, MediaRow[]>();
+  for (const r of rows) {
+    const k = r.role || 'detail';
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(r);
+  }
+  const out: MediaRow[] = [];
+  for (const list of groups.values()) {
+    const best = Math.min(...list.map(tier));
+    for (const r of list) if (tier(r) === best) out.push(r);
+  }
+  return out.sort((a, b) => a.sort_order - b.sort_order);
+}
+
 const prettify = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 function fmtDur(a: number | null, b: number | null): string {
   if (!a && !b) return '';
@@ -58,6 +83,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function TechniqueDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [task, setTask] = useState<Task | null | 'missing'>(null);
+  const [media, setMedia] = useState<MediaRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -98,6 +124,17 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
       setTask(data && data.length ? data[0] : 'missing');
     })();
   }, [slug]);
+
+  // once we know the task id, load its media (images/video)
+  useEffect(() => {
+    if (!task || task === 'missing') return;
+    let cancelled = false;
+    fetch(`/api/admin/tasks/${task.id}/media`)
+      .then(r => r.json())
+      .then(j => { if (!cancelled) setMedia(Array.isArray(j?.media) ? j.media : []); })
+      .catch(() => { if (!cancelled) setMedia([]); });
+    return () => { cancelled = true; };
+  }, [task]);
 
   if (task === null) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>;
   if (task === 'missing') return (
@@ -199,6 +236,31 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
             style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
         </div>
       )}
+
+      {/* Media gallery — task_media rows, resolved to the viewer's language. */}
+      {(() => {
+        const shown = pickForLocale(media, 'en');
+        if (!shown.length) return null;
+        return (
+          <div style={{
+            marginTop: 20,
+            display: 'grid',
+            gridTemplateColumns: shown.length > 1 ? 'repeat(auto-fit, minmax(240px, 1fr))' : '1fr',
+            gap: 12,
+          }}>
+            {shown.map(m => (
+              <figure key={m.id} style={{ margin: 0, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
+                {m.kind === 'video'
+                  ? <video src={m.url} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 420, background: '#000' }} />
+                  : <img src={m.url} alt={m.caption ?? task.name} style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />}
+                {m.caption && (
+                  <figcaption style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 10px' }}>{m.caption}</figcaption>
+                )}
+              </figure>
+            ))}
+          </div>
+        );
+      })()}
 
       {task.description && (
         <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg)', marginTop: 14 }}>
