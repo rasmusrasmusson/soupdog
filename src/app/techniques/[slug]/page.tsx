@@ -3,6 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { useLocale } from '@/lib/locale-context';
 
 type Task = {
   id: string; slug: string | null; name: string; category: string | null;
@@ -82,6 +83,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default function TechniqueDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
+  const { locale } = useLocale();
   const [task, setTask] = useState<Task | null | 'missing'>(null);
   const [media, setMedia] = useState<MediaRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -239,7 +241,7 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
 
       {/* Media gallery — task_media rows, resolved to the viewer's language. */}
       {(() => {
-        const shown = pickForLocale(media, 'en');
+        const shown = pickForLocale(media, locale);
         if (!shown.length) return null;
         return (
           <div style={{
