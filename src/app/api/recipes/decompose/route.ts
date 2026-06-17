@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
+export const maxDuration = 120; // Sonnet decomposition of long recipes can exceed the default; raise to avoid 502s
 
 // Allow time for the (possibly slow) Anthropic call — without this the
 // serverless function can be killed mid-request and return a 502 intermittently.
