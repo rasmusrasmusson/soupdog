@@ -414,6 +414,7 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
   const [boundTool, setBoundTool] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState<{ name: string; slug: string } | null>(null);
 
   const load = async () => {
     try {
@@ -434,8 +435,12 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(out.error || `Failed (${res.status})`); setBusy(false); return; }
-      // open the new concept's edit page so the user can add its specific content
-      window.location.href = `/techniques/${out.concept.slug}/edit`;
+      // stay on the parent: refresh the list, clear the form, keep adding.
+      // edit a concept's own content later by clicking it in the list.
+      setJustAdded({ name: out.concept.name, slug: out.concept.slug });
+      setName(''); setBoundTool('');
+      await load();
+      setBusy(false);
     } catch (e: any) {
       setErr(e?.message || 'Network error'); setBusy(false);
     }
@@ -467,8 +472,17 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
         <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>No specific versions yet.</p>
       )}
 
+      {justAdded && (
+        <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 10 }}>
+          Added “{justAdded.name}”. Add another below, or{' '}
+          <Link href={`/techniques/${justAdded.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+            edit its content
+          </Link>.
+        </div>
+      )}
+
       {!showForm && (
-        <button onClick={() => setShowForm(true)}
+        <button onClick={() => { setShowForm(true); setJustAdded(null); }}
           style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
             textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer',
             color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)' }}>
@@ -492,13 +506,17 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
             <button onClick={create} disabled={busy}
               style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 18px',
                 fontSize: 13, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: busy ? 0.6 : 1 }}>
-              {busy ? 'Creating…' : 'Create & edit'}
+              {busy ? 'Adding…' : 'Add'}
             </button>
             <button onClick={() => { setShowForm(false); setErr(null); }}
               style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 13, cursor: 'pointer' }}>
-              Cancel
+              Done
             </button>
           </div>
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0 }}>
+            Adds a specific version and keeps this form open so you can add more
+            (e.g. a lemon, an orange, a lime). Click any in the list above to add its own content and media.
+          </p>
           {err && <div style={{ fontSize: 12, color: '#b4413c' }}>{err}</div>}
         </div>
       )}
