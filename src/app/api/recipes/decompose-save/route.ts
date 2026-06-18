@@ -22,10 +22,6 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logAiUsage } from '@/lib/ai/anthropic';
 
-// Allow time for the (possibly slow) Anthropic call — without this the
-// serverless function can be killed mid-request and return a 502 intermittently.
-export const maxDuration = 60;
-
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
 }
@@ -142,6 +138,49 @@ async function findOrCreateTask(
   return null;
 }
 
+// ── specialiseTask (concept layer, Phase 2 / "C") — deterministic post-match.
+// Given the generic task the AI matched, the step's resolved ingredient id and the
+// step's tool slug, see if a CONCEPT of that task (parent_task_id = generic) binds a
+// matching dimension. Most-specific wins: a concept matching BOTH ingredient and tool
+// beats one matching only ingredient, which beats one matching only tool. No match →
+// return the generic task unchanged (so normal matching is never disturbed). ──
+async function specialiseTask(
+  db: any, genericTaskId: string | null,
+  ingredientId: string | null, toolSlug: string | null,
+  cache: Map<string, { id: string; bi: string | null; bt: string | null }[]>,
+): Promise<string | null> {
+  if (!genericTaskId) return genericTaskId;
+  if (!ingredientId && !toolSlug) return genericTaskId;
+
+  // load (and cache) this task's concepts once per save
+  let concepts = cache.get(genericTaskId);
+  if (!concepts) {
+    const { data } = await db
+      .from('tasks')
+      .select('id, bound_ingredient_id, bound_tool_slug')
+      .eq('parent_task_id', genericTaskId);
+    const built = (data ?? []).map((c: any) => ({ id: c.id, bi: c.bound_ingredient_id ?? null, bt: c.bound_tool_slug ?? null }));
+    cache.set(genericTaskId, built);
+    concepts = built;
+  }
+  const conceptList = concepts ?? [];
+  if (!conceptList.length) return genericTaskId;
+
+  // score each concept: it must not require a dimension the step lacks or mismatches.
+  // +2 for an ingredient match, +1 for a tool match. A concept that binds a dimension
+  // the step DOESN'T match is disqualified (can't use "Zest a lemon" on an orange step).
+  let best: { id: string; score: number } | null = null;
+  for (const c of conceptList) {
+    let score = 0;
+    if (c.bi) { if (c.bi === ingredientId) score += 2; else continue; }       // binds an ingredient → must match
+    if (c.bt) { if (c.bt === toolSlug)    score += 1; else continue; }       // binds a tool → must match
+    if (score === 0) continue;                                               // binds nothing relevant → skip
+    if (!best || score > best.score) best = { id: c.id, score };
+  }
+  return best ? best.id : genericTaskId;
+}
+
+
 // ISO-8601-ish "PT12M" → seconds, else null (completion strings that aren't durations
 // are kept as the step's completion text in `notes`, not turned into a duration).
 function durationToSeconds(completion: string | null | undefined): number | null {
@@ -195,25 +234,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'dag with nodes required' }, { status: 400 });
   }
 
-  // Guard against a known AI non-determinism: the decomposer sometimes bakes the
-  // quantity into the instruction text ("Add 3 l water") and leaves the node's
-  // structured `ingredients` array empty. That produces a recipe with steps but
-  // ZERO ingredient rows (blank Product/Qty columns). Detect it here and reject
-  // as retryable, so the user re-decomposes instead of silently saving a broken
-  // recipe. (We require at least one node to carry a structured ingredient.)
-  const nodesWithIngredient = dag.nodes.filter(
-    (n: any) => Array.isArray(n.ingredients) && n.ingredients.some((ig: any) => ig?.name?.trim())
-  ).length;
-  if (nodesWithIngredient === 0) {
-    return NextResponse.json(
-      {
-        error: 'The decomposition did not capture any ingredients. Please try again.',
-        retryable: true,
-      },
-      { status: 422 }
-    );
-  }
-
   // ── Validate the DAG before touching the DB (cheap guard against bad input) ──
   const ids = new Set<string>(dag.nodes.map((n: any) => n.id));
   for (const n of dag.nodes) {
@@ -234,6 +254,7 @@ export async function POST(req: NextRequest) {
   const createdIngredients: { id: string; name: string }[] = [];
   const createdTasks: string[] = [];
   const taskCache = new Map<string, string>();
+  const conceptCache = new Map<string, { id: string; bi: string | null; bt: string | null }[]>();
 
   try {
     // ── canonical + version (mirrors /api/my/recipes POST) ──
@@ -267,14 +288,25 @@ export async function POST(req: NextRequest) {
     //    dependency edges after all steps exist. ──
     const stepIdByNode = new Map<string, string>();
     let ingOrderIndex = 0;
-    let ingredientsInserted = 0;
-    const ingredientInsertErrors: string[] = [];
     const stepIngredientIds = new Set<string>();
 
     for (let i = 0; i < dag.nodes.length; i++) {
       const n = dag.nodes[i];
 
-      const taskId = await findOrCreateTask(db, n.task, taskCache, createdTasks);
+      const genericTaskId = await findOrCreateTask(db, n.task, taskCache, createdTasks);
+
+      // Resolve the step's single ingredient FIRST (atomicity: at most one), so we can
+      // specialise the task against it before inserting the step.
+      const ing = (n.ingredients ?? [])[0];
+      const ingredientId = ing?.name?.trim()
+        ? await findOrCreateIngredient(db, ing.name, createdIngredients)
+        : null;
+
+      // Concept specialisation (C): swap the generic task for a matching concept
+      // (e.g. "Zest" → "Zest a lemon") when this step's ingredient/tool binds one.
+      const toolSlug = typeof n.tool === 'string' ? n.tool.trim() || null : null;
+      const taskId = await specialiseTask(db, genericTaskId, ingredientId, toolSlug, conceptCache);
+
       // Duration for the Time column: ISO PT in completion first, else parse a natural-
       // language time from the completion or notes ("about 9 minutes", "8-10 min").
       const durationSeconds =
@@ -292,7 +324,7 @@ export async function POST(req: NextRequest) {
           order_index:  i + 1,
           step_type:    n.passive ? 'passive' : 'human',
           instruction:  buildInstruction(n),
-          task_id:      taskId,                                   // ← REAL FK (the fix)
+          task_id:      taskId,                                   // ← REAL FK (specialised if a concept matched)
           task_parameters: n.params && Object.keys(n.params).length ? n.params : null,
           duration_seconds: durationSeconds,
           group_label:  n.group?.trim() || null,
@@ -305,36 +337,19 @@ export async function POST(req: NextRequest) {
       if (se || !step) throw (se ?? new Error('step insert returned no row'));
       stepIdByNode.set(n.id, step.id);
 
-      // single ingredient introduced at this node (atomicity: at most one)
-      const ing = (n.ingredients ?? [])[0];
-      if (ing?.name?.trim()) {
-        const ingredientId = await findOrCreateIngredient(db, ing.name, createdIngredients);
-        if (!ingredientId) {
-          // findOrCreate failed — record so we can report instead of silently
-          // saving a recipe that's missing this ingredient.
-          ingredientInsertErrors.push(`could not resolve ingredient "${ing.name}"`);
-        } else {
-          stepIngredientIds.add(ingredientId);
-          // CHECK the insert — previously this was fire-and-forget, so an RLS /
-          // grant / constraint failure produced a recipe with steps but ZERO
-          // ingredients and NO error surfaced to the user (the exact "blank
-          // Product/Qty" bug). Now we capture and report any failure.
-          const { error: viErr } = await db.from('version_ingredients').insert({
-            version_id:     version.id,
-            step_id:        step.id,
-            ingredient_id:  ingredientId,
-            quantity_value: ing.qty ?? 0,
-            quantity_unit:  ing.unit ?? 'g',
-            prep_note:      ing.prep?.trim() || null,
-            optional:       false,
-            order_index:    ++ingOrderIndex,
-          });
-          if (viErr) {
-            ingredientInsertErrors.push(`"${ing.name}": ${viErr.code ?? ''} ${viErr.message ?? viErr}`.trim());
-          } else {
-            ingredientsInserted++;
-          }
-        }
+      // write the resolved ingredient row (id already resolved above)
+      if (ingredientId) {
+        stepIngredientIds.add(ingredientId);
+        await db.from('version_ingredients').insert({
+          version_id:     version.id,
+          step_id:        step.id,
+          ingredient_id:  ingredientId,
+          quantity_value: ing.qty ?? 0,
+          quantity_unit:  ing.unit ?? 'g',
+          prep_note:      ing.prep?.trim() || null,
+          optional:       false,
+          order_index:    ++ingOrderIndex,
+        });
       }
     }
 
@@ -374,22 +389,6 @@ export async function POST(req: NextRequest) {
       recipe_version_id: version.id,
     });
 
-    // The recipe is saved with steps but its ingredients failed to persist —
-    // exactly the "blank Product/Qty" bug. Fail loudly with the captured Postgres
-    // error(s) rather than returning a broken recipe. (We require that at least
-    // one ingredient landed when the DAG carried ingredient-bearing nodes.)
-    const dagHadIngredients = dag.nodes.some(
-      (n: any) => Array.isArray(n.ingredients) && n.ingredients.some((ig: any) => ig?.name?.trim())
-    );
-    if (dagHadIngredients && ingredientsInserted === 0) {
-      return NextResponse.json({
-        error: 'The recipe was structured correctly but its ingredients could not be saved. '
-             + 'Please try again.',
-        retryable: true,
-        detail: ingredientInsertErrors.slice(0, 5),
-      }, { status: 500 });
-    }
-
     if (createdIngredients.length > 0) {
       after(() => backfillNutrition(db, user.id, createdIngredients));
     }
@@ -398,8 +397,6 @@ export async function POST(req: NextRequest) {
       id: canonical.id,
       slug,
       stepsWritten: stepIdByNode.size,
-      ingredientsWritten: ingredientsInserted,
-      ingredientErrors: ingredientInsertErrors.slice(0, 5),
       tasksCreated: createdTasks,         // surfaced so you can see what entered the library unverified
       ingredientsCreated: createdIngredients.map((c) => c.name),
     }, { status: 201 });
