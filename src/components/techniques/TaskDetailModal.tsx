@@ -65,6 +65,7 @@ export function TaskDetailModal({
   const [task, setTask] = useState<TaskRow | null>(null);
   const [media, setMedia] = useState<MediaRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enlarged, setEnlarged] = useState<MediaRow | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +111,8 @@ export function TaskDetailModal({
   }, [onKey]);
 
   const shown = pickForLocale(media, locale);
+  const heroM = shown.find(m => m.role === 'hero') ?? null;
+  const stepM = shown.filter(m => m.role !== 'hero').sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const heat = task?.heat_mechanism && task.heat_mechanism !== 'none'
     ? `${prettify(task.heat_mechanism)}${task.heat_medium && task.heat_medium !== 'none' ? ` in ${task.heat_medium}` : ''}`
     : '';
@@ -161,20 +164,52 @@ export function TaskDetailModal({
               </p>
             )}
 
-            {/* media gallery — locale-resolved */}
-            {shown.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: shown.length > 1 ? 'repeat(auto-fit, minmax(200px, 1fr))' : '1fr', gap: 10, margin: '0 0 18px' }}>
-                {shown.map(m => (
-                  <figure key={m.id} style={{ margin: 0 }}>
-                    {m.kind === 'video'
-                      ? <video src={m.url} controls playsInline style={{ width: '100%', borderRadius: 2, background: '#000' }} />
-                      : <img src={m.url} alt={m.caption ?? task.name} style={{ width: '100%', borderRadius: 2, display: 'block' }} />}
-                    {m.caption && (
-                      <figcaption style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{m.caption}</figcaption>
-                    )}
-                  </figure>
-                ))}
+            {/* media — locale-resolved. Enlarge-in-place: tap a step to view it large. */}
+            {enlarged ? (
+              <div style={{ margin: '0 0 18px' }}>
+                <button onClick={() => setEnlarged(null)}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '0 0 8px' }}>
+                  ← back to steps
+                </button>
+                {enlarged.kind === 'video'
+                  ? <video src={enlarged.url} controls autoPlay playsInline style={{ width: '100%', borderRadius: 2, background: '#000' }} />
+                  : <img src={enlarged.url} alt={enlarged.caption ?? task.name} style={{ width: '100%', borderRadius: 2, display: 'block' }} />}
+                {enlarged.caption && <div style={{ fontSize: 13, color: 'var(--fg)', marginTop: 6 }}>{enlarged.caption}</div>}
               </div>
+            ) : (
+              <>
+                {heroM && (
+                  <div style={{ margin: '0 0 14px', cursor: 'pointer' }} onClick={() => setEnlarged(heroM)}>
+                    {heroM.kind === 'video'
+                      ? <video src={heroM.url} playsInline muted style={{ width: '100%', borderRadius: 2, background: '#000' }} />
+                      : <img src={heroM.url} alt={task.name} style={{ width: '100%', borderRadius: 2, display: 'block' }} />}
+                  </div>
+                )}
+                {stepM.length > 0 && (
+                  <div style={{ margin: '0 0 18px' }}>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8 }}>
+                      Step by step
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 10 }}>
+                      {stepM.map((m, i) => (
+                        <button key={m.id} onClick={() => setEnlarged(m)}
+                          style={{ textAlign: 'left', padding: 0, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', overflow: 'hidden' }}>
+                            {m.kind === 'video'
+                              ? <>
+                                  <video src={m.url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 22, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>▸</span>
+                                </>
+                              : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                            <span style={{ position: 'absolute', top: 5, left: 5, fontFamily: 'var(--font-mono)', fontSize: 10, color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '1px 6px', borderRadius: 2 }}>{i + 1}</span>
+                          </div>
+                          {m.caption && <div style={{ fontSize: 11, color: 'var(--fg)', padding: '6px 8px', lineHeight: 1.35 }}>{m.caption}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
             {/* compact facts */}

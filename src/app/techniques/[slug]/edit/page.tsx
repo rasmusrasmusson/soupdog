@@ -430,6 +430,30 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
     setBusy(false);
   };
 
+  // drag-and-drop reorder (desktop/mouse). Touch uses the arrows.
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const dropOn = async (targetIdx: number) => {
+    if (!media || dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
+    // rebuild the order array with the dragged item moved to the target position,
+    // then renumber sort_order 0..n and persist every changed row.
+    const arr = [...media];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(targetIdx, 0, moved);
+    setDragIdx(null);
+    setBusy(true); setErr(null);
+    try {
+      await Promise.all(arr.map((m, i) =>
+        (m.sort_order ?? -1) === i ? null :
+        fetch(`/api/admin/tasks/${taskId}/media?mediaId=${m.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: i }),
+        })
+      ).filter(Boolean) as Promise<any>[]);
+      await load();
+    } catch (e: any) { setErr(e?.message || 'Reorder error'); }
+    setBusy(false);
+  };
+
   return (
     <div style={{ ...FIELD, border: '1px solid var(--border)', padding: '16px', background: 'var(--surface)' }}>
       <label style={L}>Media (images &amp; video, per language)</label>
@@ -447,17 +471,23 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
       {media && media.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
           {media.map((m: MediaRow, idx: number) => (
-            <div key={m.id} style={{ border: '1px solid var(--border)', padding: 8, background: 'var(--bg, #fff)' }}>
+            <div key={m.id}
+              draggable={!busy}
+              onDragStart={() => setDragIdx(idx)}
+              onDragOver={e => e.preventDefault()}
+              onDrop={() => dropOn(idx)}
+              style={{ border: dragIdx === idx ? '1px dashed var(--accent)' : '1px solid var(--border)',
+                padding: 8, background: 'var(--bg, #fff)', opacity: dragIdx === idx ? 0.5 : 1, cursor: busy ? 'default' : 'grab' }}>
               {m.kind === 'video'
                 ? <video src={m.url} controls style={{ width: '100%', height: 90, objectFit: 'cover', background: '#000' }} />
                 : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: 90, objectFit: 'cover' }} />}
               <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>{m.kind} · {langLabel(m.language)} · {m.role}</span>
                 <span style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} title="Move earlier"
-                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === 0) ? 'default' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--muted)', padding: '0 5px', fontSize: 11, lineHeight: 1.6 }}>↑</button>
-                  <button onClick={() => move(idx, 1)} disabled={busy || idx === media.length - 1} title="Move later"
-                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === media.length - 1) ? 'default' : 'pointer', color: idx === media.length - 1 ? 'var(--border)' : 'var(--muted)', padding: '0 5px', fontSize: 11, lineHeight: 1.6 }}>↓</button>
+                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} title="Move left"
+                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === 0) ? 'default' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>←</button>
+                  <button onClick={() => move(idx, 1)} disabled={busy || idx === media.length - 1} title="Move right"
+                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === media.length - 1) ? 'default' : 'pointer', color: idx === media.length - 1 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>→</button>
                 </span>
               </div>
               <input
