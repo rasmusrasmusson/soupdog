@@ -126,10 +126,20 @@ function ToolCell({ settings }: { settings: any }) {
 // muted suffix ("Fry — until crispy"). `notes` carries observable completion phrases
 // ("until crispy") and human time ranges ("about 8-10 minutes") that don't fit the
 // numeric Time column. Duration (PT#M) lives in the Time column, not here.
-function StepLine({ instruction, notes, taskId, onOpenTask }: { instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void }) {
+// The step line shows the CURATED task name (verb) when the step references a task,
+// so wording derives from blessed content rather than the frozen AI-built sentence.
+// Ingredients/quantities are rendered SEPARATELY by each layout (pills on desktop,
+// columns in the table), so they are NOT repeated in the line. Falls back to the
+// stored instruction for steps with no task (or legacy data).
+function composeStepLine(taskName: string | undefined, instruction: string): string {
+  const verb = (taskName ?? '').trim();
+  return verb || instruction;
+}
+
+function StepLine({ taskName, instruction, notes, taskId, onOpenTask }: { taskName?: string; instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void }) {
   return (
     <>
-      {instruction}
+      {composeStepLine(taskName, instruction)}
       {notes && <span style={{ color: MUT, fontFamily: MONO, fontSize: 10 }}> — {notes}</span>}
       {taskId && onOpenTask && (
         <button
@@ -321,7 +331,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                     <div className="flex items-start gap-3">
                       {isOn && <Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></p>
+                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></p>
                         {stepIngs.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {stepIngs.map((ing: RecipeIngredientRef) => (
@@ -395,7 +405,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                           <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} /></td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>
-                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>
+                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>
                         </tr>
                       ) : (
                         stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
@@ -410,7 +420,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>}
                           </tr>
                         ))
                       );

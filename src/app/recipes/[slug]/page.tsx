@@ -112,6 +112,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
         : undefined,
       applianceSettings: s.appliance_settings ?? undefined,
       taskId:      s.task_id ?? undefined,
+      taskName:    (Array.isArray(s.tasks) ? s.tasks[0]?.name : s.tasks?.name) ?? undefined,
     }));
 
   const equipment: any[] = (rv?.version_equipment ?? [])
@@ -530,7 +531,8 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               ),
               version_steps (
                 id, order_index, step_type, group_label, instruction, notes,
-                duration_seconds, temperature_celsius, appliance_settings, task_id
+                duration_seconds, temperature_celsius, appliance_settings, task_id,
+                tasks ( name )
               ),
               version_equipment (
                 id, required,
@@ -612,7 +614,8 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               ),
               version_steps (
                 id, order_index, step_type, group_label, instruction, notes,
-                duration_seconds, temperature_celsius, appliance_settings, task_id
+                duration_seconds, temperature_celsius, appliance_settings, task_id,
+                tasks ( name )
               ),
               version_equipment (
                 id, required,
