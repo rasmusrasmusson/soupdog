@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ImageUpload } from '@/components/admin/ImageUpload';
+import { IngredientPicker, ToolPicker } from '@/components/techniques/BindingPickers';
 
 const COMPLETION_TYPES = ['', 'time','core_temp','surface_temp','color','volume','mass','texture','structural','aroma','ph','subjective'];
 const HEAT_MECHANISMS = ['', 'conduction','convection','radiation','dielectric','combination','none'];
@@ -40,6 +41,7 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
   const [drafting, setDrafting] = useState(false);
   const [draftMsg, setDraftMsg] = useState<string | null>(null);
   const [parentInfo, setParentInfo] = useState<{ name: string; slug: string } | null>(null);
+  const [boundIngLabel, setBoundIngLabel] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient() as any;
@@ -54,6 +56,10 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       if (row?.parent_task_id) {
         const { data: p } = await supabase.from('tasks').select('name, slug').eq('id', row.parent_task_id).maybeSingle();
         if (p) setParentInfo({ name: p.name, slug: p.slug });
+      }
+      if (row?.bound_ingredient_id) {
+        const { data: ing } = await supabase.from('ingredients').select('name').eq('id', row.bound_ingredient_id).maybeSingle();
+        if (ing) setBoundIngLabel(ing.name);
       }
     })();
   }, [slug]);
@@ -102,6 +108,8 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       is_verified: t.is_verified,
       image_url: t.image_url ?? null,
       parent_task_id: t.parent_task_id ?? null,
+      bound_ingredient_id: t.bound_ingredient_id ?? null,
+      bound_tool_slug: t.bound_tool_slug ?? null,
     };
     const res = await fetch(`/api/admin/tasks/${t.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -156,6 +164,22 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
             Make standalone (remove parent link)
           </button>
           <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>— takes effect on Save</span>
+
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+            <div>
+              <label style={{ ...L, fontSize: 11 }}>Specialised for ingredient (optional)</label>
+              <IngredientPicker value={t.bound_ingredient_id ?? null} valueLabel={boundIngLabel}
+                onChange={(id, label) => { set('bound_ingredient_id', id); setBoundIngLabel(label); }} />
+            </div>
+            <div>
+              <label style={{ ...L, fontSize: 11 }}>Specialised for tool (optional)</label>
+              <ToolPicker value={t.bound_tool_slug ?? null}
+                onChange={(slug) => set('bound_tool_slug', slug)} />
+            </div>
+            <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
+              These are what make this a distinct version (e.g. a bound ingredient like “lemon”, or a bound tool like “knife”). Saved with the technique.
+            </p>
+          </div>
         </div>
       )}
 
@@ -457,7 +481,9 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
   const [concepts, setConcepts] = useState<ConceptRow[] | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
-  const [boundTool, setBoundTool] = useState('');
+  const [boundTool, setBoundTool] = useState<string | null>(null);
+  const [boundIng, setBoundIng] = useState<string | null>(null);
+  const [boundIngLabel, setBoundIngLabel] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<{ name: string; slug: string } | null>(null);
@@ -477,14 +503,18 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
       const res = await fetch(`/api/admin/tasks/${taskId}/concepts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), bound_tool_slug: boundTool.trim() || null }),
+        body: JSON.stringify({
+          name: name.trim(),
+          bound_tool_slug: boundTool || null,
+          bound_ingredient_id: boundIng || null,
+        }),
       });
       const out = await res.json().catch(() => ({}));
       if (!res.ok) { setErr(out.error || `Failed (${res.status})`); setBusy(false); return; }
       // stay on the parent: refresh the list, clear the form, keep adding.
       // edit a concept's own content later by clicking it in the list.
       setJustAdded({ name: out.concept.name, slug: out.concept.slug });
-      setName(''); setBoundTool('');
+      setName(''); setBoundTool(null); setBoundIng(null); setBoundIngLabel(null);
       await load();
       setBusy(false);
     } catch (e: any) {
@@ -544,9 +574,13 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
               placeholder={`e.g. ${taskName} a lemon`} />
           </div>
           <div>
-            <label style={{ ...L, fontSize: 11 }}>Bound tool slug (optional)</label>
-            <input style={I} value={boundTool} onChange={e => setBoundTool(e.target.value)}
-              placeholder="e.g. microplane" />
+            <label style={{ ...L, fontSize: 11 }}>Bound ingredient (optional)</label>
+            <IngredientPicker value={boundIng} valueLabel={boundIngLabel}
+              onChange={(id, label) => { setBoundIng(id); setBoundIngLabel(label); }} />
+          </div>
+          <div>
+            <label style={{ ...L, fontSize: 11 }}>Bound tool (optional)</label>
+            <ToolPicker value={boundTool} onChange={(slug) => setBoundTool(slug)} />
           </div>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <button onClick={create} disabled={busy}
