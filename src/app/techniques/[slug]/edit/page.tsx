@@ -37,6 +37,8 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
   const [t, setT] = useState<any | null | 'missing'>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [drafting, setDrafting] = useState(false);
+  const [draftMsg, setDraftMsg] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = createClient() as any;
@@ -61,8 +63,6 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
   const set = (k: string, v: any) => setT({ ...t, [k]: v });
 
   // AI-draft tips + common mistakes (fills the fields for review; does not save)
-  const [drafting, setDrafting] = useState(false);
-  const [draftMsg, setDraftMsg] = useState<string | null>(null);
   const draftContent = async () => {
     setDrafting(true); setDraftMsg(null);
     try {
