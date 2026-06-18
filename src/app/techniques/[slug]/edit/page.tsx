@@ -392,6 +392,44 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
     setBusy(false);
   };
 
+  // edit a caption after upload
+  const saveCaption = async (id: string, value: string) => {
+    setBusy(true); setErr(null);
+    try {
+      await fetch(`/api/admin/tasks/${taskId}/media?mediaId=${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caption: value }),
+      });
+      await load();
+    } catch (e: any) { setErr(e?.message || 'Save error'); }
+    setBusy(false);
+  };
+
+  // reorder: swap this item's sort_order with its neighbour in the given direction
+  const move = async (index: number, dir: -1 | 1) => {
+    if (!media) return;
+    const a = media[index];
+    const b = media[index + dir];
+    if (!a || !b) return;
+    const aOrder = a.sort_order ?? index;
+    const bOrder = b.sort_order ?? index + dir;
+    setBusy(true); setErr(null);
+    try {
+      await Promise.all([
+        fetch(`/api/admin/tasks/${taskId}/media?mediaId=${a.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: bOrder }),
+        }),
+        fetch(`/api/admin/tasks/${taskId}/media?mediaId=${b.id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: aOrder }),
+        }),
+      ]);
+      await load();
+    } catch (e: any) { setErr(e?.message || 'Reorder error'); }
+    setBusy(false);
+  };
+
   return (
     <div style={{ ...FIELD, border: '1px solid var(--border)', padding: '16px', background: 'var(--surface)' }}>
       <label style={L}>Media (images &amp; video, per language)</label>
@@ -408,15 +446,25 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
       )}
       {media && media.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
-          {media.map((m: MediaRow) => (
+          {media.map((m: MediaRow, idx: number) => (
             <div key={m.id} style={{ border: '1px solid var(--border)', padding: 8, background: 'var(--bg, #fff)' }}>
               {m.kind === 'video'
                 ? <video src={m.url} controls style={{ width: '100%', height: 90, objectFit: 'cover', background: '#000' }} />
                 : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: 90, objectFit: 'cover' }} />}
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                {m.kind} · {langLabel(m.language)} · {m.role}
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>{m.kind} · {langLabel(m.language)} · {m.role}</span>
+                <span style={{ display: 'flex', gap: 4 }}>
+                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} title="Move earlier"
+                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === 0) ? 'default' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--muted)', padding: '0 5px', fontSize: 11, lineHeight: 1.6 }}>↑</button>
+                  <button onClick={() => move(idx, 1)} disabled={busy || idx === media.length - 1} title="Move later"
+                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === media.length - 1) ? 'default' : 'pointer', color: idx === media.length - 1 ? 'var(--border)' : 'var(--muted)', padding: '0 5px', fontSize: 11, lineHeight: 1.6 }}>↓</button>
+                </span>
               </div>
-              {m.caption && <div style={{ fontSize: 11, color: 'var(--fg)', marginTop: 2 }}>{m.caption}</div>}
+              <input
+                defaultValue={m.caption ?? ''}
+                placeholder="caption…"
+                onBlur={e => { const v = e.target.value.trim(); if (v !== (m.caption ?? '')) saveCaption(m.id, v); }}
+                style={{ width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)' }} />
               <button onClick={() => remove(m.id)} disabled={busy}
                 style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
                   textTransform: 'uppercase', color: '#b4413c', background: 'transparent',

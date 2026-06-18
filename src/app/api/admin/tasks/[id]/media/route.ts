@@ -60,6 +60,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   return NextResponse.json({ media: data });
 }
 
+// PATCH /api/admin/tasks/{id}/media?mediaId=...  body: { caption?, sort_order? }
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!ADMIN_IDS.includes(user.id)) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
+
+  const mediaId = new URL(req.url).searchParams.get('mediaId');
+  if (!mediaId) return NextResponse.json({ error: 'mediaId required' }, { status: 400 });
+
+  const body = await req.json().catch(() => ({}));
+  const patch: Record<string, any> = {};
+  if ('caption' in body) patch.caption = body.caption ? String(body.caption).trim() : null;
+  if ('sort_order' in body && Number.isFinite(body.sort_order)) patch.sort_order = Math.trunc(body.sort_order);
+  if (Object.keys(patch).length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+
+  const db = supabase as any;
+  const { error } = await db.from('task_media').update(patch).eq('id', mediaId).eq('task_id', id);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ ok: true });
+}
+
 // DELETE /api/admin/tasks/{id}/media?mediaId=...  -> remove one media row
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
