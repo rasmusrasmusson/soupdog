@@ -126,20 +126,46 @@ function ToolCell({ settings }: { settings: any }) {
 // muted suffix ("Fry — until crispy"). `notes` carries observable completion phrases
 // ("until crispy") and human time ranges ("about 8-10 minutes") that don't fit the
 // numeric Time column. Duration (PT#M) lives in the Time column, not here.
-// The step line shows the CURATED task name (verb) when the step references a task,
-// so wording derives from blessed content rather than the frozen AI-built sentence.
-// Ingredients/quantities are rendered SEPARATELY by each layout (pills on desktop,
-// columns in the table), so they are NOT repeated in the line. Falls back to the
-// stored instruction for steps with no task (or legacy data).
-function composeStepLine(taskName: string | undefined, instruction: string): string {
+// Compose the step line. If the task has a display_template, fill its [ingredient]
+// and [tool] tags from this step's own ingredient and tool. [tool] is only filled
+// when the task is single_tool (so it's unambiguous) and a tool is present; an
+// unfillable [tool] (and its trailing "to the"/"in the" preposition) is stripped so
+// the line still reads cleanly. With no template, show the curated task name; with
+// no task at all, fall back to the stored instruction. Ingredients/quantities are
+// also shown separately by each layout, so the template usually names without qty.
+function composeStepLine(
+  taskName: string | undefined,
+  template: string | undefined,
+  singleTool: boolean,
+  ingredientName: string | undefined,
+  toolName: string | undefined,
+  instruction: string,
+): string {
+  const tmpl = (template ?? '').trim();
+  if (tmpl) {
+    let out = tmpl;
+    // [ingredient] → the step's ingredient, or strip the tag if none
+    if (ingredientName) out = out.replace(/\[ingredient\]/gi, ingredientName);
+    else out = out.replace(/\s*\[ingredient\]/gi, '');
+    // [tool] → only when single_tool and a tool is known; else strip the tag plus
+    // a leading preposition ("to the [tool]", "in the [tool]") so it reads cleanly
+    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, toolName);
+    else out = out.replace(/\s*(?:to|in|on|into|with)?\s*(?:the\s+)?\[tool\]/gi, '');
+    out = out.replace(/\s{2,}/g, ' ').trim();
+    if (out) return out;
+  }
   const verb = (taskName ?? '').trim();
   return verb || instruction;
 }
 
-function StepLine({ taskName, instruction, notes, taskId, onOpenTask }: { taskName?: string; instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void }) {
+function StepLine({ taskName, template, singleTool, ingredientName, toolName, instruction, notes, taskId, onOpenTask }: {
+  taskName?: string; template?: string; singleTool?: boolean;
+  ingredientName?: string; toolName?: string;
+  instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void;
+}) {
   return (
     <>
-      {composeStepLine(taskName, instruction)}
+      {composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction)}
       {notes && <span style={{ color: MUT, fontFamily: MONO, fontSize: 10 }}> — {notes}</span>}
       {taskId && onOpenTask && (
         <button
@@ -331,7 +357,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                     <div className="flex items-start gap-3">
                       {isOn && <Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} />}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></p>
+                        <p style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)', margin: 0 }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></p>
                         {stepIngs.length > 0 && (
                           <div className="flex flex-wrap gap-1.5 mt-2">
                             {stepIngs.map((ing: RecipeIngredientRef) => (
@@ -405,7 +431,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                           <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} /></td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>
-                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>
+                          <td style={{ ...td, lineHeight: 1.55 }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>
                         </tr>
                       ) : (
                         stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
@@ -420,7 +446,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine taskName={step.taskName} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} /></td>}
                           </tr>
                         ))
                       );

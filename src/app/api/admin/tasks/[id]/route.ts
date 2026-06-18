@@ -16,6 +16,8 @@ const EDITABLE = new Set([
   'min_duration_seconds', 'max_duration_seconds',
   'typical_input_state', 'typical_output_state',
   'suggested_tool_slugs', 'is_verified', 'image_url',
+  // instruction composition: per-task display template + single-tool flag
+  'display_template', 'single_tool',
   // concept layer: a task can point at a parent + bind dimensions
   'parent_task_id', 'bound_ingredient_id', 'bound_tool_slug',
   'bound_quantity', 'bound_quantity_unit', 'bound_dimensions',
@@ -88,6 +90,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.suggested_tool_slugs = Array.isArray(arr) && arr.length ? arr : null;
   }
   if ('is_verified' in patch) patch.is_verified = !!patch.is_verified;
+  if ('single_tool' in patch) patch.single_tool = !!patch.single_tool;
+  if ('display_template' in patch) patch.display_template = (patch.display_template === '' || patch.display_template == null) ? null : String(patch.display_template);
 
   // Archive / unarchive: body.archived (boolean) maps to archived_at timestamp.
   if ('archived' in body) {

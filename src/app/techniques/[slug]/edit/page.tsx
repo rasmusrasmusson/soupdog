@@ -115,6 +115,8 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       suggested_tool_slugs: Array.isArray(t.suggested_tool_slugs) ? t.suggested_tool_slugs.join(', ') : t.suggested_tool_slugs,
       is_verified: t.is_verified,
       image_url: t.image_url ?? null,
+      display_template: t.display_template ?? null,
+      single_tool: !!t.single_tool,
       parent_task_id: t.parent_task_id ?? null,
       bound_ingredient_id: t.bound_ingredient_id ?? null,
       bound_tool_slug: t.bound_tool_slug ?? null,
@@ -239,6 +241,25 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
 
       <div style={FIELD}><label style={L}>Tools (comma-separated slugs)</label>
         <input style={I} value={toolStr} onChange={e => set('suggested_tool_slugs', e.target.value)} placeholder='large-pot, colander' /></div>
+
+      <div style={FIELD}>
+        <label style={L}>Display template</label>
+        <input style={I} value={t.display_template ?? ''} onChange={e => set('display_template', e.target.value)}
+          placeholder='e.g. Add [ingredient] to the [tool]' />
+        <p style={{ fontSize: 11, color: 'var(--muted)', margin: '6px 0 0', lineHeight: 1.5 }}>
+          How a recipe step using this technique reads. Use <code>[ingredient]</code> and <code>[tool]</code> as
+          placeholders — the recipe fills them from that step. Leave empty to just show the technique name.
+          Examples: <em>Zest [ingredient]</em> · <em>Add [ingredient] to the [tool]</em> · <em>Bring to a boil</em>.
+        </p>
+      </div>
+
+      <div style={{ ...FIELD, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <input type="checkbox" id="single_tool" checked={!!t.single_tool}
+          onChange={e => set('single_tool', e.target.checked)} />
+        <label htmlFor="single_tool" style={{ fontSize: 13, color: 'var(--fg)', cursor: 'pointer' }}>
+          Single tool — this technique uses exactly one tool (so <code>[tool]</code> in the template is unambiguous)
+        </label>
+      </div>
 
       <div style={FIELD}><label style={L}>Hero image</label>
         <ImageUpload kind="techniques" slug={slug} value={t.image_url} onChange={url => set('image_url', url)} /></div>

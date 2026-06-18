@@ -370,6 +370,8 @@ export interface RecipeStep {
   applianceSettings?: ApplianceStepSettings;  // new
   taskId?:          string;  // FK to tasks — enables the task-detail modal in recipes
   taskName?:        string;   // ← ADD: curated task name, for render-time step composition
+  taskTemplate?:    string;    // ← ADD: task's display_template
+  taskSingleTool?:  boolean;   // ← ADD: task takes exactly one tool
 }
 
 export interface SubRecipeRef {
