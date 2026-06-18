@@ -6,6 +6,14 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { ImageUpload } from '@/components/admin/ImageUpload';
 import { IngredientPicker, ToolPicker } from '@/components/techniques/BindingPickers';
+import {
+  DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor,
+  useSensor, useSensors, type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, rectSortingStrategy, useSortable, sortableKeyboardCoordinates, arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 const COMPLETION_TYPES = ['', 'time','core_temp','surface_temp','color','volume','mass','texture','structural','aroma','ph','subjective'];
 const HEAT_MECHANISMS = ['', 'conduction','convection','radiation','dielectric','combination','none'];
@@ -430,17 +438,21 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
     setBusy(false);
   };
 
-  // drag-and-drop reorder (desktop/mouse). Touch uses the arrows.
-  const [dragIdx, setDragIdx] = useState<number | null>(null);
-  const dropOn = async (targetIdx: number) => {
-    if (!media || dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
-    // rebuild the order array with the dragged item moved to the target position,
-    // then renumber sort_order 0..n and persist every changed row.
-    const arr = [...media];
-    const [moved] = arr.splice(dragIdx, 1);
-    arr.splice(targetIdx, 0, moved);
-    setDragIdx(null);
-    setBusy(true); setErr(null);
+  // drag-and-drop reorder via dnd-kit (grab-and-follow, touch + mouse).
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = async (e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!media || !over || active.id === over.id) return;
+    const from = media.findIndex(m => m.id === active.id);
+    const to = media.findIndex(m => m.id === over.id);
+    if (from < 0 || to < 0) return;
+    const arr = arrayMove(media, from, to);
+    setMedia(arr);                         // optimistic — reorders instantly
+    setErr(null);
     try {
       await Promise.all(arr.map((m, i) =>
         (m.sort_order ?? -1) === i ? null :
@@ -449,9 +461,8 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
           body: JSON.stringify({ sort_order: i }),
         })
       ).filter(Boolean) as Promise<any>[]);
-      await load();
-    } catch (e: any) { setErr(e?.message || 'Reorder error'); }
-    setBusy(false);
+      await load();                         // reconcile with server
+    } catch (err: any) { setErr(err?.message || 'Reorder error'); await load(); }
   };
 
   return (
@@ -469,41 +480,16 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
         <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 14 }}>No media yet.</p>
       )}
       {media && media.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
-          {media.map((m: MediaRow, idx: number) => (
-            <div key={m.id}
-              draggable={!busy}
-              onDragStart={() => setDragIdx(idx)}
-              onDragOver={e => e.preventDefault()}
-              onDrop={() => dropOn(idx)}
-              style={{ border: dragIdx === idx ? '1px dashed var(--accent)' : '1px solid var(--border)',
-                padding: 8, background: 'var(--bg, #fff)', opacity: dragIdx === idx ? 0.5 : 1, cursor: busy ? 'default' : 'grab' }}>
-              {m.kind === 'video'
-                ? <video src={m.url} controls style={{ width: '100%', height: 90, objectFit: 'cover', background: '#000' }} />
-                : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: 90, objectFit: 'cover' }} />}
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>{m.kind} · {langLabel(m.language)} · {m.role}</span>
-                <span style={{ display: 'flex', gap: 4 }}>
-                  <button onClick={() => move(idx, -1)} disabled={busy || idx === 0} title="Move left"
-                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === 0) ? 'default' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>←</button>
-                  <button onClick={() => move(idx, 1)} disabled={busy || idx === media.length - 1} title="Move right"
-                    style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === media.length - 1) ? 'default' : 'pointer', color: idx === media.length - 1 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>→</button>
-                </span>
-              </div>
-              <input
-                defaultValue={m.caption ?? ''}
-                placeholder="caption…"
-                onBlur={e => { const v = e.target.value.trim(); if (v !== (m.caption ?? '')) saveCaption(m.id, v); }}
-                style={{ width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)' }} />
-              <button onClick={() => remove(m.id)} disabled={busy}
-                style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
-                  textTransform: 'uppercase', color: '#b4413c', background: 'transparent',
-                  border: '1px solid var(--border)', padding: '3px 8px', cursor: busy ? 'default' : 'pointer' }}>
-                Remove
-              </button>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <SortableContext items={media.map(m => m.id)} strategy={rectSortingStrategy}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
+              {media.map((m: MediaRow, idx: number) => (
+                <SortableCard key={m.id} m={m} idx={idx} count={media.length} busy={busy}
+                  onMove={move} onRemove={remove} onCaption={saveCaption} />
+              ))}
             </div>
-          ))}
-        </div>
+          </SortableContext>
+        </DndContext>
       )}
 
       {/* upload controls */}
@@ -708,6 +694,61 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
           {err && <div style={{ fontSize: 12, color: '#b4413c' }}>{err}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SortableCard — one media tile, draggable via dnd-kit (grab-and-follow,
+// touch + mouse). Arrows remain as an explicit fallback. Caption editable.
+// ---------------------------------------------------------------------------
+function SortableCard({
+  m, idx, count, busy, onMove, onRemove, onCaption,
+}: {
+  m: MediaRow; idx: number; count: number; busy: boolean;
+  onMove: (idx: number, dir: -1 | 1) => void | Promise<void>;
+  onRemove: (id: string) => void | Promise<void>;
+  onCaption: (id: string, value: string) => void | Promise<void>;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: m.id });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    border: '1px solid var(--border)',
+    padding: 8,
+    background: 'var(--bg, #fff)',
+    opacity: isDragging ? 0.6 : 1,
+    boxShadow: isDragging ? '0 6px 18px rgba(0,0,0,0.18)' : 'none',
+    zIndex: isDragging ? 10 : 'auto',
+  };
+  return (
+    <div ref={setNodeRef} style={style}>
+      {/* drag handle = the media itself */}
+      <div {...attributes} {...listeners} style={{ cursor: busy ? 'default' : 'grab', touchAction: 'none' }}>
+        {m.kind === 'video'
+          ? <video src={m.url} style={{ width: '100%', height: 90, objectFit: 'cover', background: '#000', pointerEvents: 'none' }} />
+          : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: 90, objectFit: 'cover', pointerEvents: 'none' }} />}
+      </div>
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--muted)', marginTop: 6, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span>{m.kind} · {langLabel(m.language)} · {m.role}</span>
+        <span style={{ display: 'flex', gap: 4 }}>
+          <button onClick={() => onMove(idx, -1)} disabled={busy || idx === 0} title="Move left"
+            style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === 0) ? 'default' : 'pointer', color: idx === 0 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>&larr;</button>
+          <button onClick={() => onMove(idx, 1)} disabled={busy || idx === count - 1} title="Move right"
+            style={{ border: '1px solid var(--border)', background: 'transparent', cursor: (busy || idx === count - 1) ? 'default' : 'pointer', color: idx === count - 1 ? 'var(--border)' : 'var(--muted)', padding: '0 6px', fontSize: 12, lineHeight: 1.6 }}>&rarr;</button>
+        </span>
+      </div>
+      <input
+        defaultValue={m.caption ?? ''}
+        placeholder="caption…"
+        onBlur={e => { const v = e.target.value.trim(); if (v !== (m.caption ?? '')) onCaption(m.id, v); }}
+        style={{ width: '100%', marginTop: 6, fontSize: 11, padding: '4px 6px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)' }} />
+      <button onClick={() => onRemove(m.id)} disabled={busy}
+        style={{ marginTop: 6, fontFamily: 'var(--font-mono)', fontSize: 9, letterSpacing: '0.06em',
+          textTransform: 'uppercase', color: '#b4413c', background: 'transparent',
+          border: '1px solid var(--border)', padding: '3px 8px', cursor: busy ? 'default' : 'pointer' }}>
+        Remove
+      </button>
     </div>
   );
 }
