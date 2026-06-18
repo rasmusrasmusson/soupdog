@@ -244,7 +244,7 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         )}
       </div>
 
-      {task.image_url && media.length === 0 && (
+      {task.image_url && (
         <div style={{ marginTop: 20, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
           <img src={task.image_url} alt={task.name}
             style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
