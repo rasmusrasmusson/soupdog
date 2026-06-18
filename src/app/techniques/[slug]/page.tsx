@@ -78,6 +78,7 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
   const [children, setChildren] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [parentLink, setParentLink] = useState<{ name: string; slug: string } | null>(null);
   const [media, setMedia] = useState<MediaRow[]>([]);
+  const [lightbox, setLightbox] = useState<MediaRow | null>(null);
   const { locale } = useLocale();
   const [isAdmin, setIsAdmin] = useState(false);
   const [archiving, setArchiving] = useState(false);
@@ -165,6 +166,17 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
     ? `${COMPLETION_GLOSS[task.completion_type] ?? task.completion_type}${task.completion_target ? ` (${task.completion_target})` : ''}`
     : null;
 
+  // split media into a hero (role=hero, else fall back to the legacy image_url)
+  // and the ordered instructional "step" media (everything else, by sort_order).
+  const localised = pickForLocale(media, locale);
+  const heroMedia = localised.find(m => m.role === 'hero') ?? null;
+  const heroAsset = heroMedia
+    ? { url: heroMedia.url, video: heroMedia.kind === 'video', media: heroMedia as MediaRow }
+    : (task.image_url ? { url: task.image_url, video: false, media: null as MediaRow | null } : null);
+  const stepMedia = localised
+    .filter(m => m.role !== 'hero')
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
   return (
     <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 24px 80px' }}>
       <Link href="/techniques" style={{
@@ -244,30 +256,51 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         )}
       </div>
 
-      {task.image_url && (
-        <div style={{ marginTop: 20, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
-          <img src={task.image_url} alt={task.name}
-            style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
+      {/* intro: description left, hero right (matches ingredient pages) */}
+      <div style={{ display: 'flex', gap: 24, marginTop: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <div style={{ flex: '1 1 320px', minWidth: 280 }}>
+          {task.description && (
+            <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg)', margin: 0 }}>
+              {task.description}
+            </p>
+          )}
         </div>
-      )}
+        {heroAsset && (
+          <div style={{ flex: '0 0 280px', maxWidth: 320, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden', cursor: 'pointer' }}
+            onClick={() => heroAsset.media && setLightbox(heroAsset.media)}>
+            {heroAsset.video
+              ? <video src={heroAsset.url} controls playsInline style={{ display: 'block', width: '100%', background: '#000' }} />
+              : <img src={heroAsset.url} alt={task.name} style={{ display: 'block', width: '100%', objectFit: 'cover' }} />}
+          </div>
+        )}
+      </div>
 
-      {media.length > 0 && (
-        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {pickForLocale(media, locale).map(m => (
-            <div key={m.id} style={{ border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
-              {m.kind === 'video'
-                ? <video src={m.url} controls playsInline style={{ display: 'block', width: '100%', background: '#000' }} />
-                : <img src={m.url} alt={m.caption ?? task.name} style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />}
-              {m.caption && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 10px' }}>{m.caption}</div>}
-            </div>
-          ))}
+      {/* instructional media: ordered grid of step cards (images + videos mixed), click to enlarge */}
+      {stepMedia.length > 0 && (
+        <div style={{ marginTop: 28 }}>
+          <h2 style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 12 }}>Step by step</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 14 }}>
+            {stepMedia.map((m, i) => (
+              <button key={m.id} onClick={() => setLightbox(m)}
+                style={{ textAlign: 'left', padding: 0, border: '1px solid var(--border)', background: 'var(--surface)',
+                  cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', overflow: 'hidden' }}>
+                  {m.kind === 'video'
+                    ? <>
+                        <video src={m.url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#fff', fontSize: 26, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>▸</span>
+                      </>
+                    : <img src={m.url} alt={m.caption ?? ''} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  <span style={{ position: 'absolute', top: 6, left: 6, fontFamily: 'var(--font-mono)', fontSize: 11,
+                    color: '#fff', background: 'rgba(0,0,0,0.55)', padding: '1px 7px', borderRadius: 2 }}>{i + 1}</span>
+                </div>
+                {m.caption && <div style={{ fontSize: 12, color: 'var(--fg)', padding: '8px 10px', lineHeight: 1.4 }}>{m.caption}</div>}
+              </button>
+            ))}
+          </div>
         </div>
-      )}
-
-      {task.description && (
-        <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg)', marginTop: 14 }}>
-          {task.description}
-        </p>
       )}
 
       <div style={{ marginTop: 24 }}>
@@ -339,6 +372,24 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
               </Link>
             ))}
           </div>
+        </div>
+      )}
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.8)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 900, width: '100%', maxHeight: '90vh', background: 'var(--bg)', overflow: 'auto' }}>
+            {lightbox.kind === 'video'
+              ? <video src={lightbox.url} controls autoPlay playsInline style={{ display: 'block', width: '100%', maxHeight: '80vh', background: '#000' }} />
+              : <img src={lightbox.url} alt={lightbox.caption ?? task.name} style={{ display: 'block', width: '100%', maxHeight: '80vh', objectFit: 'contain', background: '#000' }} />}
+            {lightbox.caption && <div style={{ fontSize: 14, color: 'var(--fg)', padding: '12px 16px' }}>{lightbox.caption}</div>}
+          </div>
+          <button onClick={() => setLightbox(null)}
+            style={{ position: 'fixed', top: 18, right: 22, fontSize: 26, color: '#fff', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
+            ×
+          </button>
         </div>
       )}
     </div>
