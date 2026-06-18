@@ -320,6 +320,7 @@ export interface Recipe {
   slug:                string;
   version:             number;
   parentVersionId?:    string;
+  heroImageUrl?:       string;
   canonicalId?:        string;
   recipeVersionId?:    string;
   title:               string;
@@ -360,7 +361,6 @@ export interface RecipeStep {
   order:            number;
   type:             StepType;
   group?:           string;
-  heroImageUrl?:    string;
   instruction:      string;
   ingredients?:     string[];  // ingredientIds
   tools?:           string[];  // tool names
