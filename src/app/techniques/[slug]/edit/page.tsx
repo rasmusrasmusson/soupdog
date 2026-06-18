@@ -487,6 +487,7 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<{ name: string; slug: string } | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = async () => {
     try {
@@ -530,23 +531,52 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
         They inherit this technique’s content and override only what differs.
       </p>
 
-      {concepts && concepts.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-          {concepts.map(c => (
-            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
-              padding: '7px 10px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
-              <Link href={`/techniques/${c.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'none', flex: 1 }}>
-                {c.name}
-              </Link>
-              {c.bound_tool_slug && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{c.bound_tool_slug}</span>}
-              {!c.is_verified && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>draft</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {concepts && concepts.length === 0 && (
-        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>No specific versions yet.</p>
-      )}
+      {(() => {
+        const active = (concepts ?? []).filter(c => !c.archived_at);
+        const archived = (concepts ?? []).filter(c => c.archived_at);
+        return (
+          <>
+            {active.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+                {active.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
+                    padding: '7px 10px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                    <Link href={`/techniques/${c.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'none', flex: 1 }}>
+                      {c.name}
+                    </Link>
+                    {c.bound_tool_slug && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{c.bound_tool_slug}</span>}
+                    {!c.is_verified && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>draft</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {concepts && active.length === 0 && archived.length === 0 && (
+              <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>No specific versions yet.</p>
+            )}
+            {archived.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <button onClick={() => setShowArchived(v => !v)}
+                  style={{ background: 'transparent', border: 'none', color: 'var(--muted)', fontSize: 12, cursor: 'pointer', padding: 0, fontFamily: 'var(--font-mono)' }}>
+                  {showArchived ? '▾' : '▸'} {archived.length} archived
+                </button>
+                {showArchived && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {archived.map(c => (
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
+                        padding: '7px 10px', border: '1px solid var(--border)', background: 'var(--surface)', opacity: 0.6 }}>
+                        <Link href={`/techniques/${c.slug}/edit`} style={{ color: 'var(--muted)', textDecoration: 'none', flex: 1 }}>
+                          {c.name}
+                        </Link>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>archived</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       {justAdded && (
         <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 10 }}>

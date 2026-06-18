@@ -128,7 +128,7 @@ export default function NewTechniquePage() {
             }}
           >
             <option value="">— choose a family —</option>
-            {families.map(f => <option key={f} value={f}>{f}</option>)}
+            {families.map(f => <option key={f} value={f}>{f.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
             <option value="__new__">+ Add a new family…</option>
           </select>
         ) : (

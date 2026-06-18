@@ -59,6 +59,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 export default function TechniqueDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
   const [task, setTask] = useState<Task | null | 'missing'>(null);
+  const [children, setChildren] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const [parentLink, setParentLink] = useState<{ name: string; slug: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -103,9 +105,16 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
       if (row.parent_task_id) {
         const { data: parent } = await supabase.from('tasks').select('*').eq('id', row.parent_task_id).maybeSingle();
         setTask(resolveConcept(row, parent ?? null));
+        if (parent) setParentLink({ name: parent.name, slug: parent.slug });
       } else {
         setTask(row);
       }
+      // list this task's specific versions (active only — archived hidden here)
+      const { data: kids } = await supabase.from('tasks')
+        .select('id, name, slug, archived_at')
+        .eq('parent_task_id', row.id)
+        .order('name');
+      setChildren((kids ?? []).filter((k: any) => !k.archived_at).map((k: any) => ({ id: k.id, name: k.name, slug: k.slug })));
     })();
   }, [slug]);
 
@@ -258,6 +267,33 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
             textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 8,
           }}>Common mistakes</h2>
           <p style={{ fontSize: 14, lineHeight: 1.6, color: 'var(--fg)' }}>{task.common_mistakes}</p>
+        </div>
+      )}
+
+      {parentLink && (
+        <div style={{ marginTop: 24, fontSize: 13, color: 'var(--muted)' }}>
+          A specific version of{' '}
+          <Link href={`/techniques/${parentLink.slug}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>
+            {parentLink.name}
+          </Link>.
+        </div>
+      )}
+
+      {children.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <h2 style={{
+            fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.12em',
+            textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 10,
+          }}>Specific versions</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {children.map(c => (
+              <Link key={c.id} href={`/techniques/${c.slug}`}
+                style={{ fontSize: 14, color: 'var(--accent)', textDecoration: 'none',
+                  padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+                {c.name}
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>
