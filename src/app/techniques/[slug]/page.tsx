@@ -4,6 +4,22 @@ import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { resolveConcept } from '@/lib/tasks/resolve-concept';
+import { useLocale } from '@/lib/locale-context';
+
+type MediaRow = { id: string; kind: 'image' | 'video'; role: string; language: string | null; url: string; caption: string | null; sort_order: number | null };
+
+// keep the best-matching language tier per role (viewer locale → neutral → en → any)
+function pickForLocale(rows: MediaRow[], locale: string): MediaRow[] {
+  const tier = (r: MediaRow) => (r.language === locale ? 0 : r.language == null ? 1 : r.language === 'en' ? 2 : 3);
+  const groups = new Map<string, MediaRow[]>();
+  for (const r of rows) { const k = r.role || 'detail'; if (!groups.has(k)) groups.set(k, []); groups.get(k)!.push(r); }
+  const out: MediaRow[] = [];
+  for (const [, gs] of groups) {
+    const best = Math.min(...gs.map(tier));
+    out.push(...gs.filter(g => tier(g) === best).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)));
+  }
+  return out;
+}
 
 type Task = {
   id: string; slug: string | null; name: string; category: string | null;
@@ -61,6 +77,8 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
   const [task, setTask] = useState<Task | null | 'missing'>(null);
   const [children, setChildren] = useState<{ id: string; name: string; slug: string }[]>([]);
   const [parentLink, setParentLink] = useState<{ name: string; slug: string } | null>(null);
+  const [media, setMedia] = useState<MediaRow[]>([]);
+  const { locale } = useLocale();
   const [isAdmin, setIsAdmin] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -115,6 +133,20 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         .eq('parent_task_id', row.id)
         .order('name');
       setChildren((kids ?? []).filter((k: any) => !k.archived_at).map((k: any) => ({ id: k.id, name: k.name, slug: k.slug })));
+
+      // media: this task's own, falling back to the parent's if a concept has none
+      let mediaList: MediaRow[] = [];
+      try {
+        const mr = await fetch(`/api/admin/tasks/${row.id}/media`).then(r => r.json());
+        mediaList = Array.isArray(mr?.media) ? mr.media : [];
+      } catch { mediaList = []; }
+      if (mediaList.length === 0 && row.parent_task_id) {
+        try {
+          const pm = await fetch(`/api/admin/tasks/${row.parent_task_id}/media`).then(r => r.json());
+          if (Array.isArray(pm?.media)) mediaList = pm.media;
+        } catch { /* ignore */ }
+      }
+      setMedia(mediaList);
     })();
   }, [slug]);
 
@@ -212,10 +244,23 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         )}
       </div>
 
-      {task.image_url && (
+      {task.image_url && media.length === 0 && (
         <div style={{ marginTop: 20, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
           <img src={task.image_url} alt={task.name}
             style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
+        </div>
+      )}
+
+      {media.length > 0 && (
+        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {pickForLocale(media, locale).map(m => (
+            <div key={m.id} style={{ border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
+              {m.kind === 'video'
+                ? <video src={m.url} controls playsInline style={{ display: 'block', width: '100%', background: '#000' }} />
+                : <img src={m.url} alt={m.caption ?? task.name} style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />}
+              {m.caption && <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 10px' }}>{m.caption}</div>}
+            </div>
+          ))}
         </div>
       )}
 
