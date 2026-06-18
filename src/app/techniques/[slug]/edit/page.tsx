@@ -39,6 +39,7 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
   const [msg, setMsg] = useState<string | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [draftMsg, setDraftMsg] = useState<string | null>(null);
+  const [parentInfo, setParentInfo] = useState<{ name: string; slug: string } | null>(null);
 
   useEffect(() => {
     const supabase = createClient() as any;
@@ -48,7 +49,12 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
         const r = await supabase.from('tasks').select('*').ilike('name', slug.replace(/-/g, ' ')).limit(1);
         data = r.data;
       }
-      setT(data && data.length ? data[0] : 'missing');
+      const row = data && data.length ? data[0] : null;
+      setT(row ?? 'missing');
+      if (row?.parent_task_id) {
+        const { data: p } = await supabase.from('tasks').select('name, slug').eq('id', row.parent_task_id).maybeSingle();
+        if (p) setParentInfo({ name: p.name, slug: p.slug });
+      }
     })();
   }, [slug]);
 
@@ -95,6 +101,7 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       suggested_tool_slugs: Array.isArray(t.suggested_tool_slugs) ? t.suggested_tool_slugs.join(', ') : t.suggested_tool_slugs,
       is_verified: t.is_verified,
       image_url: t.image_url ?? null,
+      parent_task_id: t.parent_task_id ?? null,
     };
     const res = await fetch(`/api/admin/tasks/${t.id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -104,6 +111,19 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
     setSaving(false);
     if (res.ok) { setMsg('Saved.'); setTimeout(() => router.push(`/techniques/${slug}`), 600); }
     else setMsg(`Error: ${out.error ?? res.status}`);
+  };
+
+  // archive = soft-delete (lives on the technique's own page, with full context)
+  const archive = async () => {
+    if (!confirm(`Archive “${t.name}”? It will be hidden from the techniques list. You can restore it later.`)) return;
+    setSaving(true); setMsg(null);
+    const res = await fetch(`/api/admin/tasks/${t.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived: true }),
+    });
+    setSaving(false);
+    if (res.ok) { setMsg('Archived.'); setTimeout(() => router.push('/techniques'), 600); }
+    else { const o = await res.json().catch(() => ({})); setMsg(`Error: ${o.error ?? res.status}`); }
   };
 
   const toolStr = Array.isArray(t.suggested_tool_slugs) ? t.suggested_tool_slugs.join(', ') : (t.suggested_tool_slugs ?? '');
@@ -116,6 +136,28 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 28, fontWeight: 600, margin: '14px 0 24px', color: 'var(--fg)' }}>
         Edit technique
       </h1>
+
+      {t.parent_task_id && (
+        <div style={{ ...FIELD, padding: '12px 14px', border: '1px solid var(--border)',
+          background: 'var(--surface)', borderLeft: '3px solid var(--accent)' }}>
+          <div style={{ fontSize: 13, color: 'var(--fg)' }}>
+            Specific version of{' '}
+            {parentInfo
+              ? <Link href={`/techniques/${parentInfo.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'underline' }}>{parentInfo.name}</Link>
+              : <span style={{ color: 'var(--muted)' }}>its parent</span>}.
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--muted)', margin: '6px 0 8px', lineHeight: 1.5 }}>
+            Any field you leave empty here inherits from the parent. Fill a field only to override it.
+          </p>
+          <button
+            onClick={() => { set('parent_task_id', null); setParentInfo(null); }}
+            style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)',
+              background: 'transparent', border: '1px solid var(--border)', padding: '5px 10px', cursor: 'pointer' }}>
+            Make standalone (remove parent link)
+          </button>
+          <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>— takes effect on Save</span>
+        </div>
+      )}
 
       <div style={FIELD}><label style={L}>Name</label>
         <input style={I} value={t.name ?? ''} onChange={e => set('name', e.target.value)} /></div>
@@ -235,6 +277,10 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <button onClick={archive} disabled={saving}
+            style={{ background: 'transparent', color: '#b4413c', border: '1px solid #b4413c', padding: '9px 16px', fontSize: 13, cursor: saving ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: saving ? 0.6 : 1 }}>
+            Archive
+          </button>
           <Link href={`/techniques/${slug}`} style={{ color: 'var(--muted)', fontSize: 14, textDecoration: 'none' }}>
             Cancel
           </Link>

@@ -42,9 +42,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const db = supabase as any;
 
-  // confirm the parent exists (and grab its category as a sensible default)
+  // confirm the parent exists (and inherit its grouping columns — a concept is
+  // in the same family as its parent). `family` is NOT NULL with no default.
   const { data: parent, error: pErr } = await db.from('tasks')
-    .select('id, category').eq('id', parentId).maybeSingle();
+    .select('id, category, family, task_family').eq('id', parentId).maybeSingle();
   if (pErr) return NextResponse.json({ error: pErr.message }, { status: 500 });
   if (!parent) return NextResponse.json({ error: 'Parent task not found' }, { status: 404 });
 
@@ -58,6 +59,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     name,
     slug,
     parent_task_id: parentId,
+    family: parent.family,                    // inherit — NOT NULL constraint
+    task_family: parent.task_family ?? null,
     category: parent.category ?? null,
     source: 'human_authored',
     is_verified: false,

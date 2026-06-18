@@ -1,6 +1,7 @@
 // src/app/techniques/new/page.tsx
 'use client';
 import React, { useState, useEffect } from 'react';
+import { createClient } from '@/lib/supabase/client';
 
 const MONO = 'var(--font-mono)';
 const MUT  = 'var(--muted)';
@@ -27,6 +28,8 @@ export default function NewTechniquePage() {
   const [slug, setSlug]       = useState('');
   const [slugEdited, setSlugEdited] = useState(false);
   const [family, setFamily]   = useState('');
+  const [families, setFamilies] = useState<string[]>([]);
+  const [addingNewFamily, setAddingNewFamily] = useState(false);
   const [description, setDescription] = useState('');
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState<string | null>(null);
@@ -36,6 +39,16 @@ export default function NewTechniquePage() {
       .then(r => r.json())
       .then(d => setAllowed(Boolean(d.isAdmin)))
       .catch(() => setAllowed(false));
+  }, []);
+
+  // distinct families already in use, for the dropdown
+  useEffect(() => {
+    const supabase = createClient() as any;
+    supabase.from('tasks').select('family').then(({ data }: { data: { family: string | null }[] | null }) => {
+      const set = new Set<string>();
+      (data ?? []).forEach(r => { if (r.family) set.add(r.family); });
+      setFamilies([...set].sort());
+    });
   }, []);
 
   useEffect(() => {
@@ -105,12 +118,34 @@ export default function NewTechniquePage() {
 
       <div style={{ marginBottom: 18 }}>
         <label style={labelStyle}>Family (required — the transformation family)</label>
-        <input style={inputStyle} value={family}
-          onChange={e => setFamily(e.target.value)}
-          placeholder="e.g. boil, fry, knife_cuts, mix, prepare" />
+        {!addingNewFamily ? (
+          <select
+            style={inputStyle}
+            value={family}
+            onChange={e => {
+              if (e.target.value === '__new__') { setAddingNewFamily(true); setFamily(''); }
+              else setFamily(e.target.value);
+            }}
+          >
+            <option value="">— choose a family —</option>
+            {families.map(f => <option key={f} value={f}>{f}</option>)}
+            <option value="__new__">+ Add a new family…</option>
+          </select>
+        ) : (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input style={{ ...inputStyle, flex: 1 }} value={family} autoFocus
+              onChange={e => setFamily(e.target.value)}
+              placeholder="new family, e.g. ferment" />
+            <button type="button"
+              onClick={() => { setAddingNewFamily(false); setFamily(''); }}
+              style={{ background: 'transparent', color: MUT, border: 'none', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              use existing
+            </button>
+          </div>
+        )}
         <p style={{ fontFamily: MONO, fontSize: 9, color: MUT, margin: '6px 0 0', lineHeight: 1.5 }}>
-          Groups the technique with siblings sharing a mechanism. Reuse an existing family
-          where one fits (boil, simmer, fry, steam, knife_cuts, mix, prepare, finish, passive…).
+          Groups the technique with siblings sharing a mechanism. Pick an existing family
+          where one fits — only add a new one if nothing matches (keeps the list from drifting).
         </p>
       </div>
 

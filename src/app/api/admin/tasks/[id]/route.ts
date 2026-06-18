@@ -16,6 +16,9 @@ const EDITABLE = new Set([
   'min_duration_seconds', 'max_duration_seconds',
   'typical_input_state', 'typical_output_state',
   'suggested_tool_slugs', 'is_verified', 'image_url',
+  // concept layer: a task can point at a parent + bind dimensions
+  'parent_task_id', 'bound_ingredient_id', 'bound_tool_slug',
+  'bound_quantity', 'bound_quantity_unit', 'bound_dimensions',
 ]);
 
 // enum guards (null allowed = clear the field)
@@ -46,6 +49,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // normalise empties → null; validate enums; coerce numbers/arrays
   const norm = (v: any) => (v === '' || v === undefined ? null : v);
+
+  // concept: a task cannot be its own parent
+  if ('parent_task_id' in patch) {
+    patch.parent_task_id = norm(patch.parent_task_id);
+    if (patch.parent_task_id === id)
+      return NextResponse.json({ error: 'A technique cannot be its own parent' }, { status: 400 });
+  }
   if ('completion_type' in patch) {
     patch.completion_type = norm(patch.completion_type);
     if (patch.completion_type && !COMPLETION_TYPES.has(patch.completion_type))
