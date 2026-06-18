@@ -360,6 +360,7 @@ export interface RecipeStep {
   order:            number;
   type:             StepType;
   group?:           string;
+  heroImageUrl?:    string;
   instruction:      string;
   ingredients?:     string[];  // ingredientIds
   tools?:           string[];  // tool names
