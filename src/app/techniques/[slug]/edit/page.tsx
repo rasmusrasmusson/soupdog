@@ -60,6 +60,28 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
 
   const set = (k: string, v: any) => setT({ ...t, [k]: v });
 
+  // AI-draft tips + common mistakes (fills the fields for review; does not save)
+  const [drafting, setDrafting] = useState(false);
+  const [draftMsg, setDraftMsg] = useState<string | null>(null);
+  const draftContent = async () => {
+    setDrafting(true); setDraftMsg(null);
+    try {
+      const res = await fetch(`/api/admin/tasks/${t.id}/draft-content`, { method: 'POST' });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { setDraftMsg(out.error || `Failed (${res.status})`); setDrafting(false); return; }
+      // fill whichever fields came back; leave existing if the AI returned empty
+      setT((prev: any) => ({
+        ...prev,
+        tips: out.tips || prev.tips,
+        common_mistakes: out.common_mistakes || prev.common_mistakes,
+      }));
+      setDraftMsg('Drafted — review and Save.');
+    } catch (e: any) {
+      setDraftMsg(e?.message || 'Network error');
+    }
+    setDrafting(false);
+  };
+
   const save = async () => {
     setSaving(true); setMsg(null);
     const payload = {
@@ -150,6 +172,21 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
       {/* Media manager — multiple images + videos, per language. Saves immediately
           (its own table), independent of the Save-technique button below. */}
       <MediaManager taskId={t.id} slug={slug} />
+
+      <div style={{ ...FIELD, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <button onClick={draftContent} disabled={drafting}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+            textTransform: 'uppercase', padding: '7px 14px', cursor: drafting ? 'default' : 'pointer',
+            color: drafting ? 'var(--muted)' : 'var(--accent)', background: 'transparent',
+            border: '1px solid var(--accent)' }}>
+          {drafting ? 'Drafting…' : '✨ Draft tips & mistakes with AI'}
+        </button>
+        {draftMsg && (
+          <span style={{ fontSize: 12, color: draftMsg.startsWith('Drafted') ? 'var(--accent)' : '#b4413c' }}>
+            {draftMsg}
+          </span>
+        )}
+      </div>
 
       <div style={FIELD}><label style={L}>Tips</label>
         <textarea style={{ ...I, minHeight: 56, resize: 'vertical' }} value={t.tips ?? ''} onChange={e => set('tips', e.target.value)} /></div>
