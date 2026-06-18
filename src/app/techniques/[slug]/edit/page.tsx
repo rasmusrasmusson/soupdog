@@ -173,6 +173,10 @@ export default function TaskEditPage({ params }: { params: Promise<{ slug: strin
           (its own table), independent of the Save-technique button below. */}
       <MediaManager taskId={t.id} slug={slug} />
 
+      {/* Concepts — specialised versions of this task (e.g. "Zest a lemon" under
+          "Zest"). Only shown for generic tasks (a concept has parent_task_id set). */}
+      {!t.parent_task_id && <ConceptsManager taskId={t.id} taskName={t.name} />}
+
       <div style={{ ...FIELD, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={draftContent} disabled={drafting}
           style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
@@ -386,6 +390,118 @@ function MediaManager({ taskId, slug }: { taskId: string; slug: string }) {
       </label>
 
       {err && <div style={{ marginTop: 10, fontSize: 12, color: '#b4413c' }}>{err}</div>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Concepts manager: lists + creates specialised versions of a generic task.
+// A concept is a task row with parent_task_id = this task. Its content fields
+// resolve from the parent (see src/lib/tasks/resolve-concept.ts); here we only
+// set name + bound dimensions. Created concepts open in their own edit page.
+// ---------------------------------------------------------------------------
+type ConceptRow = {
+  id: string; name: string; slug: string;
+  bound_ingredient_id: string | null; bound_tool_slug: string | null;
+  bound_quantity: number | null; bound_quantity_unit: string | null;
+  is_verified: boolean; archived_at: string | null;
+};
+
+function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: string }) {
+  const [concepts, setConcepts] = useState<ConceptRow[] | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [name, setName] = useState('');
+  const [boundTool, setBoundTool] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = async () => {
+    try {
+      const j = await fetch(`/api/admin/tasks/${taskId}/concepts`).then(r => r.json());
+      setConcepts(j.concepts ?? []);
+    } catch { setConcepts([]); }
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [taskId]);
+
+  const create = async () => {
+    if (!name.trim()) { setErr('Give the specific version a name.'); return; }
+    setBusy(true); setErr(null);
+    try {
+      const res = await fetch(`/api/admin/tasks/${taskId}/concepts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), bound_tool_slug: boundTool.trim() || null }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(out.error || `Failed (${res.status})`); setBusy(false); return; }
+      // open the new concept's edit page so the user can add its specific content
+      window.location.href = `/techniques/${out.concept.slug}/edit`;
+    } catch (e: any) {
+      setErr(e?.message || 'Network error'); setBusy(false);
+    }
+  };
+
+  return (
+    <div style={{ ...FIELD, borderTop: '1px solid var(--border)', paddingTop: 18, marginTop: 8 }}>
+      <label style={L}>Specific versions</label>
+      <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px', lineHeight: 1.5 }}>
+        More specific forms of <strong>{taskName}</strong> (e.g. “{taskName} a lemon”).
+        They inherit this technique’s content and override only what differs.
+      </p>
+
+      {concepts && concepts.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          {concepts.map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13,
+              padding: '7px 10px', border: '1px solid var(--border)', background: 'var(--surface)' }}>
+              <Link href={`/techniques/${c.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'none', flex: 1 }}>
+                {c.name}
+              </Link>
+              {c.bound_tool_slug && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)' }}>{c.bound_tool_slug}</span>}
+              {!c.is_verified && <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>draft</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {concepts && concepts.length === 0 && (
+        <p style={{ fontSize: 12, color: 'var(--muted)', margin: '0 0 12px' }}>No specific versions yet.</p>
+      )}
+
+      {!showForm && (
+        <button onClick={() => setShowForm(true)}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '0.06em',
+            textTransform: 'uppercase', padding: '7px 14px', cursor: 'pointer',
+            color: 'var(--accent)', background: 'transparent', border: '1px solid var(--accent)' }}>
+          + Add a specific version
+        </button>
+      )}
+
+      {showForm && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 420 }}>
+          <div>
+            <label style={{ ...L, fontSize: 11 }}>Name</label>
+            <input style={I} value={name} onChange={e => setName(e.target.value)}
+              placeholder={`e.g. ${taskName} a lemon`} />
+          </div>
+          <div>
+            <label style={{ ...L, fontSize: 11 }}>Bound tool slug (optional)</label>
+            <input style={I} value={boundTool} onChange={e => setBoundTool(e.target.value)}
+              placeholder="e.g. microplane" />
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button onClick={create} disabled={busy}
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 18px',
+                fontSize: 13, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: busy ? 0.6 : 1 }}>
+              {busy ? 'Creating…' : 'Create & edit'}
+            </button>
+            <button onClick={() => { setShowForm(false); setErr(null); }}
+              style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 13, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+          {err && <div style={{ fontSize: 12, color: '#b4413c' }}>{err}</div>}
+        </div>
+      )}
     </div>
   );
 }

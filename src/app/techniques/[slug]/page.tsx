@@ -3,7 +3,7 @@
 import React, { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { useLocale } from '@/lib/locale-context';
+import { resolveConcept } from '@/lib/tasks/resolve-concept';
 
 type Task = {
   id: string; slug: string | null; name: string; category: string | null;
@@ -15,31 +15,6 @@ type Task = {
   suggested_tool_slugs: string[] | null; image_url: string | null; is_verified: boolean;
   archived_at: string | null;
 };
-
-type MediaRow = {
-  id: string; kind: 'image' | 'video'; role: string;
-  language: string | null; url: string; caption: string | null; sort_order: number;
-};
-
-// Resolve media for the viewer's language, per role group:
-//   exact locale -> language-neutral (null) -> English -> whatever exists.
-function pickForLocale(rows: MediaRow[], locale: string): MediaRow[] {
-  if (!rows.length) return [];
-  const tier = (r: MediaRow) =>
-    r.language === locale ? 0 : r.language == null ? 1 : r.language === 'en' ? 2 : 3;
-  const groups = new Map<string, MediaRow[]>();
-  for (const r of rows) {
-    const k = r.role || 'detail';
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k)!.push(r);
-  }
-  const out: MediaRow[] = [];
-  for (const list of groups.values()) {
-    const best = Math.min(...list.map(tier));
-    for (const r of list) if (tier(r) === best) out.push(r);
-  }
-  return out.sort((a, b) => a.sort_order - b.sort_order);
-}
 
 const prettify = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 function fmtDur(a: number | null, b: number | null): string {
@@ -83,9 +58,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 export default function TechniqueDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = use(params);
-  const { locale } = useLocale();
   const [task, setTask] = useState<Task | null | 'missing'>(null);
-  const [media, setMedia] = useState<MediaRow[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
@@ -123,20 +96,18 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
         const r = await supabase.from('tasks').select('*').ilike('name', name).limit(1);
         data = r.data;
       }
-      setTask(data && data.length ? data[0] : 'missing');
+      const row = data && data.length ? data[0] : null;
+      if (!row) { setTask('missing'); return; }
+      // concept resolution: if this task has a parent, fill empty content fields
+      // from the parent (own value wins). Identity + bound_* stay the concept's own.
+      if (row.parent_task_id) {
+        const { data: parent } = await supabase.from('tasks').select('*').eq('id', row.parent_task_id).maybeSingle();
+        setTask(resolveConcept(row, parent ?? null));
+      } else {
+        setTask(row);
+      }
     })();
   }, [slug]);
-
-  // once we know the task id, load its media (images/video)
-  useEffect(() => {
-    if (!task || task === 'missing') return;
-    let cancelled = false;
-    fetch(`/api/admin/tasks/${task.id}/media`)
-      .then(r => r.json())
-      .then(j => { if (!cancelled) setMedia(Array.isArray(j?.media) ? j.media : []); })
-      .catch(() => { if (!cancelled) setMedia([]); });
-    return () => { cancelled = true; };
-  }, [task]);
 
   if (task === null) return <div style={{ padding: 40, color: 'var(--muted)' }}>Loading…</div>;
   if (task === 'missing') return (
@@ -238,31 +209,6 @@ export default function TechniqueDetailPage({ params }: { params: Promise<{ slug
             style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />
         </div>
       )}
-
-      {/* Media gallery — task_media rows, resolved to the viewer's language. */}
-      {(() => {
-        const shown = pickForLocale(media, locale);
-        if (!shown.length) return null;
-        return (
-          <div style={{
-            marginTop: 20,
-            display: 'grid',
-            gridTemplateColumns: shown.length > 1 ? 'repeat(auto-fit, minmax(240px, 1fr))' : '1fr',
-            gap: 12,
-          }}>
-            {shown.map(m => (
-              <figure key={m.id} style={{ margin: 0, border: '1px solid var(--border)', background: 'var(--surface)', overflow: 'hidden' }}>
-                {m.kind === 'video'
-                  ? <video src={m.url} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 420, background: '#000' }} />
-                  : <img src={m.url} alt={m.caption ?? task.name} style={{ display: 'block', width: '100%', maxHeight: 420, objectFit: 'cover' }} />}
-                {m.caption && (
-                  <figcaption style={{ fontSize: 12, color: 'var(--muted)', padding: '8px 10px' }}>{m.caption}</figcaption>
-                )}
-              </figure>
-            ))}
-          </div>
-        );
-      })()}
 
       {task.description && (
         <p style={{ fontSize: 17, lineHeight: 1.55, color: 'var(--fg)', marginTop: 14 }}>

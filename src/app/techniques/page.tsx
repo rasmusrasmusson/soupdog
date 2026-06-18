@@ -18,6 +18,7 @@ type Task = {
   max_duration_seconds: number | null;
   is_verified: boolean;
   archived_at: string | null;
+  parent_task_id: string | null;
 };
 
 // Human label for a category slug (falls back to the slug itself, prettified).
@@ -61,7 +62,7 @@ export default function TechniquesPage() {
     const supabase = createClient() as any;
     supabase
       .from('tasks')
-      .select('id, slug, name, category, description, completion_type, completion_target, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, is_verified, archived_at')
+      .select('id, slug, name, category, description, completion_type, completion_target, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, is_verified, archived_at, parent_task_id')
       .order('is_verified', { ascending: false })
       .order('name', { ascending: true })
       .then(({ data }: { data: Task[] | null }) => setTasks(data ?? []));
@@ -69,8 +70,13 @@ export default function TechniquesPage() {
 
   // Visible set: live techniques only, unless an admin has toggled "show archived".
   const visibleTasks = (tasks ?? []).filter(t =>
-    (showArchived || !t.archived_at) && (!draftsOnly || !t.is_verified)
+    !t.parent_task_id && (showArchived || !t.archived_at) && (!draftsOnly || !t.is_verified)
   );
+  // concepts (parent_task_id set) are shown UNDER their parent, not at top level.
+  const childCount = new Map<string, number>();
+  for (const t of (tasks ?? [])) {
+    if (t.parent_task_id && !t.archived_at) childCount.set(t.parent_task_id, (childCount.get(t.parent_task_id) ?? 0) + 1);
+  }
   const archivedCount = (tasks ?? []).filter(t => t.archived_at).length;
   const draftCount = (tasks ?? []).filter(t => !t.is_verified && !t.archived_at).length;
 
@@ -118,26 +124,14 @@ export default function TechniquesPage() {
             Techniques
           </h1>
           {isAdmin && (
-            <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-              {draftCount > 0 && (
-                <a href="/techniques/review"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                    fontFamily: 'var(--font-mono)', fontSize: 10, color: '#fff',
-                    background: 'var(--accent)', border: '1px solid var(--accent)', padding: '6px 12px',
-                    textDecoration: 'none', textTransform: 'uppercase',
-                    letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
-                  Review queue ({draftCount})
-                </a>
-              )}
-              <a href="/techniques/new"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)',
-                  border: '1px solid var(--accent)', padding: '6px 12px',
-                  textDecoration: 'none', textTransform: 'uppercase',
-                  letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
-                + Add a technique
-              </a>
-            </div>
+            <a href="/techniques/new"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: 'var(--font-mono)', fontSize: 10, color: 'var(--accent)',
+                border: '1px solid var(--accent)', padding: '6px 12px',
+                textDecoration: 'none', textTransform: 'uppercase',
+                letterSpacing: '0.1em', flexShrink: 0, whiteSpace: 'nowrap' }}>
+              + Add a technique
+            </a>
           )}
         </div>
         <p style={{ color: 'var(--muted)', marginTop: 8, fontSize: 14, lineHeight: 1.5 }}>
@@ -276,6 +270,11 @@ export default function TechniquesPage() {
                 </div>
                 <span style={{ color: 'var(--muted)', fontSize: 13, lineHeight: 1.45 }}>
                   {t.description ?? <em style={{ opacity: 0.6 }}>No description yet</em>}
+                  {childCount.get(t.id) ? (
+                    <span style={{ display: 'block', marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--accent)' }}>
+                      {childCount.get(t.id)} specific version{childCount.get(t.id)! > 1 ? 's' : ''}
+                    </span>
+                  ) : null}
                 </span>
                 <span style={{
                   fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--muted)',

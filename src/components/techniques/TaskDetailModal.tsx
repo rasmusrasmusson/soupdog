@@ -2,6 +2,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { resolveConcept } from '@/lib/tasks/resolve-concept';
 
 // Reusable "click a task for instructions" modal. Self-contained: give it a
 // taskId, it fetches the task's archive content (description, completion, heat,
@@ -72,13 +73,30 @@ export function TaskDetailModal({
       const supabase = createClient() as any;
       const [{ data: taskData }, mediaRes] = await Promise.all([
         supabase.from('tasks').select(
-          'id, name, slug, description, tips, common_mistakes, completion_type, completion_target, completion_criterion, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, image_url'
+          'id, name, slug, description, tips, common_mistakes, completion_type, completion_target, completion_criterion, heat_mechanism, heat_medium, min_duration_seconds, max_duration_seconds, image_url, parent_task_id'
         ).eq('id', taskId).maybeSingle(),
         fetch(`/api/admin/tasks/${taskId}/media`).then(r => r.json()).catch(() => ({ media: [] })),
       ]);
       if (cancelled) return;
-      setTask(taskData ?? null);
-      setMedia(Array.isArray(mediaRes?.media) ? mediaRes.media : []);
+
+      let resolved = taskData ?? null;
+      let mediaList = Array.isArray(mediaRes?.media) ? mediaRes.media : [];
+
+      // concept resolution: fill empty content fields from the parent; if the
+      // concept has no media of its own, fall back to the parent's media.
+      if (taskData?.parent_task_id) {
+        const { data: parent } = await supabase.from('tasks').select('*').eq('id', taskData.parent_task_id).maybeSingle();
+        if (!cancelled) {
+          resolved = resolveConcept(taskData, parent ?? null);
+          if (mediaList.length === 0 && parent?.id) {
+            const pm = await fetch(`/api/admin/tasks/${parent.id}/media`).then(r => r.json()).catch(() => ({ media: [] }));
+            if (!cancelled && Array.isArray(pm?.media)) mediaList = pm.media;
+          }
+        }
+      }
+      if (cancelled) return;
+      setTask(resolved);
+      setMedia(mediaList);
       setLoading(false);
     })();
     return () => { cancelled = true; };
