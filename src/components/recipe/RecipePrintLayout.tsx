@@ -76,6 +76,12 @@ function fmtTemp(t?: { value: number; unit: string }): string | null {
 // tools live in applianceSettings — an appliance (applianceId → APPLIANCES name)
 // and/or a stepTools[] array of { name }. (step.tools is not populated by the
 // page mapper, which is why the print Tools list was empty before.)
+// Tool names are stored as slugs ("frying-pan"). Humanize for display: hyphens →
+// spaces, lowercase kept (mirrors RecipeDisplay.humanizeTool — keep them identical).
+function humanizeTool(name: string | undefined | null): string {
+  return (name ?? '').replace(/-/g, ' ').trim();
+}
+
 function stepToolNames(step: RecipeStep): string[] {
   const out: string[] = [];
   const s = (step as { applianceSettings?: {
@@ -85,11 +91,11 @@ function stepToolNames(step: RecipeStep): string[] {
   if (s?.applianceId) {
     const appliance = APPLIANCES.find((a: { id: string; model?: string; name?: string }) => a.id === s.applianceId);
     const name = appliance?.name ?? appliance?.model;
-    if (name) out.push(name);
+    if (name) out.push(humanizeTool(name));
   }
-  (s?.stepTools ?? []).forEach(t => { if (t?.name) out.push(t.name); });
+  (s?.stepTools ?? []).forEach(t => { if (t?.name) out.push(humanizeTool(t.name)); });
   // Fallback to step.tools if it ever gets populated.
-  (step.tools ?? []).forEach(t => { if (t) out.push(t); });
+  (step.tools ?? []).forEach(t => { if (t) out.push(humanizeTool(t)); });
   return out;
 }
 
@@ -125,7 +131,7 @@ function composeStepLine(
     let out = tmpl;
     if (fill) out = out.replace(/\[ingredient\]/gi, fill);
     else out = out.replace(/\s*\[ingredient\]/gi, '');
-    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, toolName);
+    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, humanizeTool(toolName));
     else out = out.replace(/\s*(?:to|in|on|into|with)?\s*(?:the\s+)?\[tool\]/gi, '');
     out = out.replace(/\s{2,}/g, ' ').trim();
     if (out) return out;
@@ -171,7 +177,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
     const seen = new Set<string>();
     const out: string[] = [];
     const add = (t?: string) => {
-      const name = (t ?? '').trim();
+      const name = humanizeTool(t);
       if (!name) return;
       const key = name.toLowerCase();
       if (seen.has(key)) return;

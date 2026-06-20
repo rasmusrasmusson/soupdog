@@ -29,6 +29,14 @@ const B    = '1px solid var(--border)';
 const MONO = 'var(--font-mono)';
 const MUT  = 'var(--muted)';
 
+// Tool names are stored as slugs ("frying-pan", "large-pot"). Humanize for display:
+// hyphens → spaces. Lowercase is kept (matches the calm cookbook tone). Used at every
+// point a raw slug becomes visible text (the [tool] fill, the per-step tool cell, and
+// the recipe-level tool list) so the page never shows a hyphenated slug.
+function humanizeTool(name: string | undefined | null): string {
+  return (name ?? '').replace(/-/g, ' ').trim();
+}
+
 // ── Optional interactivity contract ──
 // When present, the OWNER (the page) holds the checklist/servings state so other
 // page chrome (sidebar progress) can read it. When absent, nothing is interactive.
@@ -104,7 +112,7 @@ function ToolCell({ settings }: { settings: any }) {
     const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
     return (
       <div>
-        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{tool.name}</span>
+        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{humanizeTool(tool.name)}</span>
         {hasSettings && tool.applianceModeId && (
           <span style={{ fontFamily: MONO, fontSize: 9, color: MUT, display: 'block' }}>
             {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
@@ -173,7 +181,7 @@ function composeStepLine(
     else out = out.replace(/\s*\[ingredient\]/gi, '');
     // [tool] → only when single_tool and a tool is known; else strip the tag plus
     // a leading preposition ("to the [tool]", "in the [tool]") so it reads cleanly
-    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, toolName);
+    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, humanizeTool(toolName));
     else out = out.replace(/\s*(?:to|in|on|into|with)?\s*(?:the\s+)?\[tool\]/gi, '');
     out = out.replace(/\s{2,}/g, ' ').trim();
     if (out) return out;
@@ -254,7 +262,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
     const seen = new Set<string>();
     const out: string[] = [];
     const add = (t?: string) => {
-      const name = (t ?? '').trim();
+      const name = humanizeTool(t);
       if (!name) return;
       const key = name.toLowerCase();
       if (seen.has(key)) return;
