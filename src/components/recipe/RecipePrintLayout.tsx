@@ -93,6 +93,28 @@ function stepToolNames(step: RecipeStep): string[] {
   return out;
 }
 
+// Compose the step line from the curated task template (mirrors the web RecipeDisplay
+// composeStepLine): fill [ingredient]/[tool] from the step, [tool] only when single_tool
+// + a tool is present; strip an unfillable [tool] with its preposition. Falls back to the
+// curated task name, then the stored instruction. Keeps print identical to the web view.
+function composeStepLine(
+  taskName: string | undefined, template: string | undefined, singleTool: boolean,
+  ingredientName: string | undefined, toolName: string | undefined, instruction: string,
+): string {
+  const tmpl = (template ?? '').trim();
+  if (tmpl) {
+    let out = tmpl;
+    if (ingredientName) out = out.replace(/\[ingredient\]/gi, ingredientName);
+    else out = out.replace(/\s*\[ingredient\]/gi, '');
+    if (singleTool && toolName) out = out.replace(/\[tool\]/gi, toolName);
+    else out = out.replace(/\s*(?:to|in|on|into|with)?\s*(?:the\s+)?\[tool\]/gi, '');
+    out = out.replace(/\s{2,}/g, ' ').trim();
+    if (out) return out;
+  }
+  const verb = (taskName ?? '').trim();
+  return verb || instruction;
+}
+
 // Group steps by their section label (same logic as the web view).
 function groupSteps(steps: RecipeStep[]) {
   const groups: { label: string; steps: (RecipeStep & { idx: number })[] }[] = [];
@@ -213,7 +235,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                   <div key={s.id} style={{ display: 'flex', gap: 10, padding: '7px 0', breakInside: 'avoid' }}>
                     <span style={{ ...MONO, fontSize: 12, color: '#b08a3e', fontWeight: 500, flexShrink: 0, width: 18, textAlign: 'right' }}>{s.idx}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>{s.instruction}</div>
+                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>{composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction)}</div>
                       {(meta.length > 0 || stepIngs.length > 0) && (
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
                           {meta.map((m, i) => <span key={`m${i}`}>{m}</span>)}
