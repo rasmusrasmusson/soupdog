@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
       recipe_versions!current_version_id ( title )
     `)
     .eq('author_id', user.id)
+    .is('archived_at', null)   // ← archived recipes must NOT count as "you already have this"
     .limit(400);
 
   const catalogue: CatalogueItem[] = (recipeRows ?? []).map((r: any) => {
