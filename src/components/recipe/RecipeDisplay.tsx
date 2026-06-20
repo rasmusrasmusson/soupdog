@@ -143,6 +143,7 @@ function composeStepLine(
 ): string {
   const tmpl = (template ?? '').trim();
   if (tmpl) {
+    console.log('COMPOSE', { tmpl, singleTool, toolName, ingredientName });  // ← temp debug — remove after
     let out = tmpl;
     // [ingredient] → the step's ingredient, or strip the tag if none
     if (ingredientName) out = out.replace(/\[ingredient\]/gi, ingredientName);
