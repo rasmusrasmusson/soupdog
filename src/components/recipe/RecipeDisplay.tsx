@@ -37,6 +37,23 @@ function humanizeTool(name: string | undefined | null): string {
   return (name ?? '').replace(/-/g, ' ').trim();
 }
 
+// Quantity units that are QUALIFIERS, not measures: the phrase IS the amount, there's
+// no number. Stored in the unit field with value 0 ("Salt · to taste"). We show the
+// qualifier in the Qty column and blank the Unit column (per product decision), instead
+// of a meaningless "0 g".
+const QUALIFIER_UNITS = new Set(['to taste', 'as needed', 'to serve', 'for garnish', 'for serving']);
+
+// Resolve how an ingredient's amount should DISPLAY: { qty, unit } as strings.
+// - qualifier unit ("to taste") → qty = the qualifier, unit = '' (the phrase is the amount)
+// - real unit but value 0/null  → qty = '—', unit = '' (honest "no amount", not "0 g")
+// - normal                      → qty = the number, unit = the unit
+function fmtAmount(value: number | null | undefined, unit: string | null | undefined): { qty: string; unit: string } {
+  const u = (unit ?? '').trim();
+  if (QUALIFIER_UNITS.has(u.toLowerCase())) return { qty: u, unit: '' };
+  if (value == null || value === 0) return { qty: '—', unit: '' };
+  return { qty: String(value), unit: u };
+}
+
 // ── Optional interactivity contract ──
 // When present, the OWNER (the page) holds the checklist/servings state so other
 // page chrome (sidebar progress) can read it. When absent, nothing is interactive.
@@ -316,7 +333,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
               {isOn && <Checkbox checked={ingChecked(i)} onChange={() => interactive!.ingChecks.toggle(i)} />}
               <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
               <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
-              <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{ing.quantity.value}<span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{ing.quantity.unit}</span></span>
+              <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return <>{a.qty}{a.unit && <span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{a.unit}</span>}</>; })()}</span>
               {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.prep}</span>}
             </div>
           ))}
@@ -343,8 +360,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                       : <span style={{ color: 'var(--fg)' }}>{ing.name}</span>}
                     {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
                   </td>
-                  <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.value}</td>
-                  <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
+                  <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
+                  <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>
                   <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
                   <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
                 </tr>
@@ -399,7 +416,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             {stepIngs.map((ing: RecipeIngredientRef) => (
                               <span key={`${step.id}-${ing.ingredientId}`}
                                 style={{ fontFamily: MONO, fontSize: 10, padding: '2px 8px', borderRadius: 3, border: B, background: 'var(--surface)', color: 'var(--fg)' }}>
-                                {ing.name} · {ing.quantity.value}{ing.quantity.unit}
+                                {(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return `${ing.name} · ${a.qty}${a.unit ? ' ' + a.unit : ''}`; })()}
                               </span>
                             ))}
                           </div>
@@ -478,8 +495,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                                 ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
                                 : <span style={{ color: 'var(--fg)' }}>{ing.name}</span>}
                             </td>
-                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{ing.quantity.value}</td>
-                            <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{ing.quantity.unit}</td>
+                            <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
+                            <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} intermediates={step.consumedIntermediates} /></td>}

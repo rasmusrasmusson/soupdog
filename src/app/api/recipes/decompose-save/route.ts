@@ -344,8 +344,14 @@ export async function POST(req: NextRequest) {
           version_id:     version.id,
           step_id:        step.id,
           ingredient_id:  ingredientId,
+          // Preserve the amount the AI actually asserted — do NOT fabricate.
+          // A qualifier unit ("to taste", "as needed") legitimately pairs with value 0;
+          // keep it. A missing unit stays null (not coerced to 'g' — that invented a
+          // false measure, the "Salt 0 g" bug). A missing qty stays 0 only as the
+          // column's neutral default; the display layer renders 0/null amounts as "—"
+          // or shows the qualifier, never a meaningless "0 g".
           quantity_value: ing.qty ?? 0,
-          quantity_unit:  ing.unit ?? 'g',
+          quantity_unit:  ing.unit?.trim() || null,
           prep_note:      ing.prep?.trim() || null,
           optional:       false,
           order_index:    ++ingOrderIndex,

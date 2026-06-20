@@ -58,10 +58,16 @@ function OverviewItem({ icon, label, value }: { icon: keyof typeof ICONS; label:
   );
 }
 
-function fmtQty(value: number, unit: string): string {
-  if (!value && value !== 0) return '';
+// Quantity units that are QUALIFIERS, not measures (mirrors RecipeDisplay): the phrase
+// IS the amount, value 0. Show the qualifier, not "0 g".
+const QUALIFIER_UNITS = new Set(['to taste', 'as needed', 'to serve', 'for garnish', 'for serving']);
+
+function fmtQty(value: number | null | undefined, unit: string | null | undefined): string {
+  const u = (unit ?? '').trim();
+  if (QUALIFIER_UNITS.has(u.toLowerCase())) return u;        // "to taste"
+  if (value == null || value === 0) return '';                // no honest amount → show nothing
   const n = Number.isInteger(value) ? value : Math.round(value * 100) / 100;
-  return unit ? `${n} ${unit}` : `${n}`;
+  return u ? `${n} ${u}` : `${n}`;
 }
 
 // Temperature unit → short symbol ("celsius" → "C", "fahrenheit" → "F").
@@ -275,7 +281,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
                           {meta.map((m, i) => <span key={`m${i}`}>{m}</span>)}
                           {stepIngs.map((ing, i) => (
-                            <span key={`i${i}`} style={{ color: '#888' }}>{ing.name}{ing.quantity?.value ? ` · ${fmtQty(ing.quantity.value, ing.quantity.unit)}` : ''}</span>
+                            <span key={`i${i}`} style={{ color: '#888' }}>{ing.name}{(() => { const s = fmtQty(ing.quantity?.value, ing.quantity?.unit); return s ? ` · ${s}` : ''; })()}</span>
                           ))}
                         </div>
                       )}
