@@ -130,7 +130,17 @@ function groupSteps(steps: RecipeStep[]) {
 }
 
 export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: string }) {
-  const ingById = new Map(recipe.ingredients.map(i => [i.ingredientId, i]));
+  // Map step → its ingredients via each ingredient's stepId (same as the web
+  // RecipeDisplay). The mapper links ingredients to steps this way, NOT via a
+  // step.ingredients id-array — so building from s.ingredients would come up empty.
+  const ingsByStepId = new Map<string, Recipe['ingredients']>();
+  for (const ing of recipe.ingredients) {
+    const sid = (ing as { stepId?: string }).stepId;
+    if (!sid) continue;
+    const arr = ingsByStepId.get(sid) ?? [];
+    arr.push(ing);
+    ingsByStepId.set(sid, arr);
+  }
   const groups = groupSteps(recipe.steps);
   const showGroupTitles = groups.length > 1 || (groups[0]?.label ?? '') !== '';
 
@@ -224,8 +234,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                 </h3>
               )}
               {g.steps.map((s) => {
-                const stepIngs = (s.ingredients ?? [])
-                  .map(id => ingById.get(id)).filter(Boolean) as Recipe['ingredients'];
+                const stepIngs = (ingsByStepId.get(s.id) ?? []) as Recipe['ingredients'];
                 const meta = [
                   fmtTemp(s.temperature),
                   s.durationSeconds ? formatDuration(s.durationSeconds) : null,
