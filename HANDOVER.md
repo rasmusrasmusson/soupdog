@@ -1985,3 +1985,128 @@ meal page is otherwise sparse). Don't build until images exist to design against
   - TODO: Behavioral_Data_And_Insights note (not yet written)
 - NEXT: (1) test AI compose vs real catalogue; (2) build resumable session Layer 1 (schema first).
 - See HANDOVER_next_chat_2026-06-14.md for full detail.
+
+# Soupdog — Session Handover · 2026-06-20
+
+Read this first, then the big standing HANDOVER.md for full project context. This
+records what changed THIS session and what's next.
+
+## Standing context (unchanged)
+Solo founder Rasmus; soup.dog; Next.js 16 / Supabase (npvajzgciuykugqxedmm) / Vercel
+(auto-deploy on push to main). Rasmus in EUROPE now (no VPN needed; AI works). No real
+users (safe to change live data). File delivery: Claude creates whole files with `--`
+path separators; Rasmus places manually in VS Code; `[id]`/`[slug]` segments stay literal.
+First line = real path comment. SQL run manually in Supabase SQL editor (autocommit-safe,
+idempotent). `tasks` has per-column grants — after adding columns, re-grant
+`grant all on tasks to authenticated; grant select on tasks to anon;`. Admin ACCOUNT ids
+(not person id): bb02ae50-436c-4402-8c8c-447344e10151 (rr@varm.io),
+1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf (rr@le.works).
+
+## SHIPPED + VERIFIED LIVE this session
+
+### Concept matcher (C) — deterministic post-match specialisation
+`decompose-save/route.ts` now swaps a generic matched task for a bound CONCEPT when the
+step's ingredient/tool matches. `specialiseTask(db, genericTaskId, ingredientId, toolSlug,
+cache)`: loads concepts (parent_task_id = generic), scores +2 ingredient / +1 tool,
+DISQUALIFIES any concept binding a dimension the step doesn't match (so "Zest a lemon"
+can't land on an orange step), most-specific wins, no match → generic unchanged. Loop
+restructured: resolve ingredient FIRST, specialise, insert step with specialised task_id,
+then insert the version_ingredient. Runs ONLY at import time. The AI's matching is
+UNCHANGED — specialisation is a deterministic post-step, so normal matching is never
+disturbed (the design risk we were protecting against). VERIFIED: aglio e olio linked
+"Zest a lemon" instead of generic "Zest".
+
+### Instruction composition LAYER 1 — curated wording + display templates (web + PRINT)
+Two concerns Rasmus raised about AI-written step text: (#1 metric-vs-imperial units, #2
+AI wording drift vs curated content). Split: did #2 now, scoped #1 (units) separately.
+
+- Step lines now render the CURATED task name / a display_template at RENDER time, not the
+  frozen AI-built `instruction`. Falls back to instruction for steps with no task.
+- **`display_template`** (text) + **`single_tool`** (bool) columns added to `tasks`
+  (`template_00_task_display_template.sql`, RAN LIVE + re-grants). A template carries
+  `[ingredient]` / `[tool]` tags, e.g. "Add [ingredient] to the [tool]", "Zest
+  [ingredient]", "Bring to a boil". At render, tags fill from the step's ingredient/tool.
+  `[tool]` fills ONLY when single_tool=true AND a tool is present; an unfillable `[tool]`
+  is stripped along with its preposition ("to the [tool]" → gone). Ingredients/quantities
+  are shown SEPARATELY by each layout (pills/columns), so the line is just the verb phrase
+  (not repeated qty).
+- Editable in the technique edit form: Display template field + Single-tool checkbox.
+- PATCH route whitelist + coercion extended (display_template empty→null, single_tool→bool).
+- Recipe page selects `tasks(name, display_template, single_tool)` and maps onto each step
+  as taskName/taskTemplate/taskSingleTool. `types/index.ts` RecipeStep gained those 3.
+- **PRINT/PDF (`RecipePrintLayout.tsx`) now uses the SAME composeStepLine** — web and PDF
+  match. VERIFIED: arrabbiata step 13 reads "Add spaghetti to the large-pot" on BOTH.
+
+## ⚠️ KEY LESSONS THIS SESSION (cost real time)
+
+1. **Web and PDF are TWO separate renderers.** RecipeDisplay (web) and RecipePrintLayout
+   (PDF) are different code paths. A display-layer change must update BOTH or they drift.
+   The long [tool] debug was a renderer mismatch: the WEB was fixed and correct the whole
+   time; Rasmus was comparing against the PDF, which still printed raw `instruction`.
+   **When web and PDF disagree, check which renderer you're looking at FIRST.**
+
+2. **Web and PDF link step→ingredient DIFFERENTLY.** The mapper links ingredients to steps
+   via `ing.stepId` (NOT a `step.ingredients` id-array). RecipeDisplay uses stepId (works);
+   RecipePrintLayout originally assumed `s.ingredients` (always empty → `[ingredient]`
+   stripped → "Add to the large-pot"). Fixed print to build `ingsByStepId` from
+   `ing.stepId` like the web. BACKLOG: have the mapper populate both, or have print reuse
+   the web's exact map-building, so they can't drift again.
+
+3. **The `[slug]` PowerShell glob trap (recurring).** `Select-String -Path
+   "src\app\recipes\[slug]\page.tsx"` returns a FALSE NEGATIVE (brackets = wildcard). Use
+   **`-LiteralPath`**. This sent the [tool] debug down a wrong path ("file is stale!" when
+   it wasn't). Same glob risk in `git add` — use `git add -A`.
+
+4. **`console.log` debug confirmed the data was always correct** (singleTool:true,
+   toolName:'large-pot', ingredientName:'spaghetti') — the bug was purely the PDF renderer.
+   console.log has been REMOVED from RecipeDisplay; don't leave it live.
+
+## FILES SHIPPED (all placed + pushed + verified)
+- `template_00_task_display_template.sql` (RAN)
+- `src/app/api/recipes/decompose-save/route.ts` (concept matcher C)
+- `src/app/api/admin/tasks/[id]/route.ts` (PATCH whitelist: display_template, single_tool)
+- `src/app/techniques/[slug]/edit/page.tsx` (template field + single-tool checkbox)
+- `src/app/recipes/[slug]/page.tsx` (join + map taskName/taskTemplate/taskSingleTool)
+- `src/components/recipe/RecipeDisplay.tsx` (composeStepLine; console.log removed)
+- `src/components/recipe/RecipePrintLayout.tsx` (same composeStepLine; stepId-based ings)
+- `types/index.ts` RecipeStep: taskName?, taskTemplate?, taskSingleTool? (one-line adds)
+
+## OPEN THREADS / NEXT (all design-settled or scoped; pick fresh)
+
+- **Instruction composition LAYER 2 — intermediate materialization (the meaty one).**
+  Bare "Add" steps that CONSUME an upstream intermediate (e.g. add the chopped onion from
+  the Chop step) still show bare "Add" / "Add to the [tool]" because the intermediate isn't
+  on the step as an ingredient. DECISION REACHED: every transforming step PRODUCES a new
+  ingredient (Ingredient-Process Model, transformed_from_id); decomposition should
+  materialize intermediates and thread them onto consuming steps, so [ingredient] fills
+  "Add the chopped onion". NO per-ingredient Add tasks (one Add task; ingredient is data).
+  Touches the decomposition pipeline (feeds every recipe) → its own focused session with
+  eval discipline. Layer 1 templates are the ready foundation (the template will name the
+  intermediate the moment layer 2 puts it on the step).
+
+- **Units (#1) — separate display-layer build.** RecipeDisplay does NO unit conversion;
+  prints raw metric in table AND steps. Doing it properly = a unit-system layer (si/imperial/us
+  from profile) across table + steps, with culinary rules (weight vs volume, counts don't
+  convert, sensible rounding). Its own piece; don't bolt a half-version onto just the step
+  line (would make the page inconsistent).
+
+- **Tool-slug humanizing (small).** Tools render as slugs ("large-pot") in composed lines.
+  "Add spaghetti to the large-pot" reads a bit technical. Small follow-up: replace hyphens /
+  title-case the tool name in composition (both RecipeDisplay + RecipePrintLayout).
+
+- **Concept-name redundancy (minor).** A concept whose name embeds its ingredient ("Add
+  spaghetti") + the ingredient pill ("spaghetti") is slightly redundant. Argument for the
+  optional display_template on concepts (show just the parent verb in-line). Note, not urgent.
+
+- **Re-import the ~34 existing recipes** to pick up concept matching (C runs import-time
+  only) AND eventual layer-2 intermediate naming. Do ONCE after layer 2, not twice.
+
+- **Mass content + blessing the ~62 draft tasks** — Rasmus's dedicated future session.
+
+- **Backlog:** re-add bound_ingredient_id FK (standalone, was dropped to plain uuid to get
+  the concept batch to run); hero-via-role media unification; the mapper-populates-both
+  fix (lesson #2 above).
+
+## STILL PARKED (unchanged)
+Meal-plan enforcement + Stripe; Demand Phase 2; Sharing & Delegation Phase 0; Plan &
+End-Product bridge; Cook Mode.

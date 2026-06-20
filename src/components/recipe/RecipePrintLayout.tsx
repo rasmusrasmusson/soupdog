@@ -97,14 +97,33 @@ function stepToolNames(step: RecipeStep): string[] {
 // composeStepLine): fill [ingredient]/[tool] from the step, [tool] only when single_tool
 // + a tool is present; strip an unfillable [tool] with its preposition. Falls back to the
 // curated task name, then the stored instruction. Keeps print identical to the web view.
+// Layer 2 (mirrors RecipeDisplay): join consumed-intermediate names into a readable,
+// "the"-prefixed phrase. ["softened onion","tomato sauce"] → "the softened onion and
+// tomato sauce". Keeps print identical to the web view.
+function joinIntermediates(names: string[]): string {
+  const xs = names.map(n => n.trim()).filter(Boolean);
+  if (xs.length === 0) return '';
+  let body: string;
+  if (xs.length === 1) body = xs[0];
+  else if (xs.length === 2) body = `${xs[0]} and ${xs[1]}`;
+  else body = `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`;
+  return `the ${body}`;
+}
+
 function composeStepLine(
   taskName: string | undefined, template: string | undefined, singleTool: boolean,
   ingredientName: string | undefined, toolName: string | undefined, instruction: string,
+  intermediates?: string[],
 ): string {
+  const intermediatePhrase = (!ingredientName && intermediates && intermediates.length)
+    ? joinIntermediates(intermediates)
+    : '';
+  const fill = ingredientName || intermediatePhrase || '';
+
   const tmpl = (template ?? '').trim();
   if (tmpl) {
     let out = tmpl;
-    if (ingredientName) out = out.replace(/\[ingredient\]/gi, ingredientName);
+    if (fill) out = out.replace(/\[ingredient\]/gi, fill);
     else out = out.replace(/\s*\[ingredient\]/gi, '');
     if (singleTool && toolName) out = out.replace(/\[tool\]/gi, toolName);
     else out = out.replace(/\s*(?:to|in|on|into|with)?\s*(?:the\s+)?\[tool\]/gi, '');
@@ -112,6 +131,7 @@ function composeStepLine(
     if (out) return out;
   }
   const verb = (taskName ?? '').trim();
+  if (verb && intermediatePhrase) return `${verb} ${intermediatePhrase}`;
   return verb || instruction;
 }
 
@@ -244,7 +264,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                   <div key={s.id} style={{ display: 'flex', gap: 10, padding: '7px 0', breakInside: 'avoid' }}>
                     <span style={{ ...MONO, fontSize: 12, color: '#b08a3e', fontWeight: 500, flexShrink: 0, width: 18, textAlign: 'right' }}>{s.idx}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>{composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction)}</div>
+                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>{composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction, (s as any).consumedIntermediates)}</div>
                       {(meta.length > 0 || stepIngs.length > 0) && (
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
                           {meta.map((m, i) => <span key={`m${i}`}>{m}</span>)}

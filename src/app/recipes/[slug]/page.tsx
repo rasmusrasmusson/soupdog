@@ -150,6 +150,56 @@ function mapNewSchemaRecipe(row: any): Recipe {
   };
 }
 
+// ── Layer 2: thread upstream intermediate names onto consuming steps ──────────
+// Each DAG edge (version_step_dependencies) carries the producer's intermediate name
+// in `consumes_intermediate_label` (written at save time). A combine/transform step
+// has no own ingredient by design, so its [ingredient] tag would otherwise be stripped
+// — leaving a bare "Add" / "Toss". Here we fetch the incoming edges for this recipe's
+// steps and attach the ordered list of labelled intermediates to each step, so the
+// display layer can fill "Add the diced onion and hot oil".
+//
+// Done as its own small query (NOT a nested select) on purpose: the dependencies table
+// has two FKs to version_steps (step_id, depends_on_step_id), which makes a nested
+// embed FK-alias-fragile; a flat query keyed by the step ids we already have is robust
+// and leaves the (critical, every-recipe) main query untouched.
+async function attachIntermediates(supabase: any, recipe: Recipe): Promise<Recipe> {
+  const stepIds = recipe.steps.map(s => s.id).filter(Boolean);
+  if (stepIds.length === 0) return recipe;
+
+  const { data: edges, error } = await supabase
+    .from('version_step_dependencies')
+    .select('step_id, depends_on_step_id, consumes_intermediate_label')
+    .in('step_id', stepIds);
+
+  if (error || !Array.isArray(edges) || edges.length === 0) return recipe;
+
+  // producer step → its order_index, so we can present intermediates in a stable,
+  // natural order (the order the producers appear in the recipe).
+  const orderByStepId = new Map<string, number>();
+  for (const s of recipe.steps) orderByStepId.set(s.id, s.order ?? 0);
+
+  // consuming step id → [{ label, producerOrder }]
+  const byStep = new Map<string, { label: string; producerOrder: number }[]>();
+  for (const e of edges) {
+    const label = (e.consumes_intermediate_label ?? '').trim();
+    if (!label) continue; // edges from un-named producers (e.g. "bring to a boil") carry null
+    const arr = byStep.get(e.step_id) ?? [];
+    arr.push({ label, producerOrder: orderByStepId.get(e.depends_on_step_id) ?? 0 });
+    byStep.set(e.step_id, arr);
+  }
+
+  const steps = recipe.steps.map(s => {
+    const list = byStep.get(s.id);
+    if (!list || list.length === 0) return s;
+    const consumedIntermediates = list
+      .sort((a, b) => a.producerOrder - b.producerOrder)
+      .map(x => x.label);
+    return { ...s, consumedIntermediates };
+  });
+
+  return { ...recipe, steps };
+}
+
 // ── Recipe nutrition section ──────────────────────────────────
 function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition, onComputed }: {
   versionId?: string;
@@ -569,7 +619,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               .single();
             setCanonicalId(can?.id ?? data.id);
           }
-          setRecipe(mapNewSchemaRecipe(data));
+          setRecipe(await attachIntermediates(supabase, mapNewSchemaRecipe(data)));
           setLoading(false);
           return;
         }
@@ -633,7 +683,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version: 1,
               recipe_versions: version,
             };
-            setRecipe(mapNewSchemaRecipe(shaped));
+            setRecipe(await attachIntermediates(supabase, mapNewSchemaRecipe(shaped)));
             setLoading(false);
             return;
           }
