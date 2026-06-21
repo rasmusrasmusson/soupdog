@@ -1,6 +1,21 @@
 // src/app/api/admin/recipes/[id]/respecialise/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+
+// Service-role client (BYPASSRLS) for the DB work. The session client is RLS-bound and
+// has no UPDATE policy on version_steps, so an apply would silently affect 0 rows (an
+// RLS-blocked update returns NO error — it just changes nothing). Same pattern as the
+// backfill-nutrition route. The session client is still used for the admin GATE below.
+function serviceClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — cannot write past RLS');
+  return createSupabaseClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${key}`, apikey: key } },
+  });
+}
 
 // Admin gate — AUTH account ids (auth.uid()), NOT person ids. Keep in sync with
 // /api/admin/tasks/[id] + /api/admin/check + the RLS policy.
@@ -80,7 +95,9 @@ async function run(req: NextRequest, id: string, apply: boolean) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   if (!ADMIN_IDS.includes(user.id)) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
-  const db = supabase as any;
+  // Admin verified via the session client above; do all DB work with the service client
+  // (BYPASSRLS) so reads aren't policy-filtered and the apply actually writes.
+  const db = serviceClient() as any;
 
   // The page may hand us EITHER a canonical id OR a recipes-mirror id (the mirror trap:
   // the recipe page sometimes holds the mirror row id, not the canonical). Resolve to the
@@ -184,15 +201,26 @@ async function run(req: NextRequest, id: string, apply: boolean) {
     });
   }
 
-  // apply: update each step's task_id
+  // apply: update each step's task_id. Count rows that ACTUALLY changed (RETURNING the
+  // row) rather than trusting absence-of-error — an RLS-blocked or no-match update
+  // returns no error but writes nothing.
   let updated = 0;
+  const failures: string[] = [];
   for (const p of proposals) {
-    const { error } = await db.from('version_steps').update({ task_id: p.toTaskId }).eq('id', p.stepId);
-    if (!error) updated++;
+    const { data, error } = await db
+      .from('version_steps')
+      .update({ task_id: p.toTaskId })
+      .eq('id', p.stepId)
+      .select('id');
+    if (error) failures.push(error.message);
+    else if (data && data.length > 0) updated++;
+    else failures.push(`step ${p.stepId}: 0 rows changed`);
   }
   return NextResponse.json({
     recipe: canonical.slug, applied: true,
-    changeCount: changes.length, updated, changes,
+    changeCount: changes.length, updated,
+    failures: failures.length ? failures : undefined,
+    changes,
   });
 }
 
