@@ -97,7 +97,7 @@ function RespecialiseButton({ canonicalId }: { canonicalId: string }) {
       let d: any = null;
       try { d = JSON.parse(text); } catch { /* non-JSON (e.g. HTML 404/500 page) */ }
       if (!r.ok) {
-        setMsg(`${r.status}: ${d?.error ?? text.slice(0, 120) || 'Failed'}`);
+        setMsg(`${r.status}: ${d?.error ?? (text.slice(0, 120) || 'Failed')}`);
         setChanges(null);
       } else {
         setChanges(d?.changes ?? []); setOpen(true);
