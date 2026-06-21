@@ -71,7 +71,97 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
   );
 }
 
-// ── Tool/equipment cell ───────────────────────────────────────
+// ── Admin: re-bind this recipe's steps to newer concepts ──────────────────────
+// Concept binding is frozen at save time, so concepts added later (e.g. "Slice
+// cucumber") don't retroactively attach. This button dry-runs the re-specialisation
+// against the current concept library, shows the proposed changes, then applies on
+// confirm. Admin-only (self-gates via /api/admin/check) — renders nothing otherwise.
+function RespecialiseButton({ canonicalId }: { canonicalId: string }) {
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [changes, setChanges] = useState<{ stepOrder: number; instruction: string; from: string | null; to: string }[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/check').then(r => r.json()).then(d => setIsAdmin(!!d.isAdmin)).catch(() => {});
+  }, []);
+
+  if (!isAdmin) return null;
+
+  const dryRun = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/admin/recipes/${canonicalId}/respecialise`);
+      const d = await r.json();
+      if (!r.ok) { setMsg(d.error ?? 'Failed'); setChanges(null); }
+      else { setChanges(d.changes ?? []); setOpen(true); }
+    } catch { setMsg('Request failed'); }
+    setBusy(false);
+  };
+
+  const apply = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch(`/api/admin/recipes/${canonicalId}/respecialise?apply=true`, { method: 'POST' });
+      const d = await r.json();
+      if (!r.ok) setMsg(d.error ?? 'Failed');
+      else { setMsg(`Updated ${d.updated} step${d.updated === 1 ? '' : 's'}. Reload to see changes.`); setChanges([]); }
+    } catch { setMsg('Apply failed'); }
+    setBusy(false);
+  };
+
+  return (
+    <span style={{ position: 'relative', flexShrink: 0 }}>
+      <button onClick={dryRun} disabled={busy}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)',
+          padding: '6px 12px', fontSize: 11, cursor: busy ? 'default' : 'pointer',
+          fontFamily: 'var(--font-mono)', background: 'transparent', color: 'var(--muted)', opacity: busy ? 0.6 : 1 }}
+        title="Re-bind steps to newer concepts (admin)">
+        {busy ? 'Checking…' : 'Re-specialise'}
+      </button>
+      {open && changes && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 320, zIndex: 60,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 14,
+          boxShadow: '0 6px 24px rgba(0,0,0,0.10)', fontFamily: 'var(--font-mono)' }}>
+          {changes.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              {msg ?? 'No changes — every step already uses the best available concept.'}
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 11, color: 'var(--fg)', marginBottom: 8, fontWeight: 600 }}>
+                {changes.length} step{changes.length === 1 ? '' : 's'} would change:
+              </div>
+              <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                {changes.map((c, i) => (
+                  <div key={i} style={{ fontSize: 11, lineHeight: 1.4 }}>
+                    <span style={{ color: 'var(--muted)' }}>#{c.stepOrder}</span>{' '}
+                    <span style={{ color: 'var(--muted)' }}>{c.from ?? '—'}</span>
+                    <span style={{ color: 'var(--accent)' }}> → {c.to}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={apply} disabled={busy}
+                  style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 14px',
+                    fontSize: 11, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)' }}>
+                  {busy ? 'Applying…' : 'Apply'}
+                </button>
+                <button onClick={() => setOpen(false)}
+                  style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+          {msg && changes.length > 0 && <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 8 }}>{msg}</div>}
+        </div>
+      )}
+      {msg && !open && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>{msg}</span>}
+    </span>
+  );
+}
 
 // ── Appliance cell (compact) ──────────────────────────────────
 
@@ -419,6 +509,7 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
                 <span className="flex items-center gap-3 flex-shrink-0 no-print">
                   <PrintButton title={recipe.title} />
                   <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
+                  <RespecialiseButton canonicalId={canonicalId ?? recipe.id} />
                 </span>
               </div>
 
