@@ -157,8 +157,13 @@ function BulkRespecialise() {
                       <span style={{ color: 'var(--accent)' }}> → {u.to}</span>
                     </span>
                     <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-                      {u.stepCount} step{u.stepCount === 1 ? '' : 's'} in {u.recipeCount} recipe{u.recipeCount === 1 ? '' : 's'}
-                      {u.recipes.length ? ` · ${u.recipes.slice(0, 4).join(', ')}${u.recipes.length > 4 ? '…' : ''}` : ''}
+                      {u.stepCount} step{u.stepCount === 1 ? '' : 's'} in{' '}
+                      <a href={`/my/recipes/affected?task=${encodeURIComponent(u.toTaskId)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
+                        {u.recipeCount} recipe{u.recipeCount === 1 ? '' : 's'} ↗
+                      </a>
                     </span>
                   </span>
                 </label>
