@@ -70,6 +70,19 @@ function fmtQty(value: number | null | undefined, unit: string | null | undefine
   return u ? `${n} ${u}` : `${n}`;
 }
 
+// A prep qualifier is REDUNDANT when every word already appears in the ingredient name
+// (mirrors RecipeDisplay — keep identical). "ripe tomatoes" + "ripe" → suppress.
+function prepIsRedundant(name: string | undefined | null, prep: string | undefined | null): boolean {
+  const p = (prep ?? '').trim().toLowerCase();
+  if (!p) return false;
+  const nameWords = new Set((name ?? '').toLowerCase().split(/[\s,]+/).filter(Boolean));
+  const prepWords = p.split(/[\s,]+/).filter(Boolean);
+  return prepWords.length > 0 && prepWords.every(w => nameWords.has(w));
+}
+function displayPrep(name: string | undefined | null, prep: string | undefined | null): string {
+  return prepIsRedundant(name, prep) ? '' : (prep ?? '').trim();
+}
+
 // Temperature unit → short symbol ("celsius" → "C", "fahrenheit" → "F").
 function fmtTemp(t?: { value: number; unit: string }): string | null {
   if (!t || t.value == null) return null;
@@ -231,7 +244,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
               <li key={ing.ingredientId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderBottom: '1px solid #eee', breakInside: 'avoid' }}>
                 <span style={{ ...SANS, fontSize: 11.5, color: '#111' }}>
                   {ing.name}{ing.optional ? <span style={{ color: '#999', fontStyle: 'italic' }}> (optional)</span> : null}
-                  {ing.prep ? <span style={{ color: '#888' }}>, {ing.prep}</span> : null}
+                  {displayPrep(ing.name, ing.prep) ? <span style={{ color: '#888' }}>, {displayPrep(ing.name, ing.prep)}</span> : null}
                 </span>
                 <span style={{ ...MONO, fontSize: 10.5, color: '#444', whiteSpace: 'nowrap' }}>
                   {fmtQty(ing.quantity.value, ing.quantity.unit)}

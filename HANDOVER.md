@@ -2110,3 +2110,76 @@ AI wording drift vs curated content). Split: did #2 now, scoped #1 (units) separ
 ## STILL PARKED (unchanged)
 Meal-plan enforcement + Stripe; Demand Phase 2; Sharing & Delegation Phase 0; Plan &
 End-Product bridge; Cook Mode.
+
+# SESSION UPDATE — 2026-06-21 (Layer 2 intermediates · tool/qty display fixes · archive-leak closure)
+
+Continuation of the decomposition display work. After concept matching + instruction
+composition Layer 1, this arc shipped Layer 2 (intermediate materialization) plus a
+batch of display-honesty fixes and closed an archive-visibility leak across three
+surfaces. All SHIPPED & verified live unless noted.
+
+## SHIPPED — code (pushed, builds green, verified on live)
+- **Layer 2 — intermediate materialization (web + PDF).** Combine/transform steps that
+  consume an upstream intermediate (and carry no own ingredient by design) now fill the
+  [ingredient] slot from `version_step_dependencies.consumes_intermediate_label` (already
+  written at save time). "Add" → "Add the diced onion and hot oil"; "Toss" → "Toss the
+  reserved pasta water and egg and cheese mixture". Fuller scope: multi-input convergence
+  joined ("a, b and c"), "the"-prefixed for intermediates, own-ingredient (with qty) wins
+  the slot when both present. Implemented as `attachIntermediates()` in
+  `recipes/[slug]/page.tsx` — a FLAT query keyed on the step ids we already have, NOT a
+  nested embed (version_step_dependencies has two FKs to version_steps → nested embed is
+  FK-alias-fragile; flat query leaves the critical every-recipe main query untouched).
+  New `RecipeStep.consumedIntermediates?: string[]`. composeStepLine updated identically
+  in BOTH RecipeDisplay.tsx and RecipePrintLayout.tsx (the two renderers must stay byte-
+  identical in that function). NO migration, NO AI/decomposition change — the data was
+  already there.
+- **Tool-slug humanizing.** Shared `humanizeTool()` (hyphens→spaces, lowercase kept)
+  applied at every point a slug becomes visible text — the [tool] fill, the per-step tool
+  cell, and the recipe-level/mise-en-place tool list — in both renderers. "frying-pan" →
+  "frying pan".
+- **Qualifier quantities (no more "0 g").** Shared `fmtAmount`/`fmtQty`: a qualifier unit
+  ("to taste", "as needed", "to serve", "for garnish", "for serving") renders the
+  qualifier in the Qty column with a blank Unit; a real unit with value 0/null renders
+  "—" (web) / nothing (print) — never a meaningless "0 g". Applied at all qty render
+  sites in both renderers. Save layer (`decompose-save/route.ts`) no longer fabricates:
+  `ing.unit ?? 'g'` → `ing.unit?.trim() || null` (the grams-fabrication was the "Salt 0 g"
+  root cause; qty kept as `?? 0` for the column default, display interprets it).
+- **Archived recipes excluded from the AI duplicate-check catalogue.** `recipes/generate/
+  route.ts` catalogue query gained `.is('archived_at', null)` — archived recipes were
+  triggering "you already have this" and looping the create-with-AI flow.
+
+## SHIPPED — SQL (run on prod, verified)
+- **2 genuine qty-0 slips corrected** (`fix_qty_zero_slips.sql`): garlic-butter-pasta Salt
+  → "to taste", lemon-curd Water → "as needed". (The many other "to taste" rows were
+  already correct in data — only the display was wrong; the code fix covers them.)
+- **search_index view now filters archived recipes** (`fix_search_index_archived.sql`):
+  the recipe branch filtered `is_published` but not `archived_at`. Archiving does NOT
+  unpublish (it only sets archived_at + drops the `recipes` mirror), so published-and-
+  archived recipes kept matching search AND the Ask Soupdog panel (both read this view).
+  Added `AND rc.archived_at IS NULL` to the recipe branch only; other branches untouched.
+
+## VERIFIED end-to-end
+Greek Salad (old `greek-salad-mpw6vfin`) had lost all 7 quantities (wholesale parse
+failure) → archived it → regenerated via create-with-AI as `greek-salad-mqnfd723`. New
+copy has real quantities (tomatoes 400 g, olives 16 piece, feta 200 g), qualifier amounts
+("Salt · 1 pinch", "Black pepper · to taste"), Layer 2 intermediates ("Add the tomato
+chunks", "Add the tossed salad base and dressing"), humanized tools. All three display
+fixes confirmed on one fresh recipe.
+
+## OPEN THREADS / NEXT
+- **Archive invariant (name the seam).** Archiving leaves `is_published = true`, so every
+  read surface must separately remember `archived_at is null`. We've now patched three
+  leaks (the `recipes` mirror delete, the generate catalogue, the search_index view) —
+  but any FUTURE query filtering only on `is_published` will re-leak archived recipes.
+  Durable fix: flip `is_published = false` on archive (in the DELETE/archive handler), OR
+  standardize a single "visible" predicate, so the invariant lives in one place. Not
+  urgent; the three live leaks are closed.
+- **Decomposition-quality quirks (prompt-side, not display).** Surfaced on regenerated
+  Greek Salad, none blocking: (a) occasional null-producer bare-combine steps ("Add to
+  the large bowl" with no intermediate — the producer node emitted no `produces` label,
+  so Layer 2 has nothing to thread); (b) ingredient name + qualifier doubling ("ripe
+  tomatoes, ripe"). Same family as the earlier apparatus-as-intermediate cases (bain-
+  marie, hot pan modelled as consumed intermediates). All belong to decomposition prompt
+  quality, not the display layers.
+- **Layer 3?** Intermediate materialization Layer 2 is done. Next decomposition-display
+  step (if continuing the arc) is whatever was sequenced after Layer 2.

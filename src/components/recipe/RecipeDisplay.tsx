@@ -54,6 +54,24 @@ function fmtAmount(value: number | null | undefined, unit: string | null | undef
   return { qty: String(value), unit: u };
 }
 
+// A prep qualifier is REDUNDANT when every word of it already appears in the ingredient
+// name — e.g. ingredient "ripe tomatoes" + prep "ripe" → "ripe tomatoes, ripe". The
+// decomposition legitimately emits "ripe" as a prep (rule 2b lists it as a valid non-
+// transformation qualifier), but if the catalogue name already carries the word, showing
+// it twice reads wrong. Suppress at display time; keep genuinely additive preps.
+function prepIsRedundant(name: string | undefined | null, prep: string | undefined | null): boolean {
+  const p = (prep ?? '').trim().toLowerCase();
+  if (!p) return false;
+  const nameWords = new Set((name ?? '').toLowerCase().split(/[\s,]+/).filter(Boolean));
+  const prepWords = p.split(/[\s,]+/).filter(Boolean);
+  return prepWords.length > 0 && prepWords.every(w => nameWords.has(w));
+}
+
+// Resolve the prep to DISPLAY: the stored prep unless it's redundant with the name.
+function displayPrep(name: string | undefined | null, prep: string | undefined | null): string {
+  return prepIsRedundant(name, prep) ? '' : (prep ?? '').trim();
+}
+
 // ── Optional interactivity contract ──
 // When present, the OWNER (the page) holds the checklist/servings state so other
 // page chrome (sidebar progress) can read it. When absent, nothing is interactive.
@@ -334,7 +352,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
               <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
               <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
               <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return <>{a.qty}{a.unit && <span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{a.unit}</span>}</>; })()}</span>
-              {ing.prep && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ing.prep}</span>}
+              {displayPrep(ing.name, ing.prep) && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayPrep(ing.name, ing.prep)}</span>}
             </div>
           ))}
         </div>
@@ -362,7 +380,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                   </td>
                   <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
                   <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>
-                  <td style={{ ...td, borderRight: B, color: MUT }}>{ing.prep ?? '—'}</td>
+                  <td style={{ ...td, borderRight: B, color: MUT }}>{displayPrep(ing.name, ing.prep) || '—'}</td>
                   <td style={{ ...td, textAlign: 'center', fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', color: MUT }}>{ing.state ?? '—'}</td>
                 </tr>
               ))}
