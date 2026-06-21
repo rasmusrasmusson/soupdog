@@ -72,6 +72,24 @@ function displayPrep(name: string | undefined | null, prep: string | undefined |
   return prepIsRedundant(name, prep) ? '' : (prep ?? '').trim();
 }
 
+// Capitalization standard:
+//  • In the ingredient LIST / qty table an ingredient is a LABEL → capitalize first
+//    letter ("ripe tomatoes" → "Ripe tomatoes").
+//  • Inside an instruction SENTENCE an ingredient is mid-sentence → lowercase first
+//    letter ("Add Red onion" → "Add red onion").
+// Only the FIRST character is touched (not the whole string), so genuine proper-noun
+// casing inside a name is preserved ("Greek yogurt" stays "Greek yogurt" as a label;
+// mid-sentence it becomes "greek yogurt", which reads fine and avoids proper-noun
+// detection rabbit-holes).
+function capitalizeLabel(s: string | undefined | null): string {
+  const t = (s ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+function lowerInSentence(s: string | undefined | null): string {
+  const t = (s ?? '').trim();
+  return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}
+
 // ── Optional interactivity contract ──
 // When present, the OWNER (the page) holds the checklist/servings state so other
 // page chrome (sidebar progress) can read it. When absent, nothing is interactive.
@@ -206,7 +224,9 @@ function composeStepLine(
   const intermediatePhrase = (!ingredientName && intermediates && intermediates.length)
     ? joinIntermediates(intermediates)
     : '';
-  const fill = ingredientName || intermediatePhrase || '';
+  // Own ingredient is mid-sentence here ("Add red onion …") → lowercase first letter.
+  // The intermediate phrase already begins with a lowercase "the …".
+  const fill = (ingredientName ? lowerInSentence(ingredientName) : '') || intermediatePhrase || '';
 
   const tmpl = (template ?? '').trim();
   if (tmpl) {
@@ -350,7 +370,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
               style={{ opacity: ingChecked(i) ? 0.4 : 1, background: ingChecked(i) ? 'var(--surface-hover)' : undefined }}>
               {isOn && <Checkbox checked={ingChecked(i)} onChange={() => interactive!.ingChecks.toggle(i)} />}
               <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, width: 20, textAlign: 'right', flexShrink: 0 }}>{i + 1}</span>
-              <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{ing.name}</span>
+              <span style={{ fontWeight: 500, fontSize: 13, flex: 1, minWidth: 0 }}>{capitalizeLabel(ing.name)}</span>
               <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', flexShrink: 0 }}>{(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return <>{a.qty}{a.unit && <span style={{ fontSize: 10, color: MUT, marginLeft: 2 }}>{a.unit}</span>}</>; })()}</span>
               {displayPrep(ing.name, ing.prep) && <span style={{ fontFamily: MONO, fontSize: 10, color: MUT, flexShrink: 0, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayPrep(ing.name, ing.prep)}</span>}
             </div>
@@ -374,8 +394,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                   <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
                   <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                     {linkIngredients && ing.ingredientSlug
-                      ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                      : <span style={{ color: 'var(--fg)' }}>{ing.name}</span>}
+                      ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</a>
+                      : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                     {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
                   </td>
                   <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
@@ -434,7 +454,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             {stepIngs.map((ing: RecipeIngredientRef) => (
                               <span key={`${step.id}-${ing.ingredientId}`}
                                 style={{ fontFamily: MONO, fontSize: 10, padding: '2px 8px', borderRadius: 3, border: B, background: 'var(--surface)', color: 'var(--fg)' }}>
-                                {(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return `${ing.name} · ${a.qty}${a.unit ? ' ' + a.unit : ''}`; })()}
+                                {(() => { const a = fmtAmount(ing.quantity.value, ing.quantity.unit); return `${capitalizeLabel(ing.name)} · ${a.qty}${a.unit ? ' ' + a.unit : ''}`; })()}
                               </span>
                             ))}
                           </div>
@@ -510,8 +530,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             {isOn && rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} /></td>}
                             <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                               {linkIngredients && ing.ingredientSlug
-                                ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{ing.name}</a>
-                                : <span style={{ color: 'var(--fg)' }}>{ing.name}</span>}
+                                ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</a>
+                                : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>

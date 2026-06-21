@@ -83,6 +83,17 @@ function displayPrep(name: string | undefined | null, prep: string | undefined |
   return prepIsRedundant(name, prep) ? '' : (prep ?? '').trim();
 }
 
+// Capitalization (mirrors RecipeDisplay — keep identical): label = capitalize first
+// letter; in-sentence = lowercase first letter. Only the first char is touched.
+function capitalizeLabel(s: string | undefined | null): string {
+  const t = (s ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+function lowerInSentence(s: string | undefined | null): string {
+  const t = (s ?? '').trim();
+  return t ? t.charAt(0).toLowerCase() + t.slice(1) : t;
+}
+
 // Temperature unit → short symbol ("celsius" → "C", "fahrenheit" → "F").
 function fmtTemp(t?: { value: number; unit: string }): string | null {
   if (!t || t.value == null) return null;
@@ -143,7 +154,7 @@ function composeStepLine(
   const intermediatePhrase = (!ingredientName && intermediates && intermediates.length)
     ? joinIntermediates(intermediates)
     : '';
-  const fill = ingredientName || intermediatePhrase || '';
+  const fill = (ingredientName ? lowerInSentence(ingredientName) : '') || intermediatePhrase || '';
 
   const tmpl = (template ?? '').trim();
   if (tmpl) {
@@ -243,7 +254,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
             {recipe.ingredients.map((ing) => (
               <li key={ing.ingredientId} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', borderBottom: '1px solid #eee', breakInside: 'avoid' }}>
                 <span style={{ ...SANS, fontSize: 11.5, color: '#111' }}>
-                  {ing.name}{ing.optional ? <span style={{ color: '#999', fontStyle: 'italic' }}> (optional)</span> : null}
+                  {capitalizeLabel(ing.name)}{ing.optional ? <span style={{ color: '#999', fontStyle: 'italic' }}> (optional)</span> : null}
                   {displayPrep(ing.name, ing.prep) ? <span style={{ color: '#888' }}>, {displayPrep(ing.name, ing.prep)}</span> : null}
                 </span>
                 <span style={{ ...MONO, fontSize: 10.5, color: '#444', whiteSpace: 'nowrap' }}>
@@ -294,7 +305,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
                           {meta.map((m, i) => <span key={`m${i}`}>{m}</span>)}
                           {stepIngs.map((ing, i) => (
-                            <span key={`i${i}`} style={{ color: '#888' }}>{ing.name}{(() => { const s = fmtQty(ing.quantity?.value, ing.quantity?.unit); return s ? ` · ${s}` : ''; })()}</span>
+                            <span key={`i${i}`} style={{ color: '#888' }}>{capitalizeLabel(ing.name)}{(() => { const s = fmtQty(ing.quantity?.value, ing.quantity?.unit); return s ? ` · ${s}` : ''; })()}</span>
                           ))}
                         </div>
                       )}
