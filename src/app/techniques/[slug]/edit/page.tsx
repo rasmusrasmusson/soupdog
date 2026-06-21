@@ -665,10 +665,10 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
 
       {justAdded && (
         <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 10 }}>
-          Added “{justAdded.name}”. Add another below, or{' '}
+          ✓ Saved “{justAdded.name}”. It’s stored now — you don’t need to press “Save technique”.{' '}
           <Link href={`/techniques/${justAdded.slug}/edit`} style={{ color: 'var(--accent)', textDecoration: 'underline' }}>
-            edit its content
-          </Link>.
+            Edit its content
+          </Link>, or add another below.
         </div>
       )}
 
@@ -697,20 +697,26 @@ function ConceptsManager({ taskId, taskName }: { taskId: string; taskName: strin
             <label style={{ ...L, fontSize: 11 }}>Bound tool (optional)</label>
             <ToolPicker value={boundTool} onChange={(slug) => setBoundTool(slug)} />
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button onClick={create} disabled={busy}
               style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 18px',
                 fontSize: 13, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)', opacity: busy ? 0.6 : 1 }}>
-              {busy ? 'Adding…' : 'Add'}
+              {busy ? 'Adding…' : 'Add version'}
             </button>
+            {justAdded && !busy && (
+              <span style={{ fontSize: 12, color: 'var(--accent)' }}>✓ saved</span>
+            )}
             <button onClick={() => { setShowForm(false); setErr(null); }}
-              style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 13, cursor: 'pointer' }}>
-              Done
+              style={{ marginLeft: 'auto', background: 'transparent', color: 'var(--muted)', border: 'none',
+                fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+              Close
             </button>
           </div>
-          <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0 }}>
-            Adds a specific version and keeps this form open so you can add more
-            (e.g. a lemon, an orange, a lime). Click any in the list above to add its own content and media.
+          <p style={{ fontSize: 11, color: 'var(--muted)', margin: 0, lineHeight: 1.5 }}>
+            Each version is saved the moment you press <strong>Add version</strong> — the form stays
+            open so you can add more (e.g. a lemon, an orange, a lime). Click any in the list above to
+            give it its own content and media. <strong>Close</strong> just hides this form; nothing you’ve
+            added is lost.
           </p>
           {err && <div style={{ fontSize: 12, color: '#b4413c' }}>{err}</div>}
         </div>
