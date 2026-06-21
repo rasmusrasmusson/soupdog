@@ -93,10 +93,16 @@ function RespecialiseButton({ canonicalId }: { canonicalId: string }) {
     setBusy(true); setMsg(null);
     try {
       const r = await fetch(`/api/admin/recipes/${canonicalId}/respecialise`);
-      const d = await r.json();
-      if (!r.ok) { setMsg(d.error ?? 'Failed'); setChanges(null); }
-      else { setChanges(d.changes ?? []); setOpen(true); }
-    } catch { setMsg('Request failed'); }
+      const text = await r.text();
+      let d: any = null;
+      try { d = JSON.parse(text); } catch { /* non-JSON (e.g. HTML 404/500 page) */ }
+      if (!r.ok) {
+        setMsg(`${r.status}: ${d?.error ?? text.slice(0, 120) || 'Failed'}`);
+        setChanges(null);
+      } else {
+        setChanges(d?.changes ?? []); setOpen(true);
+      }
+    } catch (e: any) { setMsg(`Network: ${e?.message ?? 'failed'}`); }
     setBusy(false);
   };
 

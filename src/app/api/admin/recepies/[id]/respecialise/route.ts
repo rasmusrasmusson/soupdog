@@ -82,19 +82,40 @@ async function run(req: NextRequest, id: string, apply: boolean) {
 
   const db = supabase as any;
 
+  // The page may hand us EITHER a canonical id OR a recipes-mirror id (the mirror trap:
+  // the recipe page sometimes holds the mirror row id, not the canonical). Resolve to the
+  // true recipe_canonicals.id first, so the button works regardless of which id it has.
+  // chain: recipes.id → recipes.recipe_version_id → recipe_versions.canonical_id.
+  async function resolveCanonicalId(rawId: string): Promise<string | null> {
+    // already a canonical?
+    const { data: asCanon } = await db.from('recipe_canonicals').select('id').eq('id', rawId).maybeSingle();
+    if (asCanon?.id) return asCanon.id;
+    // else try the mirror: recipes.id → recipe_version_id → recipe_versions.canonical_id
+    const { data: mirror } = await db.from('recipes').select('recipe_version_id').eq('id', rawId).maybeSingle();
+    if (mirror?.recipe_version_id) {
+      const { data: ver } = await db.from('recipe_versions').select('canonical_id').eq('id', mirror.recipe_version_id).maybeSingle();
+      if (ver?.canonical_id) return ver.canonical_id;
+    }
+    return null;
+  }
+
+  const canonicalId = await resolveCanonicalId(id);
+  if (!canonicalId) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
+
   // recipe → current version
   const { data: canonical, error: ce } = await db
     .from('recipe_canonicals')
     .select('id, slug, current_version_id')
-    .eq('id', id)
+    .eq('id', canonicalId)
     .maybeSingle();
   if (ce || !canonical) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
   if (!canonical.current_version_id) return NextResponse.json({ error: 'Recipe has no current version' }, { status: 400 });
 
-  // steps of the current version (with their current task + tool)
+  // steps of the current version (with their current task + tool). Flat select — no
+  // nested tasks embed (embeds are fragile; we resolve task names separately below).
   const { data: steps, error: se } = await db
     .from('version_steps')
-    .select('id, order_index, instruction, task_id, appliance_settings, tasks ( name )')
+    .select('id, order_index, instruction, task_id, appliance_settings')
     .eq('version_id', canonical.current_version_id)
     .order('order_index', { ascending: true });
   if (se) return NextResponse.json({ error: 'Failed to load steps' }, { status: 500 });
