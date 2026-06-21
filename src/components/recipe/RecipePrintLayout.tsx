@@ -272,7 +272,7 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
               Tools
             </h2>
             <div style={{ ...SANS, fontSize: 11.5, color: '#222', lineHeight: 1.7 }}>
-              {tools.join('  ·  ')}
+              {tools.map(capitalizeLabel).join('  ·  ')}
             </div>
           </div>
         ) : null}
@@ -294,13 +294,16 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
                 const meta = [
                   fmtTemp(s.temperature),
                   s.durationSeconds ? formatDuration(s.durationSeconds) : null,
-                  (() => { const t = stepToolNames(s); return t.length ? t.join(', ') : null; })(),
+                  (() => { const t = stepToolNames(s); return t.length ? t.map(capitalizeLabel).join(', ') : null; })(),
                 ].filter(Boolean);
                 return (
                   <div key={s.id} style={{ display: 'flex', gap: 10, padding: '7px 0', breakInside: 'avoid' }}>
                     <span style={{ ...MONO, fontSize: 12, color: '#b08a3e', fontWeight: 500, flexShrink: 0, width: 18, textAlign: 'right' }}>{s.idx}</span>
                     <div style={{ flex: 1 }}>
-                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>{composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction, (s as any).consumedIntermediates)}</div>
+                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>
+                        {composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction, (s as any).consumedIntermediates)}
+                        {(s as any).notes && <span style={{ color: '#666' }}> → {(s as any).notes}</span>}
+                      </div>
                       {(meta.length > 0 || stepIngs.length > 0) && (
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
                           {meta.map((m, i) => <span key={`m${i}`}>{m}</span>)}

@@ -165,7 +165,7 @@ function ToolCell({ settings }: { settings: any }) {
     const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
     return (
       <div>
-        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{humanizeTool(tool.name)}</span>
+        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{capitalizeLabel(humanizeTool(tool.name))}</span>
         {hasSettings && tool.applianceModeId && (
           <span style={{ fontFamily: MONO, fontSize: 9, color: MUT, display: 'block' }}>
             {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
@@ -257,7 +257,7 @@ function StepLine({ taskName, template, singleTool, ingredientName, toolName, in
   return (
     <>
       {composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)}
-      {notes && <span style={{ color: MUT, fontFamily: MONO, fontSize: 10 }}> — {notes}</span>}
+      {notes && <span style={{ color: MUT }}> → {notes}</span>}
       {taskId && onOpenTask && (
         <button
           type="button"
@@ -416,7 +416,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginTop: 4 }}>
             {derivedTools.map((t) => (
               <span key={t} style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)' }}>
-                {t}
+                {capitalizeLabel(t)}
               </span>
             ))}
           </div>
@@ -515,7 +515,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                       const rowCount = Math.max(1, stepIngs.length);
 
                       return stepIngs.length === 0 ? (
-                        <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'top' }}>
+                        <tr key={step.id} style={{ borderTop: B, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
                           {isOn && <td style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} /></td>}
                           <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
@@ -526,7 +526,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                         </tr>
                       ) : (
                         stepIngs.map((ing: RecipeIngredientRef, rowIdx: number) => (
-                          <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: rowIdx === 0 ? 'top' : 'middle' }}>
+                          <tr key={`${step.id}-${rowIdx}`} style={{ borderTop: rowIdx === 0 ? B : `1px dashed var(--border)`, opacity: done ? 0.4 : 1, background: done ? 'var(--surface-hover)' : undefined, verticalAlign: 'middle' }}>
                             {isOn && rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} /></td>}
                             <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                               {linkIngredients && ing.ingredientSlug
@@ -535,9 +535,9 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'top' }}><ToolCell settings={step.applianceSettings} /></td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'top' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'top' }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} intermediates={step.consumedIntermediates} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'middle' }}><ToolCell settings={step.applianceSettings} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'middle' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'middle' }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} intermediates={step.consumedIntermediates} /></td>}
                           </tr>
                         ))
                       );
