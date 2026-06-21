@@ -2183,3 +2183,141 @@ fixes confirmed on one fresh recipe.
   quality, not the display layers.
 - **Layer 3?** Intermediate materialization Layer 2 is done. Next decomposition-display
   step (if continuing the arc) is whatever was sequenced after Layer 2.
+
+  # SESSION UPDATE — 2026-06-21 (Layer 2 · display fixes · archive-leak closure · technique-form clarity · re-specialise tool)
+
+A long session continuing the decomposition-display arc, then branching into an
+archive-visibility bug, a UX clarity fix, and a new admin tool for re-binding existing
+recipes to newer concepts. All SHIPPED & verified live unless marked. Heavy debugging
+on the re-specialise tool surfaced two permanent lessons (see KEY LESSONS).
+
+## SHIPPED — code (pushed, builds green, verified live)
+
+### Layer 2 — intermediate materialization (web + PDF)
+Combine/transform steps that consume an upstream intermediate (and carry no own
+ingredient by design) now fill [ingredient] from
+`version_step_dependencies.consumes_intermediate_label` (already written at save time).
+"Add" → "Add the diced onion and hot oil"; "Toss" → "Toss the reserved pasta water and
+egg and cheese mixture". Fuller scope: multi-input convergence joined ("a, b and c"),
+"the"-prefixed for intermediates, own-ingredient (with qty) wins the slot when both
+present. Implemented as `attachIntermediates()` in `recipes/[slug]/page.tsx` — a FLAT
+query keyed on the step ids we already have, NOT a nested embed (the dependencies table
+has two FKs to version_steps → nested embed is FK-alias-fragile; flat query leaves the
+critical every-recipe main query untouched). New `RecipeStep.consumedIntermediates?:
+string[]`. composeStepLine updated IDENTICALLY in both RecipeDisplay.tsx and
+RecipePrintLayout.tsx. NO migration, NO AI change — the data was already there.
+
+### Display fixes (both renderers, all shared helpers kept byte-identical)
+- **Tool-slug humanizing** — `humanizeTool()` (hyphens→spaces, lowercase kept) at every
+  visible-slug point ([tool] fill, per-step tool cell, recipe-level/mise-en-place list).
+  "frying-pan" → "frying pan".
+- **Qualifier quantities** — `fmtAmount`/`fmtQty`: a qualifier unit ("to taste", "as
+  needed", "to serve", "for garnish", "for serving") renders the qualifier in the Qty
+  column, blank Unit; a real unit with value 0/null renders "—"/nothing — never "0 g".
+  Save layer (`decompose-save`) stopped fabricating: `ing.unit ?? 'g'` → `ing.unit?.trim()
+  || null` (the grams-fabrication was the "Salt 0 g" root cause).
+- **Redundant-prep suppression** — `prepIsRedundant`/`displayPrep`: drop a prep qualifier
+  when every word already appears in the ingredient name ("ripe tomatoes" + "ripe" → just
+  "ripe tomatoes"; "feta cheese, block" + "block" → drops ", block").
+- **Capitalization standard** — `capitalizeLabel` (ingredient LISTS/qty tables, first
+  letter up) + `lowerInSentence` (inside instructions, first letter down: "Add red onion",
+  not "Add Red onion"). Only the first char is touched, so proper-noun casing survives.
+
+### Archive-visibility leak — CLOSED across three surfaces
+Archiving sets `archived_at` + deletes the `recipes` mirror, but does NOT unpublish
+(`is_published` stays true). Two surfaces ignored `archived_at`:
+- **AI duplicate-check catalogue** (`recipes/generate/route.ts`): added `.is('archived_at',
+  null)` — archived recipes were triggering "you already have this" and looping the
+  create-with-AI flow / stuck generate.
+- **search_index view + Ask Soupdog** (SQL, `fix_search_index_archived.sql`): the recipe
+  branch filtered is_published but not archived_at. Added `AND rc.archived_at IS NULL` to
+  the recipe branch only; other branches (ingredient/product/equipment/task) untouched.
+- (The mirror delete already handled the public recipe page.)
+
+### Technique-version form clarity (`techniques/[slug]/edit`)
+The "Add specific version" form had ambiguous "Add" / "Done" buttons. Confirmed behaviour:
+**Add saves the version IMMEDIATELY to the DB (independent of the page's "Save technique"
+button); "Done" only collapsed the form (not a cancel — nothing to cancel, the add is
+already committed).** Fix: "Add" → "Add version", inline "✓ saved" after each add, the
+confirmation line now says "saved — you don't need to press Save technique", and "Done"
+REMOVED (replaced by a subtle "Close" link). Helper text reworded to lead with persistence.
+
+### Re-specialise tool — re-bind existing recipes to newer concepts (NEW)
+Concept binding (Phase C `specialiseTask`) is FROZEN at decompose-save time: a step gets
+the most-specific concept that existed THEN. Concepts added later (e.g. "Slice cucumber")
+don't retroactively bind. New admin tool fixes this on demand:
+- Endpoint `src/app/api/admin/recipes/[id]/respecialise/route.ts` — GET = dry-run (returns
+  proposed changes), POST `?apply=true` = applies. Reads each step's stored ingredient_id
+  + tool slug (NO AI, NO re-decompose), resolves each step's task to its GENERIC ROOT (walk
+  up parent_task_id, so concept→better-concept upgrades too, never demotes), scores the
+  CURRENT concept library (+2 ingredient, +1 tool; mismatch disqualifies).
+- Admin-only `Re-specialise` button on the recipe page (self-gates via /api/admin/check):
+  dry-run shows a diff popover ("#2 Slice → Slice cucumber"), Apply writes.
+- Verified end-to-end on Greek Salad and Spaghetti all'Arrabbiata.
+
+## SHIPPED — SQL (run on prod, verified)
+- `fix_qty_zero_slips.sql` — 2 genuine 0g slips → "to taste"/"as needed".
+- `fix_search_index_archived.sql` — archived recipes drop from search.
+- **Parsley merge** — `merge_ingredient('51fbef5f… flat-leaf parsley' survivor,
+  'bd376332… fresh flat-leaf parsley' orphan, false)`. Dry-run first; only 1
+  version_ingredient re-pointed (the Arrabbiata chop step). Done so the "Chop flat-leaf
+  parsley" concept matches the recipe step (see Fix-C thread below).
+
+## KEY LESSONS (permanent — both cost real debugging time this session)
+1. **An RLS-blocked UPDATE returns NO error — it silently changes 0 rows.** The
+   re-specialise apply reported "Updated 2 steps" while the DB was untouched, because the
+   session client (RLS-bound, no UPDATE policy on version_steps) matched zero rows and
+   `if (!error) updated++` counted a phantom success. FIX: admin writes use the
+   service-role client (BYPASSRLS, same as backfill-nutrition) — session client only for
+   the admin GATE — and count rows via `.update(...).select('id')`, never absence-of-error.
+   "No error" ≠ "it worked" under RLS. (This bit tasks earlier, now version_steps.)
+2. **The TypeScript transpiler is more lenient than Turbopack.** A `d?.error ?? text || 'x'`
+   (mixing ?? with || sans parens) passed the local transpile syntax-check but FAILED the
+   real build ("Nullish coalescing requires parens when mixing with logical operators").
+   Always fully-parenthesize ?? near ||/&&; the pre-flight check won't catch it.
+   (Also recurring: the `recipes`-mirror id trap — the recipe page's `canonicalId ??
+   recipe.id` fallback can hand any feature a MIRROR id, not the canonical. The
+   re-specialise endpoint now resolves any id → canonical via recipe_version_id, same as
+   the save/unsave fix. And the `--`-to-folder extraction produced a folder TYPO
+   "recepies" → 404; verify folder spelling after placing bracket-path routes.)
+
+## OPEN THREADS / NEXT
+
+### Fix C — ingredient-concept matching (the real fix behind the parsley merge)
+Concept binding requires an EXACT `bound_ingredient_id === step.ingredient_id` match, so
+semantic near-duplicate ingredients ("fresh flat-leaf parsley" vs "flat-leaf parsley")
+defeat it. Merging is a TACTICAL per-case patch (and will recur with every "fresh/large/
+ripe X" variant). The principled fix: concepts bind to an ingredient-CONCEPT GROUP (the
+overlapping-m2m ingredient layer already designed for DISPLAY in the recipe-model docs),
+so all variants of a herb match without merges. Design-first, not a quick build. FILED.
+
+### Archive invariant (name the seam — restated, still open)
+Archiving leaves `is_published = true`; every read surface must independently add
+`archived_at is null`. We've now patched the mirror (delete), the generate catalogue, and
+the search_index view — but FUTURE queries filtering only is_published will re-leak.
+Durable fix: flip `is_published = false` on archive, OR standardize one "visible"
+predicate. Not urgent; live leaks closed.
+
+### Decomposition-quality quirks (prompt-side, not display)
+Surfaced on Greek Salad, none blocking: null-producer bare-combine steps ("Add to the
+large bowl" with no intermediate — producer emitted no `produces`); apparatus-as-
+intermediate ("Transfer the curd mixture and simmering water bath"). Same family;
+belong to decomposition prompt quality.
+
+### Step re-ordering for reading (prototyped, deferred BY DESIGN)
+"Cut-all-then-add-all" vs cook-natural "cut-one-add-one": prototyped a dependency-
+respecting re-sort on Greek Salad's real DAG — it CAN'T produce clean pairing because the
+vessel-accumulation chain (each add depends on the previous) forces an order; a faithful
+re-sort only interleaves with an offset (arguably worse). Forcing clean pairing would
+break the DAG's honesty (claim cucumber can go in before olives). Conservative answer:
+re-order ONLY when it yields unambiguous improvement — needs design + testing across
+several recipe shapes. NOT a quick fix.
+
+### Re-specialise polish (small)
+After Apply the user must manually reload to see changes ("Updated N steps. Reload to see
+changes."). Auto-reload / re-fetch on success would be nicer. Tiny.
+
+### Larger, unchanged
+Meal-planning enforcement + Stripe (the neglected revenue track — flagged every session,
+harder to retrofit each time); Demand Model Phase 2; sub-recipe materialization; Plan &
+End-Product bridge. Each its own session.

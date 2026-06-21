@@ -17,12 +17,6 @@ function serviceClient() {
   });
 }
 
-// Admin gate — AUTH account ids (auth.uid()), NOT person ids. Keep in sync with
-// /api/admin/tasks/[id] + /api/admin/check + the RLS policy.
-const ADMIN_IDS = (process.env.SOUPDOG_ADMIN_ACCOUNT_IDS
-  ?? 'bb02ae50-436c-4402-8c8c-447344e10151,1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf')
-  .split(',').map(s => s.trim()).filter(Boolean);
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Re-specialise an EXISTING recipe against the CURRENT concept library.
 //
@@ -93,10 +87,9 @@ async function run(req: NextRequest, id: string, apply: boolean) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (!ADMIN_IDS.includes(user.id)) return NextResponse.json({ error: 'Admin only' }, { status: 403 });
 
-  // Admin verified via the session client above; do all DB work with the service client
-  // (BYPASSRLS) so reads aren't policy-filtered and the apply actually writes.
+  // DB work via the service client (BYPASSRLS) — reads aren't policy-filtered and the
+  // apply actually writes (an RLS-blocked update silently changes 0 rows).
   const db = serviceClient() as any;
 
   // The page may hand us EITHER a canonical id OR a recipes-mirror id (the mirror trap:
@@ -119,13 +112,21 @@ async function run(req: NextRequest, id: string, apply: boolean) {
   const canonicalId = await resolveCanonicalId(id);
   if (!canonicalId) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
 
-  // recipe → current version
+  // recipe → current version + author
   const { data: canonical, error: ce } = await db
     .from('recipe_canonicals')
-    .select('id, slug, current_version_id')
+    .select('id, slug, current_version_id, author_id')
     .eq('id', canonicalId)
     .maybeSingle();
   if (ce || !canonical) return NextResponse.json({ error: 'Recipe not found' }, { status: 404 });
+
+  // AUTHOR-ONLY gate: only the recipe's author may re-specialise it. A platform/super
+  // admin who can VIEW another person's recipe must NOT push concept updates into it —
+  // that's the author's decision. (You re-specialise your own recipes because you authored
+  // them.) Catalog-curation by a super admin, if ever needed, is a separate path.
+  if (canonical.author_id !== user.id) {
+    return NextResponse.json({ error: 'Only the recipe author can re-specialise this recipe' }, { status: 403 });
+  }
   if (!canonical.current_version_id) return NextResponse.json({ error: 'Recipe has no current version' }, { status: 400 });
 
   // steps of the current version (with their current task + tool). Flat select — no
@@ -192,6 +193,7 @@ async function run(req: NextRequest, id: string, apply: boolean) {
     instruction: p.instruction,
     from: p.fromTaskId ? (nameById.get(p.fromTaskId) ?? p.fromTaskId) : null,
     to: nameById.get(p.toTaskId) ?? p.toTaskId,
+    toTaskId: p.toTaskId,   // for client-side grouping by task-update (bulk modal)
   }));
 
   if (!apply) {
@@ -201,12 +203,23 @@ async function run(req: NextRequest, id: string, apply: boolean) {
     });
   }
 
+  // Optional filter: apply ONLY proposals whose target concept is in onlyTaskIds (sent by
+  // the bulk modal when the user unchecks a task-update). Absent → apply all proposals.
+  let onlyTaskIds: Set<string> | null = null;
+  if (apply) {
+    const body = await req.json().catch(() => null);
+    if (body && Array.isArray(body.onlyTaskIds)) {
+      onlyTaskIds = new Set(body.onlyTaskIds.filter((x: any) => typeof x === 'string'));
+    }
+  }
+  const toApply = onlyTaskIds ? proposals.filter(p => onlyTaskIds!.has(p.toTaskId)) : proposals;
+
   // apply: update each step's task_id. Count rows that ACTUALLY changed (RETURNING the
   // row) rather than trusting absence-of-error — an RLS-blocked or no-match update
   // returns no error but writes nothing.
   let updated = 0;
   const failures: string[] = [];
-  for (const p of proposals) {
+  for (const p of toApply) {
     const { data, error } = await db
       .from('version_steps')
       .update({ task_id: p.toTaskId })

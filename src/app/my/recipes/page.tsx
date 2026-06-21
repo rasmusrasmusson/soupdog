@@ -63,6 +63,130 @@ function EmptyState({ icon, label, action }: {
   );
 }
 
+// ── Bulk re-specialise: apply newer technique versions across all my recipes ──
+// Concepts added after a recipe was created don't retroactively bind. This scans every
+// recipe the user authored and groups the proposed changes by TASK-UPDATE (e.g.
+// "Slice → Slice cucumber: 3 recipes"). Each task-update is a checkbox (default on);
+// "Apply selected" writes the checked ones across all affected recipes. Author-scoped on
+// the server — only the user's own recipes are touched.
+interface TaskUpdate {
+  toTaskId: string; from: string; to: string;
+  recipeCount: number; stepCount: number; recipes: string[];
+}
+function BulkRespecialise() {
+  const [updates, setUpdates] = useState<TaskUpdate[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [checked, setChecked] = useState<Record<string, boolean>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/my/recipes/respecialise-all')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d || (d.taskUpdateCount ?? 0) === 0) return;
+        setUpdates(d.taskUpdates ?? []);
+        const init: Record<string, boolean> = {};
+        for (const u of (d.taskUpdates ?? [])) init[u.toTaskId] = true; // default on
+        setChecked(init);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  if (!updates || updates.length === 0) return null;
+
+  const selectedIds = Object.entries(checked).filter(([, v]) => v).map(([k]) => k);
+
+  const apply = async () => {
+    if (selectedIds.length === 0) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await fetch('/api/my/recipes/respecialise-all?apply=true', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ onlyTaskIds: selectedIds }),
+      });
+      const d = await r.json();
+      if (!r.ok) setMsg(d.error ?? 'Failed');
+      else {
+        setMsg(`Updated ${d.updated} step${d.updated === 1 ? '' : 's'} across your recipes.`);
+        setTimeout(() => window.location.reload(), 900);
+      }
+    } catch { setMsg('Apply failed'); }
+    setBusy(false);
+  };
+
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--accent)',
+          background: 'transparent', color: 'var(--accent)', padding: '7px 16px',
+          ...MONO, fontSize: 11, letterSpacing: '0.08em', cursor: 'pointer' }}
+        title="Newer technique versions are available for some of your recipes">
+        Re-specialise ({updates.length})
+      </button>
+
+      {open && (
+        <div onClick={() => !busy && setOpen(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10,
+              width: 'min(560px, 100%)', maxHeight: '80vh', overflow: 'auto', padding: 24, ...MONO }}>
+            <h2 className="font-display" style={{ fontSize: 20, fontWeight: 400, color: 'var(--fg)', marginBottom: 6 }}>
+              Apply newer technique versions
+            </h2>
+            <p style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 18 }}>
+              These technique updates can be applied across your recipes. Uncheck any you don't want.
+              Each applies to every recipe where it fits.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
+              {updates.map(u => (
+                <label key={u.toTaskId}
+                  style={{ display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer',
+                    border: '1px solid var(--border)', padding: '12px 14px', borderRadius: 8 }}>
+                  <input type="checkbox" checked={!!checked[u.toTaskId]}
+                    onChange={e => setChecked(c => ({ ...c, [u.toTaskId]: e.target.checked }))}
+                    style={{ marginTop: 2, accentColor: 'var(--accent)' }} />
+                  <span style={{ flex: 1 }}>
+                    <span style={{ fontSize: 13, color: 'var(--fg)' }}>
+                      <span style={{ color: 'var(--muted)' }}>{u.from}</span>
+                      <span style={{ color: 'var(--accent)' }}> → {u.to}</span>
+                    </span>
+                    <span style={{ display: 'block', fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+                      {u.stepCount} step{u.stepCount === 1 ? '' : 's'} in {u.recipeCount} recipe{u.recipeCount === 1 ? '' : 's'}
+                      {u.recipes.length ? ` · ${u.recipes.slice(0, 4).join(', ')}${u.recipes.length > 4 ? '…' : ''}` : ''}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {msg && <div style={{ fontSize: 12, color: 'var(--accent)', marginBottom: 14 }}>{msg}</div>}
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <button onClick={apply} disabled={busy || selectedIds.length === 0}
+                style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '8px 18px',
+                  fontSize: 12, ...MONO, cursor: (busy || selectedIds.length === 0) ? 'default' : 'pointer',
+                  opacity: (busy || selectedIds.length === 0) ? 0.5 : 1 }}>
+                {busy ? 'Applying…' : `Apply selected (${selectedIds.length})`}
+              </button>
+              <button onClick={() => setOpen(false)} disabled={busy}
+                style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 12,
+                  ...MONO, cursor: 'pointer', textDecoration: 'underline' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function MyRecipesPage() {
   const router = useRouter();
   const [banner, setBanner] = useState<{type: 'saved'|'published', title: string}|null>(null);
@@ -224,7 +348,8 @@ export default function MyRecipesPage() {
         <h1 className="font-display text-[28px] font-light" style={{ color: 'var(--fg)' }}>
           My Recipes
         </h1>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <BulkRespecialise />
           <Link href="/my/recipes/import"
             style={{
               display: 'flex', alignItems: 'center', gap: 6,

@@ -71,40 +71,32 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
   );
 }
 
-// ── Admin: re-bind this recipe's steps to newer concepts ──────────────────────
+// ── Author: re-bind this recipe's steps to newer concepts ─────────────────────
 // Concept binding is frozen at save time, so concepts added later (e.g. "Slice
 // cucumber") don't retroactively attach. This button dry-runs the re-specialisation
-// against the current concept library, shows the proposed changes, then applies on
-// confirm. Admin-only (self-gates via /api/admin/check) — renders nothing otherwise.
-function RespecialiseButton({ canonicalId }: { canonicalId: string }) {
-  const [isAdmin, setIsAdmin] = useState(false);
+// on mount and ONLY appears when the AUTHOR has something to update on THIS recipe.
+// Author-only: a super admin viewing someone else's recipe never sees it (the endpoint
+// enforces the same — author pushes updates into their own recipe, nobody else's).
+function RespecialiseButton({ canonicalId, isAuthor }: { canonicalId: string; isAuthor: boolean }) {
   const [busy, setBusy] = useState(false);
   const [changes, setChanges] = useState<{ stepOrder: number; instruction: string; from: string | null; to: string }[] | null>(null);
+  const [hasChanges, setHasChanges] = useState(false); // null/false until the mount check says yes
   const [open, setOpen] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  // On mount (author only), quietly dry-run to learn whether anything would change.
+  // Only then do we render the button. No AI — a cheap DB-only check.
   useEffect(() => {
-    fetch('/api/admin/check').then(r => r.json()).then(d => setIsAdmin(!!d.isAdmin)).catch(() => {});
-  }, []);
+    if (!isAuthor || !canonicalId) return;
+    let cancelled = false;
+    fetch(`/api/admin/recipes/${canonicalId}/respecialise`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (!cancelled && d && (d.changeCount ?? 0) > 0) { setHasChanges(true); setChanges(d.changes ?? []); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAuthor, canonicalId]);
 
-  if (!isAdmin) return null;
-
-  const dryRun = async () => {
-    setBusy(true); setMsg(null);
-    try {
-      const r = await fetch(`/api/admin/recipes/${canonicalId}/respecialise`);
-      const text = await r.text();
-      let d: any = null;
-      try { d = JSON.parse(text); } catch { /* non-JSON (e.g. HTML 404/500 page) */ }
-      if (!r.ok) {
-        setMsg(`${r.status}: ${d?.error ?? (text.slice(0, 120) || 'Failed')}`);
-        setChanges(null);
-      } else {
-        setChanges(d?.changes ?? []); setOpen(true);
-      }
-    } catch (e: any) { setMsg(`Network: ${e?.message ?? 'failed'}`); }
-    setBusy(false);
-  };
+  if (!isAuthor || !hasChanges) return null;
 
   const apply = async () => {
     setBusy(true); setMsg(null);
@@ -112,59 +104,54 @@ function RespecialiseButton({ canonicalId }: { canonicalId: string }) {
       const r = await fetch(`/api/admin/recipes/${canonicalId}/respecialise?apply=true`, { method: 'POST' });
       const d = await r.json();
       if (!r.ok) setMsg(d.error ?? 'Failed');
-      else { setMsg(`Updated ${d.updated} step${d.updated === 1 ? '' : 's'}. Reload to see changes.`); setChanges([]); }
+      else {
+        setMsg(`Updated ${d.updated} step${d.updated === 1 ? '' : 's'}…`);
+        // small polish: reload so the change is visible immediately
+        setTimeout(() => window.location.reload(), 700);
+      }
     } catch { setMsg('Apply failed'); }
     setBusy(false);
   };
 
   return (
     <span style={{ position: 'relative', flexShrink: 0 }}>
-      <button onClick={dryRun} disabled={busy}
+      <button onClick={() => setOpen(o => !o)} disabled={busy}
         style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1px solid var(--border)',
           padding: '6px 12px', fontSize: 11, cursor: busy ? 'default' : 'pointer',
-          fontFamily: 'var(--font-mono)', background: 'transparent', color: 'var(--muted)', opacity: busy ? 0.6 : 1 }}
-        title="Re-bind steps to newer concepts (admin)">
-        {busy ? 'Checking…' : 'Re-specialise'}
+          fontFamily: 'var(--font-mono)', background: 'transparent', color: 'var(--accent)', opacity: busy ? 0.6 : 1 }}
+        title="Newer technique versions are available for this recipe">
+        Re-specialise
       </button>
       {open && changes && (
         <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 6, width: 320, zIndex: 60,
           background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 14,
           boxShadow: '0 6px 24px rgba(0,0,0,0.10)', fontFamily: 'var(--font-mono)' }}>
-          {changes.length === 0 ? (
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {msg ?? 'No changes — every step already uses the best available concept.'}
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize: 11, color: 'var(--fg)', marginBottom: 8, fontWeight: 600 }}>
-                {changes.length} step{changes.length === 1 ? '' : 's'} would change:
+          <div style={{ fontSize: 11, color: 'var(--fg)', marginBottom: 8, fontWeight: 600 }}>
+            {changes.length} step{changes.length === 1 ? '' : 's'} would change:
+          </div>
+          <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {changes.map((c, i) => (
+              <div key={i} style={{ fontSize: 11, lineHeight: 1.4 }}>
+                <span style={{ color: 'var(--muted)' }}>#{c.stepOrder}</span>{' '}
+                <span style={{ color: 'var(--muted)' }}>{c.from ?? '—'}</span>
+                <span style={{ color: 'var(--accent)' }}> → {c.to}</span>
               </div>
-              <div style={{ maxHeight: 220, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                {changes.map((c, i) => (
-                  <div key={i} style={{ fontSize: 11, lineHeight: 1.4 }}>
-                    <span style={{ color: 'var(--muted)' }}>#{c.stepOrder}</span>{' '}
-                    <span style={{ color: 'var(--muted)' }}>{c.from ?? '—'}</span>
-                    <span style={{ color: 'var(--accent)' }}> → {c.to}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <button onClick={apply} disabled={busy}
-                  style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 14px',
-                    fontSize: 11, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)' }}>
-                  {busy ? 'Applying…' : 'Apply'}
-                </button>
-                <button onClick={() => setOpen(false)}
-                  style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
-                  Cancel
-                </button>
-              </div>
-            </>
-          )}
-          {msg && changes.length > 0 && <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 8 }}>{msg}</div>}
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button onClick={apply} disabled={busy}
+              style={{ background: 'var(--accent)', color: '#fff', border: 'none', padding: '6px 14px',
+                fontSize: 11, cursor: busy ? 'default' : 'pointer', fontFamily: 'var(--font-mono)' }}>
+              {busy ? 'Applying…' : 'Apply'}
+            </button>
+            <button onClick={() => setOpen(false)}
+              style={{ background: 'transparent', color: 'var(--muted)', border: 'none', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+              Cancel
+            </button>
+          </div>
+          {msg && <div style={{ fontSize: 11, color: 'var(--accent)', marginTop: 8 }}>{msg}</div>}
         </div>
       )}
-      {msg && !open && <span style={{ fontSize: 10, color: 'var(--muted)', marginLeft: 6 }}>{msg}</span>}
     </span>
   );
 }
@@ -423,7 +410,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 }
 
 
-function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonicalId?: string | null; concepts?: { memberId: string; conceptId: string; name: string }[] }) {
+function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recipe; canonicalId?: string | null; concepts?: { memberId: string; conceptId: string; name: string }[]; isAuthor?: boolean }) {
   const ingChecks  = useChecklist(recipe.ingredients.length);
   const stepChecks = useChecklist(recipe.steps.length);
   const toolChecks = useChecklist(recipe.equipment?.length ?? 0);
@@ -515,7 +502,7 @@ function RecipeView({ recipe, canonicalId, concepts }: { recipe: Recipe; canonic
                 <span className="flex items-center gap-3 flex-shrink-0 no-print">
                   <PrintButton title={recipe.title} />
                   <BookmarkButton canonicalId={canonicalId ?? recipe.id} />
-                  <RespecialiseButton canonicalId={canonicalId ?? recipe.id} />
+                  <RespecialiseButton canonicalId={canonicalId ?? recipe.id} isAuthor={!!isAuthor} />
                 </span>
               </div>
 
@@ -858,7 +845,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
           </button>
         </div>
       )}
-      <RecipeView recipe={recipe} canonicalId={canonicalId} concepts={concepts} />
+      <RecipeView recipe={recipe} canonicalId={canonicalId} concepts={concepts} isAuthor={isAuthor} />
     </>
   );
 }
