@@ -55,8 +55,8 @@ export interface RecipeNutritionResult {
 // Context-aware: oil vs flour vs liquid vs generic
 
 // Units that are qualifiers, not measures ("to taste", "as needed"): the ingredient is
-// real but inherently unweighable. Excluded from the coverage denominator so a pinch of
-// "to taste" pepper never makes a recipe look like it's missing nutrition data.
+// real but inherently unweighable. Excluded from the coverage denominator so a "to taste"
+// ingredient never makes a recipe look like it's missing nutrition data.
 const QUALIFIER_UNITS = new Set(['to taste', 'as needed', 'to serve', 'for garnish', 'for serving']);
 
 function unitToGrams(
