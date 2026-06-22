@@ -398,7 +398,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
                   {label.trim()}
                 </td>
                 <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                  {value}<span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
+                  {typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}<span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
                 </td>
               </tr>
             ))}
