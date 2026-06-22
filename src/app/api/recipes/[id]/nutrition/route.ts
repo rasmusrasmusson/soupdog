@@ -20,13 +20,31 @@ export async function GET(
       id, quantity_value, quantity_unit, step_id,
       ingredients!ingredient_id (
         id, name, category,
-        nutrition_per_100g, density_g_per_ml, typical_unit_weight_g,
+        density_g_per_ml, typical_unit_weight_g,
         retention_category_id
       )
     `)
     .eq('version_id', id);
 
   if (viErr) return NextResponse.json({ error: viErr.message }, { status: 500 });
+
+  // ── Per-ingredient nutrition from the resolved evidence-graded view ───────
+  // (replaces the old ingredients.nutrition_per_100g blob; the view returns the
+  //  best-graded value per nutrient — currently all e0/ai, identical to the blob.)
+  const ingredientIds = [...new Set(
+    (vis ?? []).map((vi: any) => vi.ingredients?.id).filter(Boolean)
+  )];
+  const nutritionByIngredient: Record<string, Record<string, number>> = {};
+  if (ingredientIds.length > 0) {
+    const { data: nutRows } = await db
+      .from('ingredient_nutrition_current')
+      .select('ingredient_id, nutrient_key, amount_per_100g')
+      .in('ingredient_id', ingredientIds);
+    for (const r of (nutRows ?? [])) {
+      (nutritionByIngredient[r.ingredient_id] ??= {})[r.nutrient_key] =
+        Number(r.amount_per_100g);
+    }
+  }
 
   // ── Fetch steps with task slugs ────────────────────────────
   const { data: steps } = await db
@@ -92,6 +110,7 @@ export async function GET(
     const ing      = vi.ingredients ?? {};
     const retCatId = ing.retention_category_id;
     const retFactors = retCatId ? retMap[retCatId] : undefined;
+    const nutrition = ing.id ? nutritionByIngredient[ing.id] : undefined;
 
     return {
       name:               ing.name ?? '',
@@ -100,7 +119,7 @@ export async function GET(
       category:           ing.category,
       densityGPerMl:      ing.density_g_per_ml,
       typicalUnitWeightG: ing.typical_unit_weight_g,
-      nutritionPer100g:   ing.nutrition_per_100g,
+      nutritionPer100g:   (nutrition && Object.keys(nutrition).length > 0) ? nutrition : undefined,
       stepId:             vi.step_id,
       retentionFactors:   retFactors,
     };

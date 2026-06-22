@@ -2321,3 +2321,43 @@ changes."). Auto-reload / re-fetch on success would be nicer. Tiny.
 Meal-planning enforcement + Stripe (the neglected revenue track — flagged every session,
 harder to retrofit each time); Demand Model Phase 2; sub-recipe materialization; Plan &
 End-Product bridge. Each its own session.
+
+# SESSION UPDATE — 2026-06-22 (Nutrition coverage solved; repo moved off OneDrive — the real villain)
+
+## ⚠️ ROOT-CAUSE LESSON — the repo lived inside OneDrive (cause of ~all "I pushed but nothing changed" loops)
+The working copy was at `E:\OneDrive LW personal\LeWorks\Soupdog - site\2026\soupdog` — i.e. a git repo **inside a OneDrive-synced folder**. OneDrive and git were both trying to own the same files: git/VS Code would write a file, OneDrive (mid-sync, or serving a cloud copy) would shadow it, so edits silently didn't reach disk, Select-String returned 0 on files that "had" the change, and commits captured stale content despite correct commit messages. This produced an entire session of chasing a nutrition bug whose fix was simply never in the deployed code.
+- **FIX APPLIED:** moved the repo to **`E:\soupdog`** (plain local disk, NOT synced). Git history + remote intact (everything was already on GitHub, so the move was zero-risk). **NEW canonical working dir = `E:\soupdog`** — the old OneDrive path is dead; update any tooling/notes that reference it.
+- **DISCIPLINE going forward:** never put a dev repo in OneDrive/Dropbox/iCloud. For edits to EXISTING files, prefer in-editor edits in VS Code over the download→copy→delete→rename dance (the rename step repeatedly grabbed a stale copy). ALWAYS verify placement with `(Select-String -Path "..." -Pattern "..." -SimpleMatch).Count` and watch the editor tab's unsaved `M` indicator (an unsaved buffer reads as 0 on disk) BEFORE `git add`/commit.
+- Bonus: OneDrive was also pointlessly syncing `node_modules`/`.next` (tens of thousands of files). Gone now.
+
+## NUTRITION COVERAGE (#13) — SOLVED, Greek salad now 100%
+The recipe page showed "91% ingredients covered" (was 64% at start). NOT a missing-data problem — every ingredient had nutrition. Two real causes, both fixed:
+
+1. **Unit-not-weighable was being counted as "no data."** `unitToGrams()` returns null for `piece`/`whole` units lacking `typical_unit_weight_g`, so those ingredients were excluded from BOTH coverage AND the per-serving totals (undercounting calories). Fixed for Greek salad by setting weights (SQL, autocommit):
+   - Cucumber `a0550b7a-...` = 300 g; green pepper `756bb869-...` = 120 g; kalamata olives `b9116641-...` = 4 g. (Red onion `00000311-...` already 120 g.)
+   - Took coverage 64% → 91%.
+2. **Qualifier units ("to taste") shouldn't count against coverage.** Black pepper `quantity_unit = 'to taste'` can't be weighed → was counted in the denominator (10/11 = 91%). Fix in `src/lib/recipe-nutrition.ts`: a module-level `QUALIFIER_UNITS` set (`'to taste','as needed','to serve','for garnish','for serving'`) + a guard `if (QUALIFIER_UNITS.has((ing.quantityUnit ?? '').trim().toLowerCase())) continue;` in BOTH loops (`calculateRecipeNutrition` AND `applyRetentionFactors`), placed right after the `quantityValue` check. Excludes qualifier-unit ingredients from the denominator entirely (not a data gap). → 100%.
+   - **GOTCHA that ate hours:** the `QUALIFIER_UNITS` *const* got committed but the two `continue` *guard lines that use it* did NOT (OneDrive drift) — so the const sat unused and coverage stayed 91%. Diagnosed by adding a temporary `_debug` array to the nutrition API route and reading the running server's own per-ingredient view via `https://www.soup.dog/api/recipes/<version_id>/nutrition`, then `git show HEAD:src/lib/recipe-nutrition.ts | Select-String QUALIFIER_UNITS` which proved the deployed lib had no guard. Lesson: when source "looks right" but behaviour is wrong, check `git show HEAD:<file>` (what's actually committed) and have the running endpoint report its own state — stop reasoning from assumed data.
+   - The temporary `_debug` field was REMOVED from `src/app/api/recipes/[id]/nutrition/route.ts` after diagnosis (final commit "Remove temporary _debug from nutrition route").
+
+## DISPLAY POLISH BATCH — shipped this session (against real uploaded source after discovering working-copy drift)
+Recipe view (`src/app/recipes/[slug]/page.tsx`) + shared `RecipeDisplay.tsx` + `RecipePrintLayout.tsx`:
+- Dropped RECIPE ID from the meta grid; capitalize difficulty/cuisine (`cap()`); servings `.toLocaleString()`.
+- Ingredient table headers: "Prep / Notes" → "Notes"; "Qty" → "Quantity" (both tables).
+- Thousands separators via `.toLocaleString(undefined,{maximumFractionDigits:2})` in `fmtAmount` (RecipeDisplay), `fmtQty` (RecipePrintLayout), AND the **nutrition value cells** (page.tsx line ~401 — was a separate render path that the earlier fmtAmount fix missed; "1204.1 mg" → "1,204.1 mg").
+- (Already shipped earlier, confirmed: capitalize tools, effect "→ notes" same-font/muted, middle-aligned tool cells.)
+- **Tools now open a MODAL, not a page link.** New `src/components/recipe/ToolDetailModal.tsx` (mirrors `TaskDetailModal`), fetches `/api/tools/[slug]`, shows name/summary/uses/category/brand, graceful "no details yet" on 404. `ToolCell` gained an `onOpenTool` callback; `RecipeDisplay` holds `openToolSlug` state + renders the modal next to `TaskDetailModal`. Sidesteps the broken `/tools/[slug]` page.
+
+## BACKLOG ADDED THIS SESSION
+- **`typical_unit_weight_g` backfill (systemic, HIGH value).** Greek salad worked only because 3 weights were hand-set. EVERY recipe with a countable ingredient (eggs, lemons, onions in "pieces") silently drops them from nutrition totals AND coverage until this column is populated. Build an AI estimator per piece/whole ingredient, parallel to the existing nutrition backfill. Central to nutrition accuracy (butler vision). NOT built.
+- **#12 nutrition → modal** — surface the nutrition section as a modal like the new ToolDetailModal/TaskDetailModal. Cheap now the pattern exists. Natural next small item.
+- Salt note: salt has a nutrition object (calories 0) but its sodium contribution should be verified; zero-calorie-but-mineral-rich ingredients may have thin nutrition data — spot-check during the backfill.
+
+## OPEN LIST (the original 14-item recipe-display list) — remaining
+- #7 chef-adaptive ACTIVE TIME, #8 chef-adaptive DIFFICULTY — real features, downstream of the cooking-competency model; each its own session.
+- #9 aesthetic plating (portion-SPLIT already exists on meals via MealFitPanel/platingSplit; the *beautiful-plating* generative side is unbuilt) — own project.
+- #10 honest-edges / reading-order — design doc done (Soupdog_Honest_Vessel_Edges_And_Reading_Order_Design_v0_1.md); next step is BUILD Phase A (decomposition prompt rules), not more design.
+- #12 nutrition modal — see backlog above (smallest next item).
+
+## LARGER PENDING (unchanged, carried)
+Stripe enforcement + checkout (revenue track, repeatedly neglected); AI cost aggregation SQL view over ai_usage_log; Fix C (ingredient-concept group matching so concepts bind to a group not an exact row id); Layer 2 instruction composition; Demand Model Phase 2; sub-recipe materialization; Plan & End-Product bridge; schema cruft consolidation; re-decompose ~34 existing recipes.
