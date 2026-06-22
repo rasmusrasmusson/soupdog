@@ -122,12 +122,7 @@ export async function GET(
     ? applyRetentionFactors(ingredients, stepTaskMap, servings)
     : calculateRecipeNutrition(ingredients, servings);
 
-const phase = hasRetention ? 'post-cooking' : 'pre-cooking';
+  const phase = hasRetention ? 'post-cooking' : 'pre-cooking';
 
-  const _debug = (ingredients as any[]).map((i) => ({
-    name: i.name, unit: i.quantityUnit, qty: i.quantityValue,
-    hasNutrition: !!i.nutritionPer100g,
-    nutritionType: Array.isArray(i.nutritionPer100g) ? 'array' : i.nutritionPer100g ? 'object' : typeof i.nutritionPer100g,
-  }));
-  return NextResponse.json({ ...result, phase, _debug });
+  return NextResponse.json({ ...result, phase });
 }
