@@ -131,6 +131,12 @@ export async function POST(
     .select('id');
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
 
+  // Record the confirmed match on the ingredient (auditable, re-runnable).
+  await db
+    .from('ingredients')
+    .update({ fdc_id: fdcId, fdc_matched_at: new Date().toISOString() })
+    .eq('id', ingredientId);
+
   return NextResponse.json({
     ok: true,
     ingredientId,
