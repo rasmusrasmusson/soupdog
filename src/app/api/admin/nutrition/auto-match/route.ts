@@ -103,7 +103,21 @@ export async function POST(req: NextRequest) {
     try {
       candidates = await usdaSearch(ing.name);
     } catch (e: any) {
-      results.push({ name: ing.name, outcome: 'error', detail: e?.message ?? 'search failed' });
+      // USDA search failed — flag for review rather than leaving it 'unmatched'
+      // (else it retries forever on names USDA may never have).
+      await db.from('ingredients')
+        .update({ nutrition_match_status: 'needs_review' }).eq('id', ing.id);
+      flagged++;
+      results.push({ name: ing.name, outcome: 'needs_review', detail: `search error: ${e?.message ?? 'failed'}` });
+      continue;
+    }
+
+    // No candidates at all (common for non-US ingredients) — flag, don't retry.
+    if (candidates.length === 0) {
+      await db.from('ingredients')
+        .update({ nutrition_match_status: 'needs_review' }).eq('id', ing.id);
+      flagged++;
+      results.push({ name: ing.name, outcome: 'needs_review', detail: 'no USDA candidates' });
       continue;
     }
 
