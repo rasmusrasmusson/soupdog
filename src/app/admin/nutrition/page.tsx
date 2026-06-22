@@ -98,6 +98,31 @@ export default function NutritionWorklistPage() {
     finally { setAutoRunning(false); }
   };
 
+  // Run batches back-to-back until nothing is left (or Stop is pressed).
+  const stopRef = React.useRef(false);
+  const runUntilDone = async () => {
+    stopRef.current = false;
+    setAutoRunning(true);
+    let totMatched = 0, totFlagged = 0, batches = 0;
+    try {
+      while (!stopRef.current) {
+        const res = await fetch('/api/admin/nutrition/auto-match', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchSize: 20 }),
+        });
+        const d = await res.json();
+        if (!res.ok) { setAutoMsg(d.error ?? 'Auto-match failed.'); break; }
+        batches++; totMatched += d.imported; totFlagged += d.flagged;
+        setAutoMsg(`Running… ${batches} batches: ${totMatched} matched, ${totFlagged} flagged. ${d.remaining} left.`);
+        if (d.remaining <= 0 || d.processed === 0) {
+          setAutoMsg(`Done. ${totMatched} matched, ${totFlagged} flagged for review across ${batches} batches.`);
+          break;
+        }
+      }
+      if (stopRef.current) setAutoMsg(prev => prev.replace('Running…', 'Stopped at'));
+    } finally { setAutoRunning(false); load(); }
+  };
+
   const confirmMatch = async (ingredientId: string, fdcId: string) => {
     setImporting(fdcId); setMsg('');
     try {
@@ -145,6 +170,20 @@ export default function NutritionWorklistPage() {
             color: autoRunning ? 'var(--accent)' : '#fff' }}>
           {autoRunning ? 'Matching…' : 'Auto-match next 20'}
         </button>
+        {!autoRunning && (
+          <button onClick={runUntilDone}
+            style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: 'pointer',
+              border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)' }}>
+            Run until done
+          </button>
+        )}
+        {autoRunning && (
+          <button onClick={() => { stopRef.current = true; }}
+            style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent', color: 'var(--fg)' }}>
+            Stop
+          </button>
+        )}
         {autoMsg && <span style={{ ...mono, fontSize: 12, color: 'var(--muted)' }}>{autoMsg}</span>}
       </div>
 
