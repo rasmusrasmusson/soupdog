@@ -38,14 +38,17 @@ async function aiPick(
   ).join('\n');
 
   const system =
-    `You match a cooking ingredient to the single best USDA FoodData Central food for its ` +
-    `per-100g nutrition. Choose the food that is the PLAIN, RAW (or most basic) form of the ` +
-    `ingredient. STRONGLY AVOID blends, mixes, branded items, prepared dishes, or "with X" ` +
-    `variants. Prefer "SR Legacy" over "Survey" when both fit (broader nutrient coverage). ` +
-    `Only choose "Foundation" if it is clearly the same plain food. ` +
-    `If NONE is a clean match for the plain ingredient, return fdcId null with confidence low. ` +
-    `Reply ONLY with JSON: {"fdcId": "<id or null>", "confidence": "high"|"low", "reason": "<short>"}. ` +
-    `confidence "high" ONLY when the chosen food is unambiguously the plain ingredient.`;
+    `You match a cooking ingredient to the best USDA FoodData Central food for its ` +
+    `per-100g nutrition. Pick the candidate that is the PLAIN / RAW / most basic form of ` +
+    `the ingredient. USDA names plain foods with commas and qualifiers ("Cucumber, with ` +
+    `peel, raw"; "Egg, whole, raw, fresh"; "Beans, snap, green, raw") — these ARE the right ` +
+    `plain matches, do not avoid them. Only AVOID candidates that are clearly a DIFFERENT ` +
+    `food or a prepared/sweetened dessert product (pie, juice, jam, croissant, candied). ` +
+    `For a common food (vegetable, fruit, meat, egg, dairy, grain, spice), there is almost ` +
+    `always an obvious plain match in the list — choose it with confidence "high". ` +
+    `Only return fdcId null + confidence "low" when NO candidate is the same food at all ` +
+    `(e.g. an obscure non-US ingredient with no USDA entry). ` +
+    `Reply ONLY with JSON: {"fdcId": "<id or null>", "confidence": "high"|"low", "reason": "<short>"}.`;
 
   const user = `Ingredient: "${ingredientName}"\n\nCandidates:\n${list}`;
 

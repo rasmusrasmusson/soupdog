@@ -33,18 +33,18 @@ export type UsdaCandidate = {
 const ACCEPTED_DATATYPES = ['Foundation', 'SR Legacy'];
 
 // Words that signal a candidate is a blend / prepared / branded thing — never auto-import.
+// Signals of a genuine BLEND / prepared product (not a plain food with
+// qualifiers). Deliberately NARROW: "with peel", "canned", commas, "raw" are
+// all normal in USDA plain-food names and must NOT be treated as blends.
 const BLEND_SIGNALS = [
-  ' and ', ',', 'blend', 'with ', 'reduced', 'low-fat', 'low fat', 'fat-free',
-  'nfs', 'prepared', 'mix', 'flavored', 'sweetened', 'canned', 'sauce',
+  ' and ',          // "Oil, corn, peanut, and olive" — a true multi-oil blend
+  'blend', 'mixed', 'flavored', 'sweetened', 'baby food', 'babyfood',
+  'nfs',            // "not further specified" survey rollups
 ];
 
 export function looksLikeBlend(description: string): boolean {
   const d = description.toLowerCase();
-  // a bare comma is a weak signal (USDA uses "Oil, olive"), so only flag commas
-  // when there are TWO+ (e.g. "Oil, corn, peanut, and olive").
-  const commaCount = (d.match(/,/g) || []).length;
-  if (commaCount >= 2) return true;
-  return BLEND_SIGNALS.some(s => s !== ',' && d.includes(s));
+  return BLEND_SIGNALS.some(s => d.includes(s));
 }
 
 const apiKey = () => {
@@ -90,21 +90,19 @@ export async function usdaSearch(query: string, pageSize = 50): Promise<UsdaCand
     });
 
   // Re-rank so the PLAIN / RAW whole food surfaces above prepared products.
-  // USDA's relevance for "apples" returns "Croissants, apple" before
-  // "Apples, raw". Score: starts-with the query word + contains "raw" is best;
-  // contains product/prepared words is worst.
+  // IMPORTANT: USDA's canonical plain foods are comma-heavy ("Cucumber, with
+  // peel, raw"; "Egg, whole, raw, fresh"), so we do NOT penalise commas or
+  // "with" — doing so buried the correct answers. We only boost leading-word
+  // + "raw", and gently demote clearly-prepared products.
   const q = query.toLowerCase().replace(/s\b/, ''); // crude singular ("apples"→"apple")
-  const PRODUCTY = ['croissant', 'strudel', 'babyfood', 'baby food', 'butter', 'juice',
-    'sauce', 'pie', 'dried', 'canned', 'cooked', 'frozen', 'sweetened', 'candied',
-    'jam', 'jelly', 'chips', 'sauce', 'with ', 'prepared', 'soup', 'dessert'];
+  const PRODUCTY = ['croissant', 'strudel', 'babyfood', 'baby food', 'juice',
+    'pie', 'sweetened', 'candied', 'jam', 'jelly', 'chips', 'dessert', 'pastry'];
   const score = (c: UsdaCandidate): number => {
     const d = c.description.toLowerCase();
     let s = 0;
-    if (d.startsWith(q)) s += 5;               // "Apples, raw…" leads with the word
-    if (d.includes('raw')) s += 3;             // raw whole food
-    if (PRODUCTY.some(p => d.includes(p))) s -= 4;
-    const commas = (d.match(/,/g) || []).length;
-    s -= commas;                               // simpler descriptions rank higher
+    if (d.startsWith(q)) s += 5;               // "Cucumber, …" leads with the word
+    if (d.includes('raw')) s += 2;             // raw whole food
+    if (PRODUCTY.some(p => d.includes(p))) s -= 5;
     if (c.dataType.toLowerCase().includes('foundation')) s += 1;
     return s;
   };
