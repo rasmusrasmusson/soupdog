@@ -86,7 +86,7 @@ export default function NutritionWorklistPage() {
     try {
       const res = await fetch('/api/admin/nutrition/auto-match', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ batchSize: 20 }),
+        body: JSON.stringify({ batchSize: 8 }),
       });
       const d = await res.json();
       if (!res.ok) { setAutoMsg(d.error ?? 'Auto-match failed.'); }
@@ -108,7 +108,7 @@ export default function NutritionWorklistPage() {
       while (!stopRef.current) {
         const res = await fetch('/api/admin/nutrition/auto-match', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ batchSize: 20 }),
+          body: JSON.stringify({ batchSize: 8 }),
         });
         const d = await res.json();
         if (!res.ok) { setAutoMsg(d.error ?? 'Auto-match failed.'); break; }
@@ -168,7 +168,7 @@ export default function NutritionWorklistPage() {
           style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: autoRunning ? 'default' : 'pointer',
             border: '1px solid var(--accent)', background: autoRunning ? 'var(--accent-subtle)' : 'var(--accent)',
             color: autoRunning ? 'var(--accent)' : '#fff' }}>
-          {autoRunning ? 'Matching…' : 'Auto-match next 20'}
+          {autoRunning ? 'Matching…' : 'Auto-match next 8'}
         </button>
         {!autoRunning && (
           <button onClick={runUntilDone}
