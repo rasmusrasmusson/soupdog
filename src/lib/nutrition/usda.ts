@@ -26,8 +26,11 @@ export type UsdaCandidate = {
 };
 
 // Datatypes we accept for base ingredients, in preference order (richest/best first).
-// Branded is intentionally excluded for base-ingredient matching.
-const ACCEPTED_DATATYPES = ['Foundation', 'SR Legacy', 'Survey (FNDDS)'];
+// Branded excluded (we don't match base ingredients to branded products).
+// Survey (FNDDS) excluded too: its parens/space break the search GET encoding
+// (USDA 400s), AND it's estimate-of-estimate quality — Foundation/SR Legacy are
+// the lab-analysed tiers we actually want.
+const ACCEPTED_DATATYPES = ['Foundation', 'SR Legacy'];
 
 // Words that signal a candidate is a blend / prepared / branded thing — never auto-import.
 const BLEND_SIGNALS = [
@@ -51,27 +54,37 @@ const apiKey = () => {
 };
 
 // Search USDA → trimmed candidate list with marker nutrients.
-export async function usdaSearch(query: string, pageSize = 15): Promise<UsdaCandidate[]> {
+export async function usdaSearch(query: string, pageSize = 25): Promise<UsdaCandidate[]> {
+  // NOTE: we deliberately do NOT send a dataType query param. Encoding the
+  // dataType list (esp. values with spaces/parens) makes USDA's search GET
+  // return 400. Instead we fetch broadly and filter by dataType in code below.
   const url =
     `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}` +
-    `&dataType=${encodeURIComponent(ACCEPTED_DATATYPES.join(','))}` +
     `&pageSize=${pageSize}&api_key=${apiKey()}`;
   const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`USDA search failed (${res.status}).`);
+  if (!res.ok) {
+    let detail = '';
+    try { const body = await res.json(); detail = body?.error?.message ?? JSON.stringify(body).slice(0, 200); }
+    catch { try { detail = (await res.text()).slice(0, 200); } catch {} }
+    throw new Error(`USDA search failed (${res.status})${detail ? ': ' + detail : ''}.`);
+  }
   const data = await res.json();
-  return (data.foods ?? []).map((f: any) => {
-    const marker = (id: number) => {
-      const hit = (f.foodNutrients ?? []).find((n: any) => Number(n.nutrientId) === id);
-      return hit ? Number(hit.value) : null;
-    };
-    return {
-      fdcId: String(f.fdcId),
-      description: f.description ?? '',
-      dataType: f.dataType ?? '',
-      brand: f.brandOwner ?? null,
-      markers: { kcal: marker(1008), fat: marker(1004), protein: marker(1003) },
-    };
-  });
+  const wanted = new Set(ACCEPTED_DATATYPES.map(d => d.toLowerCase()));
+  return (data.foods ?? [])
+    .filter((f: any) => wanted.has(String(f.dataType ?? '').toLowerCase()))
+    .map((f: any) => {
+      const marker = (id: number) => {
+        const hit = (f.foodNutrients ?? []).find((n: any) => Number(n.nutrientId) === id);
+        return hit ? Number(hit.value) : null;
+      };
+      return {
+        fdcId: String(f.fdcId),
+        description: f.description ?? '',
+        dataType: f.dataType ?? '',
+        brand: f.brandOwner ?? null,
+        markers: { kcal: marker(1008), fat: marker(1004), protein: marker(1003) },
+      };
+    });
 }
 
 // Fetch a full food profile, map nutrients onto our lookup, write graded rows,

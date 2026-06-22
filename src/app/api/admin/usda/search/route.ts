@@ -30,11 +30,10 @@ export async function GET(req: NextRequest) {
   const apiKey = process.env.USDA_FDC_API_KEY;
   if (!apiKey) return NextResponse.json({ error: 'USDA_FDC_API_KEY is not set.' }, { status: 500 });
 
-  // Prefer the well-provenanced data types; cap the page so the list stays scannable.
+  // No dataType query param (encoding it 400s USDA). Fetch broad, filter in code.
   const url =
     `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(q)}` +
-    `&dataType=${encodeURIComponent('Foundation,SR Legacy,Survey (FNDDS)')}` +
-    `&pageSize=20&api_key=${apiKey}`;
+    `&pageSize=25&api_key=${apiKey}`;
 
   let data: any;
   try {
