@@ -54,13 +54,16 @@ const apiKey = () => {
 };
 
 // Search USDA → trimmed candidate list with marker nutrients.
-export async function usdaSearch(query: string, pageSize = 25): Promise<UsdaCandidate[]> {
-  // NOTE: we deliberately do NOT send a dataType query param. Encoding the
-  // dataType list (esp. values with spaces/parens) makes USDA's search GET
-  // return 400. Instead we fetch broadly and filter by dataType in code below.
+export async function usdaSearch(query: string, pageSize = 50): Promise<UsdaCandidate[]> {
+  // Send dataType=Foundation,SR Legacy so LAB-ANALYSED foods rank first —
+  // otherwise thousands of Branded products bury the plain food (e.g. "apples"
+  // returns only branded packages). The earlier 400 came from the parens in
+  // "Survey (FNDDS)"; a plain space ("SR Legacy" → %20) is fine. Code filter
+  // below stays as a backstop.
+  const dataType = encodeURIComponent('Foundation,SR Legacy');
   const url =
     `https://api.nal.usda.gov/fdc/v1/foods/search?query=${encodeURIComponent(query)}` +
-    `&pageSize=${pageSize}&api_key=${apiKey()}`;
+    `&dataType=${dataType}&pageSize=${pageSize}&api_key=${apiKey()}`;
   const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     let detail = '';
@@ -70,7 +73,7 @@ export async function usdaSearch(query: string, pageSize = 25): Promise<UsdaCand
   }
   const data = await res.json();
   const wanted = new Set(ACCEPTED_DATATYPES.map(d => d.toLowerCase()));
-  return (data.foods ?? [])
+  const mapped = (data.foods ?? [])
     .filter((f: any) => wanted.has(String(f.dataType ?? '').toLowerCase()))
     .map((f: any) => {
       const marker = (id: number) => {
@@ -85,6 +88,27 @@ export async function usdaSearch(query: string, pageSize = 25): Promise<UsdaCand
         markers: { kcal: marker(1008), fat: marker(1004), protein: marker(1003) },
       };
     });
+
+  // Re-rank so the PLAIN / RAW whole food surfaces above prepared products.
+  // USDA's relevance for "apples" returns "Croissants, apple" before
+  // "Apples, raw". Score: starts-with the query word + contains "raw" is best;
+  // contains product/prepared words is worst.
+  const q = query.toLowerCase().replace(/s\b/, ''); // crude singular ("apples"→"apple")
+  const PRODUCTY = ['croissant', 'strudel', 'babyfood', 'baby food', 'butter', 'juice',
+    'sauce', 'pie', 'dried', 'canned', 'cooked', 'frozen', 'sweetened', 'candied',
+    'jam', 'jelly', 'chips', 'sauce', 'with ', 'prepared', 'soup', 'dessert'];
+  const score = (c: UsdaCandidate): number => {
+    const d = c.description.toLowerCase();
+    let s = 0;
+    if (d.startsWith(q)) s += 5;               // "Apples, raw…" leads with the word
+    if (d.includes('raw')) s += 3;             // raw whole food
+    if (PRODUCTY.some(p => d.includes(p))) s -= 4;
+    const commas = (d.match(/,/g) || []).length;
+    s -= commas;                               // simpler descriptions rank higher
+    if (c.dataType.toLowerCase().includes('foundation')) s += 1;
+    return s;
+  };
+  return mapped.sort((a: UsdaCandidate, b: UsdaCandidate) => score(b) - score(a));
 }
 
 // Fetch a full food profile, map nutrients onto our lookup, write graded rows,
