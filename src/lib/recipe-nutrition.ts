@@ -54,6 +54,11 @@ export interface RecipeNutritionResult {
 // ── Unit to grams conversion ──────────────────────────────────
 // Context-aware: oil vs flour vs liquid vs generic
 
+// Units that are qualifiers, not measures ("to taste", "as needed"): the ingredient is
+// real but inherently unweighable. Excluded from the coverage denominator so a "to taste"
+// ingredient never makes a recipe look like it's missing nutrition data.
+const QUALIFIER_UNITS = new Set(['to taste', 'as needed', 'to serve', 'for garnish', 'for serving']);
+
 function unitToGrams(
   value: number,
   unit:  string,
@@ -156,6 +161,7 @@ export function calculateRecipeNutrition(
 
   for (const ing of ingredients) {
     if (!ing.quantityValue || ing.quantityValue <= 0) continue;
+    if (QUALIFIER_UNITS.has((ing.quantityUnit ?? '').trim().toLowerCase())) continue;
 
     const weightG = unitToGrams(ing.quantityValue, ing.quantityUnit, ing);
 
@@ -253,6 +259,7 @@ export function applyRetentionFactors(
 
   for (const ing of ingredients) {
     if (!ing.quantityValue || ing.quantityValue <= 0) continue;
+    if (QUALIFIER_UNITS.has((ing.quantityUnit ?? '').trim().toLowerCase())) continue;
 
     const weightG = unitToGrams(ing.quantityValue, ing.quantityUnit, ing);
     if (weightG === null || weightG <= 0) { skippedCount++; continue; }
