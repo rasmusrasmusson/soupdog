@@ -66,7 +66,7 @@ function fmtQty(value: number | null | undefined, unit: string | null | undefine
   const u = (unit ?? '').trim();
   if (QUALIFIER_UNITS.has(u.toLowerCase())) return u;        // "to taste"
   if (value == null || value === 0) return '';                // no honest amount → show nothing
-  const n = Number.isInteger(value) ? value : Math.round(value * 100) / 100;
+  const n = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
   return u ? `${n} ${u}` : `${n}`;
 }
 

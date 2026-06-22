@@ -464,14 +464,17 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
 
+  const cap = (s: string | null | undefined) => {
+    const t = (s ?? '').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '—';
+  };
   const metaItems: [string, string][] = [
-    ['RECIPE ID',   recipe.id.split('-')[0].toUpperCase()],
-    ['YIELD',       `${servings} servings`],
+    ['YIELD',       `${servings.toLocaleString()} servings`],
     ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
     ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
-    ['DIFFICULTY',  recipe.difficulty],
+    ['DIFFICULTY',  cap(recipe.difficulty)],
     ['RATING',      recipe.ratings ? `${(recipe.ratings as any).average.toFixed(1)} / 5` : '—'],
-    ['CUISINE',     recipe.cuisine ?? '—'],
+    ['CUISINE',     cap(recipe.cuisine)],
   ];
 
 

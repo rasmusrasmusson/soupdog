@@ -51,7 +51,8 @@ function fmtAmount(value: number | null | undefined, unit: string | null | undef
   const u = (unit ?? '').trim();
   if (QUALIFIER_UNITS.has(u.toLowerCase())) return { qty: u, unit: '' };
   if (value == null || value === 0) return { qty: '—', unit: '' };
-  return { qty: String(value), unit: u };
+  const qty = value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return { qty, unit: u };
 }
 
 // A prep qualifier is REDUNDANT when every word of it already appears in the ingredient
@@ -133,7 +134,7 @@ function SectionHeader({ title, meta }: { title: string; meta?: string }) {
   );
 }
 
-function ToolCell({ settings }: { settings: any }) {
+function ToolCell({ settings, link = false }: { settings: any; link?: boolean }) {
   if (!settings) return <span style={{ color: MUT }}>—</span>;
 
   if (settings.applianceId) {
@@ -162,10 +163,14 @@ function ToolCell({ settings }: { settings: any }) {
 
   if (Array.isArray(settings.stepTools) && settings.stepTools.length > 0) {
     const tool = settings.stepTools[0];
+    const slug = (tool.name ?? '').trim();
+    const label = capitalizeLabel(humanizeTool(slug));
     const hasSettings = tool.applianceModeId || (tool.applianceSettings && Object.keys(tool.applianceSettings).length > 0);
     return (
       <div>
-        <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{capitalizeLabel(humanizeTool(tool.name))}</span>
+        {link && slug
+          ? <a href={`/tools/${slug}`} style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500, textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{label}</a>
+          : <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{label}</span>}
         {hasSettings && tool.applianceModeId && (
           <span style={{ fontFamily: MONO, fontSize: 9, color: MUT, display: 'block' }}>
             {Object.entries(tool.applianceSettings ?? {}).map(([, v]) => `${v}`).join(' · ')}
@@ -383,8 +388,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
             <thead>
               <tr style={thead}>
                 {isOn && <Th w={36} />}<Th w={32}>#</Th><Th>Product</Th>
-                <Th w={90} right>Qty</Th><Th w={70}>Unit</Th>
-                <Th>Prep / Notes</Th><Th w={80} center>State</Th>
+                <Th w={90} right>Quantity</Th><Th w={70}>Unit</Th>
+                <Th>Notes</Th><Th w={80} center>State</Th>
               </tr>
             </thead>
             <tbody>
@@ -461,7 +466,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                         )}
                         {step.applianceSettings && (
                           <div className="mt-1.5 text-[11px]" style={{ color: MUT }}>
-                            <ToolCell settings={step.applianceSettings} />
+                            <ToolCell settings={step.applianceSettings} link={linkIngredients} />
                           </div>
                         )}
                         <div className="flex flex-wrap gap-1.5 mt-1.5">
@@ -486,7 +491,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           <table style={{ ...tbl, minWidth: 640 }}>
             <thead>
               <tr style={thead}>
-                {isOn && <Th w={36} />}<Th>Product</Th><Th w={80} right>Qty</Th>
+                {isOn && <Th w={36} />}<Th>Product</Th><Th w={80} right>Quantity</Th>
                 <Th w={50}>Unit</Th><Th w={160}>Tool / Setting</Th>
                 <Th w={70} right>Time</Th><Th>Instruction</Th>
               </tr>
@@ -520,7 +525,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                           <td style={{ ...td, borderRight: B, color: MUT, fontFamily: MONO, fontSize: 10 }}>—</td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, color: MUT }}>—</td>
                           <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>—</td>
-                          <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} /></td>
+                          <td style={{ ...td, borderRight: B, fontSize: 11 }}><ToolCell settings={step.applianceSettings} link={linkIngredients} /></td>
                           <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>
                           <td style={{ ...td, lineHeight: 1.55 }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} intermediates={step.consumedIntermediates} /></td>
                         </tr>
@@ -535,7 +540,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
                             <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 11, color: MUT }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).unit}</td>
-                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'middle' }}><ToolCell settings={step.applianceSettings} /></td>}
+                            {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, fontSize: 11, verticalAlign: 'middle' }}><ToolCell settings={step.applianceSettings} link={linkIngredients} /></td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontSize: 11, fontVariantNumeric: 'tabular-nums', color: step.durationSeconds ? 'var(--fg)' : MUT, verticalAlign: 'middle' }}>{step.durationSeconds ? formatDuration(step.durationSeconds) : '—'}</td>}
                             {rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, lineHeight: 1.55, verticalAlign: 'middle' }}><StepLine taskName={step.taskName} template={step.taskTemplate} singleTool={step.taskSingleTool} ingredientName={stepIngs[0]?.name} toolName={(step.applianceSettings as any)?.stepTools?.[0]?.name} instruction={step.instruction} notes={step.notes} taskId={step.taskId} onOpenTask={setOpenTaskId} intermediates={step.consumedIntermediates} /></td>}
                           </tr>
