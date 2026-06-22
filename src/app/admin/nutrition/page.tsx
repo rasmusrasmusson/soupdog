@@ -5,6 +5,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 type Row = {
   id: string; name: string; slug: string | null; isProduct: boolean;
   fdcId: string | null; matchedAt: string | null; bestGrade: string | null;
+  matchStatus: 'unmatched' | 'auto_matched' | 'needs_review' | 'confirmed';
 };
 type Candidate = {
   fdcId: string; description: string; dataType: string;
@@ -27,8 +28,10 @@ export default function NutritionWorklistPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [rows, setRows] = useState<Row[] | null>(null);
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<'all' | 'unmatched' | 'estimate'>('estimate');
+  const [filter, setFilter] = useState<'all' | 'unmatched' | 'estimate' | 'review'>('estimate');
   const [hideProducts, setHideProducts] = useState(true);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [autoMsg, setAutoMsg] = useState('');
 
   // per-ingredient match panel state
   const [openId, setOpenId] = useState<string | null>(null);
@@ -57,6 +60,7 @@ export default function NutritionWorklistPage() {
       if (q && !r.name.toLowerCase().includes(q)) return false;
       if (filter === 'unmatched' && r.fdcId) return false;
       if (filter === 'estimate' && r.bestGrade && r.bestGrade !== 'e0_inferred') return false;
+      if (filter === 'review' && r.matchStatus !== 'needs_review') return false;
       return true;
     });
   }, [rows, query, filter, hideProducts]);
@@ -75,6 +79,23 @@ export default function NutritionWorklistPage() {
       else setCandidates(d.candidates ?? []);
     } catch { setMsg('Search failed.'); setCandidates([]); }
     finally { setSearching(false); }
+  };
+
+  const runAutoMatch = async () => {
+    setAutoRunning(true); setAutoMsg('Matching…');
+    try {
+      const res = await fetch('/api/admin/nutrition/auto-match', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batchSize: 20 }),
+      });
+      const d = await res.json();
+      if (!res.ok) { setAutoMsg(d.error ?? 'Auto-match failed.'); }
+      else {
+        setAutoMsg(`Processed ${d.processed}: ${d.imported} matched, ${d.flagged} flagged for review. ${d.remaining} unmatched left.`);
+        load();
+      }
+    } catch { setAutoMsg('Auto-match failed.'); }
+    finally { setAutoRunning(false); }
   };
 
   const confirmMatch = async (ingredientId: string, fdcId: string) => {
@@ -117,6 +138,16 @@ export default function NutritionWorklistPage() {
         </p>
       )}
 
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 14 }}>
+        <button onClick={runAutoMatch} disabled={autoRunning}
+          style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: autoRunning ? 'default' : 'pointer',
+            border: '1px solid var(--accent)', background: autoRunning ? 'var(--accent-subtle)' : 'var(--accent)',
+            color: autoRunning ? 'var(--accent)' : '#fff' }}>
+          {autoRunning ? 'Matching…' : 'Auto-match next 20'}
+        </button>
+        {autoMsg && <span style={{ ...mono, fontSize: 12, color: 'var(--muted)' }}>{autoMsg}</span>}
+      </div>
+
       {/* controls */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', margin: '20px 0' }}>
         <input
@@ -124,7 +155,7 @@ export default function NutritionWorklistPage() {
           placeholder="Filter ingredients…"
           style={{ flex: '1 1 240px', padding: '9px 12px', border: B, background: 'var(--surface)', color: 'var(--fg)', ...mono, fontSize: 13 }}
         />
-        {(['estimate', 'unmatched', 'all'] as const).map(f => (
+        {(['estimate', 'unmatched', 'review', 'all'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             style={{
               ...mono, fontSize: 11, letterSpacing: '0.06em', padding: '8px 12px', cursor: 'pointer',
@@ -132,7 +163,7 @@ export default function NutritionWorklistPage() {
               background: filter === f ? 'var(--accent-subtle)' : 'transparent',
               color: filter === f ? 'var(--accent)' : 'var(--fg)', textTransform: 'uppercase',
             }}>
-            {f === 'estimate' ? 'On estimates' : f === 'unmatched' ? 'Unmatched' : 'All'}
+            {f === 'estimate' ? 'On estimates' : f === 'unmatched' ? 'Unmatched' : f === 'review' ? 'Needs review' : 'All'}
           </button>
         ))}
         <label style={{ ...mono, fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
@@ -150,6 +181,16 @@ export default function NutritionWorklistPage() {
             <div key={r.id} style={{ borderTop: idx ? B : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px' }}>
                 <div style={{ flex: 1, color: 'var(--fg)', fontSize: 14 }}>{r.name}</div>
+                {r.matchStatus === 'needs_review' && (
+                  <span style={{ ...mono, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#8a6d00' }}>
+                    Needs review
+                  </span>
+                )}
+                {r.matchStatus === 'auto_matched' && (
+                  <span style={{ ...mono, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--muted)' }}>
+                    Auto
+                  </span>
+                )}
                 {r.bestGrade && (
                   <span style={{ ...mono, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase', color: GRADE_COLOR[r.bestGrade] ?? 'var(--muted)' }}>
                     {GRADE_LABEL[r.bestGrade] ?? r.bestGrade}

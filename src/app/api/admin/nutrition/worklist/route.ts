@@ -28,7 +28,7 @@ export async function GET() {
   // Ingredients (non-product real ingredients are the ones worth matching).
   const { data: ingredients, error: iErr } = await db
     .from('ingredients')
-    .select('id, name, slug, fdc_id, fdc_matched_at, is_product')
+    .select('id, name, slug, fdc_id, fdc_matched_at, is_product, nutrition_match_status')
     .order('name', { ascending: true });
   if (iErr) return NextResponse.json({ error: iErr.message }, { status: 500 });
 
@@ -56,6 +56,7 @@ export async function GET() {
     isProduct: !!i.is_product,
     fdcId: i.fdc_id ?? null,
     matchedAt: i.fdc_matched_at ?? null,
+    matchStatus: i.nutrition_match_status ?? 'unmatched',
     bestGrade: bestGrade[i.id] ?? null,   // null = no nutrition at all
   }));
 

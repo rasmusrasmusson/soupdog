@@ -13,6 +13,7 @@ export type AiFeature =
   | 'chat_modify'
   | 'nutrition_estimate'
   | 'nutrition_backfill'
+  | 'nutrition_match'
   | 'meal_plan'
   | 'meal_merge'
   | 'recipe_generate'

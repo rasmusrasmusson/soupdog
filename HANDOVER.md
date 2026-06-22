@@ -2361,3 +2361,116 @@ Recipe view (`src/app/recipes/[slug]/page.tsx`) + shared `RecipeDisplay.tsx` + `
 
 ## LARGER PENDING (unchanged, carried)
 Stripe enforcement + checkout (revenue track, repeatedly neglected); AI cost aggregation SQL view over ai_usage_log; Fix C (ingredient-concept group matching so concepts bind to a group not an exact row id); Layer 2 instruction composition; Demand Model Phase 2; sub-recipe materialization; Plan & End-Product bridge; schema cruft consolidation; re-decompose ~34 existing recipes.
+
+# SESSION UPDATE — 2026-06-22 (Nutrition data layer: Phase 1 + 2A + 2B shipped; ingredient dedup; two environment gremlins killed)
+
+A long, high-output session. Took the nutrition layer from "AI estimates in a JSON
+blob" to "evidence-graded, multi-source, USDA-fed, curatable, deduplicated." Also
+solved the multi-hour coverage bug from the prior arc (root cause was environment,
+not code) and recorded two environment lessons that had been causing phantom
+"I pushed but nothing changed" loops all day.
+
+## ⚠️ TWO ENVIRONMENT GREMLINS — READ FIRST (caused most of the day's false trails)
+1. **Repo was inside OneDrive** → OneDrive shadowed git writes, edits silently didn't
+   reach disk, commits captured stale content. **FIX: repo moved to `E:\soupdog`**
+   (plain local disk). History + remote intact (all on GitHub). **NEW canonical working
+   dir = `E:\soupdog`.** Never put a repo in OneDrive. Prefer in-editor edits; watch the
+   editor's unsaved-`M` indicator.
+2. **PowerShell bracket-glob false zero.** `Select-String -Path "...\[id]\..."` treats
+   `[id]` as a wildcard and returns Count 0 even on a correct file. **FIX: always use
+   `Select-String -LiteralPath` for paths with `[id]`/`[slug]`.** Trustworthy checks on
+   bracket paths: `git status` / `git diff <file>` (they don't glob).
+
+## NUTRITION — design doc at v0.3
+`docs/Soupdog_Nutrition_Data_Sourcing_Design_v0_3.md` (v0_1, v0_2 SUPERSEDED — delete).
+Spine: reuse the existing `evidence_grade` enum for nutrition (e0=AI, e1=USDA SR Legacy,
+e2=USDA Foundation, e3=lab test, e4=validated); per-nutrient multi-source rows (not one
+blob); USDA FoodData Central as first real population; lab tier (e3/e4) named as a future
+seam. §12 = Phase-1 build state; §13 = USDA findings validated against live olive-oil data.
+
+## PHASE 1 — evidence-graded spine (SHIPPED, verified)
+- `nutrient` lookup (key/name/category/unit/display_order/fdc_nutrient_id). Phase 1 = 16
+  rows; Phase 2A added 37 (→ ~53) incl. fatty-acid isomers, vitamins E/K/B, minerals.
+- `ingredient_nutrient_value` (per ingredient×nutrient×source_kind: amount_per_100g, unit,
+  evidence_grade, source_kind, source_ref, sample_count, measured_at). Unique
+  (ingredient_id, nutrient_id, source_kind). Public RLS using(true) + grants.
+- `ingredient_nutrition_current` resolved VIEW: DISTINCT ON (ingredient, nutrient) ORDER BY
+  evidence_rank DESC → source-preference → measured_at DESC. (Mirrors
+  target_state_rules_current.) evidence_rank: e0=0,u=1,e1=2,e2=3,e3=4,e4=5.
+- Migrated old blobs → 3,146 e0/ai rows over 308 ingredients.
+- Read path repointed: `/api/recipes/[id]/nutrition/route.ts` sources per-100g from the
+  VIEW, not the blob. Verified: Greek salad identical numbers post-repoint (coveredPct 100,
+  cal 698, sodium 1707.5). Blob KEPT as fallback relic (page client-side fallback still
+  reads it); drop after Phase 2 once page fallback repointed too.
+
+## PHASE 2A — USDA ingest engine (SHIPPED, verified on olive oil)
+- `POST /api/admin/ingredients/[id]/import-nutrition` (admin-gated; body `{fdcId}`):
+  fetches USDA `food/{fdcId}` server-side, maps nutrients via fdc_nutrient_id, writes
+  graded rows (Foundation→e2_expert/usda_foundation, else→e1_literature/usda_sr_legacy;
+  source_ref=`FDC:{id}`). Uses serviceClient() (BYPASSRLS — table is SELECT-only RLS).
+  Energy unit-guarded (id 1008 + KCAL; ignore kJ 1062). Now ALSO records fdc_id +
+  fdc_matched_at on the ingredient.
+- `USDA_FDC_API_KEY` lives in Vercel env (rotate the key pasted in chat earlier — treat as
+  burned). USDA free data.gov key, ~1000 req/hr.
+- VERIFIED: olive oil FDC 171413 ("Oil, olive, salad or cooking", SR Legacy) → 53 nutrients;
+  view flipped all macros e0→e1, fatty-acid profile (oleic 71.3, linoleic=omega-6 9.76,
+  ALA=omega-3 0.76), vit E 14.35, vit K 60.2 — all real, correct (zero EPA/DHA = correct for
+  a plant oil). Omega-6/-3 are DERIVED from isomers (store isomers, roll up at display).
+
+## PHASE 2B — curation worklist (SHIPPED, verified)
+- `ingredients.fdc_id` + `fdc_matched_at` columns (migration).
+- `GET /api/admin/usda/search?q=` — admin-gated candidate search; returns description +
+  dataType + marker nutrients (kcal/fat/protein) + fdcId so blends are catchable.
+  (NOTE: Foundation candidates show '–' markers — their search-result nutrient shape
+  differs; cosmetic only, the import still works. Small future fix.)
+- `GET /api/admin/nutrition/worklist` — ingredients with best grade + match state + product flag.
+- `/admin/nutrition` page — worklist (filters: On estimates / Unmatched / All; hide products),
+  inline Match → pre-filled USDA query → Search → candidates → "Use this" → import → grade flip.
+  House style; admin-gated via /api/admin/check.
+- VERIFIED full loop: matched extra-virgin olive oil → Foundation FDC 748608. KEY FINDING:
+  Foundation gave only 6 nutrients (deep but NARROW — a fat panel), vs SR Legacy's 53 (broad).
+  → grade (e2>e1) ≠ coverage. Design implication: match to RICHEST source, or STACK BOTH
+  (architecture supports it — per-nutrient resolution; proven below).
+
+## INGREDIENT DEDUP (SHIPPED, dry-run-first)
+- **Patched `merge_ingredient(survivor, orphan, dry_run)`** to ALSO re-point the new
+  `ingredient_nutrient_value` table (skip-would-be-dup on nutrient_id+source_kind; survivor's
+  value wins on clash) AND carry `fdc_id` forward if survivor lacks one. It previously
+  re-pointed 10 FK tables but NOT the Phase-1 nutrition table — merging would have orphaned
+  USDA data. (File: dedup_01_patch_merge_fn.sql.)
+- **15 merges** of clear duplicates (Apple→apples, both Eggplant variants→aubergine, Basil
+  variants→basil leaves, black peppercorns→Black pepper, Carrot→Carrots, Clove→cloves,
+  Coriander seed→coriander seeds, both Garlic-clove variants→Garlic, Extra virgin olive
+  oil→extra-virgin (the fdc-matched one), 2 medium-onion variants→Onion, Parmesan or Pecorino
+  →Parmesan). Survivor = the load-bearing (most-used) row.
+- **DRY-RUN CAUGHT:** "Onions" (00000200) and "Tomatoes" (00000201) plural rows PARENT 5 / 4
+  child ingredients → they're CATEGORY NODES, not duplicates. Merging would've mis-parented
+  Red onion / Cherry tomatoes etc. → DROPPED from merges, MARKED is_category instead.
+- Marked 12 category nodes is_category (Cheese, Meat & Poultry, Fruits, Vegetables, Oils &
+  Fats, Stock/broth, Noodles, Pasta, Pepper, Peppers, Onions, Tomatoes) + 3 non-foods
+  is_product (aluminum foil, baking weights, parchment paper).
+- RESULT: 303 total · **274 real ingredients** · 17 categories · 13 products (was 318).
+- **Multi-source merge PROVEN:** olive oil survivor now holds 53 e1/sr_legacy + 6 e2/foundation
+  + 8 e0/ai — view serves fats from e2, rest from e1, e0 fallback. Survived the merge intact.
+- Files: dedup_00_inventory.sql, dedup_01_patch_merge_fn.sql, dedup_02_dryrun.sql,
+  dedup_02b_dryrun_oneresult.sql, dedup_03_commit.sql. Deliberately CONSERVATIVE (left
+  borderline cases: ripe tomatoes vs Tomato, unsalted butter block/dough, fresh-herb variants,
+  Cilantro/coriander — low value, risk collapsing real distinctions; a 2nd pass can mop up).
+
+## NEXT SESSION — clear opening: the AI AUTO-MATCHER (high value, now unblocked)
+Manual matching 274 ingredients is NOT the plan; 2B is the SAFETY NET / review queue, not the
+bulk method. Build a batch auto-matcher: for each unmatched real ingredient → USDA search →
+Haiku/Sonnet picks best candidate → AUTO-IMPORT the confident ones, QUEUE doubtful ones to the
+/admin/nutrition worklist. Turns the worklist into a review queue for the ~15% the AI wasn't
+sure about. Bake in the matching RULE from the 2B finding: prefer RICHEST source (or stack
+SR Legacy + Foundation so coverage + e2-where-available). Cost-gated, dry-run/review friendly.
+Now that the list is deduped to 274 real foods, every auto-match is a keeper.
+
+## CARRIED BACKLOG (unchanged)
+- typical_unit_weight_g backfill (countable ingredients silently dropped from totals/coverage
+  until populated — HIGH value, AI estimator per piece/whole).
+- Drop the nutrition blob after page client-side fallback repointed to the view.
+- Foundation-candidate '–' markers (search-result nutrient shape) — small display fix.
+- min-grade recipe total + source badge (make evidence grade visible in recipe UI).
+- Stripe enforcement + checkout (revenue track, repeatedly neglected); AI cost aggregation
+  view over ai_usage_log; Honest-edges build Phase A; re-decompose ~34 recipes; schema cruft.
