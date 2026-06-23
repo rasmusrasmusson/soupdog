@@ -100,6 +100,31 @@ export default function NutritionWorklistPage() {
 
   // Run batches back-to-back until nothing is left (or Stop is pressed).
   const stopRef = React.useRef(false);
+  // Re-import USDA nutrition for already-matched ingredients — use after adding
+  // new nutrient rows (e.g. amino acids) to populate them from the same records.
+  const runReimport = async () => {
+    stopRef.current = false;
+    setAutoRunning(true);
+    let cursor: string | null = null;
+    let totImported = 0, totFailed = 0, batches = 0;
+    try {
+      while (!stopRef.current) {
+        const res = await fetch('/api/admin/nutrition/reimport', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ batchSize: 6, cursor }),
+        });
+        const d = await res.json();
+        if (!res.ok) { setAutoMsg(d.error ?? 'Re-import failed.'); break; }
+        batches++; totImported += d.imported; totFailed += d.failed; cursor = d.cursor;
+        setAutoMsg(`Re-importing… ${totImported} updated${totFailed ? `, ${totFailed} failed` : ''} (of ${d.totalMatched}).`);
+        if (d.done || d.processed === 0) {
+          setAutoMsg(`Re-import done. ${totImported} ingredients refreshed${totFailed ? `, ${totFailed} failed` : ''}.`);
+          break;
+        }
+      }
+    } finally { setAutoRunning(false); load(); }
+  };
+
   const runUntilDone = async () => {
     stopRef.current = false;
     setAutoRunning(true);
@@ -171,11 +196,19 @@ export default function NutritionWorklistPage() {
           {autoRunning ? 'Matching…' : 'Auto-match next 8'}
         </button>
         {!autoRunning && (
+          <>
           <button onClick={runUntilDone}
             style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: 'pointer',
               border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)' }}>
             Run until done
           </button>
+          <button onClick={runReimport}
+            title="Re-fetch USDA data for matched ingredients — use after adding new nutrients (e.g. amino acids)"
+            style={{ ...mono, fontSize: 12, padding: '9px 16px', cursor: 'pointer',
+              border: '1px solid var(--border)', background: 'transparent', color: 'var(--muted)' }}>
+            Re-import nutrients
+          </button>
+          </>
         )}
         {autoRunning && (
           <button onClick={() => { stopRef.current = true; }}

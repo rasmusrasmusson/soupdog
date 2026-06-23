@@ -603,14 +603,15 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                         ...(groups['fatty_acid'] ?? []),
                       ];
                     }
-                    const total = Object.values(groups).reduce((a, g) => a + g.length, 0);
-                    if (total === 0) return null;
+                    const aminoRows = groups['amino_acid'] ?? [];
+                    const mainTotal = CAT_ORDER.reduce((a, c) => a + (groups[c]?.length ?? 0), 0);
+                    if (mainTotal === 0 && aminoRows.length === 0) return null;
 
                     return (
                       <details style={{ marginTop: 12 }}>
                         <summary style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
                           letterSpacing: '0.15em', color: MUT, cursor: 'pointer', padding: '6px 0' }}>
-                          Detailed micronutrients ({total})
+                          Detailed micronutrients ({mainTotal})
                         </summary>
                         <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12, marginTop: 8 }}>
                           <tbody>
@@ -631,6 +632,24 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                             ))}
                           </tbody>
                         </table>
+
+                        {aminoRows.length > 0 && (
+                          <details style={{ marginTop: 10 }}>
+                            <summary style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
+                              letterSpacing: '0.15em', color: MUT, cursor: 'pointer', padding: '6px 0' }}>
+                              Amino acids ({aminoRows.length})
+                            </summary>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12, marginTop: 8 }}>
+                              <tbody>
+                                {aminoRows.map(([label, value, unit]) => (
+                                  <React.Fragment key={'aa' + label}>
+                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)} />
+                                  </React.Fragment>
+                                ))}
+                              </tbody>
+                            </table>
+                          </details>
+                        )}
                       </details>
                     );
                   })()}
