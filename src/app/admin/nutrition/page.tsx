@@ -184,8 +184,34 @@ export default function NutritionWorklistPage() {
             Stop
           </button>
         )}
+        {autoRunning && (
+          <span style={{ ...mono, fontSize: 12, color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)',
+              display: 'inline-block', animation: 'sd-pulse 1s ease-in-out infinite' }} />
+            Running
+          </span>
+        )}
         {autoMsg && <span style={{ ...mono, fontSize: 12, color: 'var(--muted)' }}>{autoMsg}</span>}
       </div>
+      <style>{`@keyframes sd-pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .3; transform: scale(.7); } }`}</style>
+
+      {/* Sticky running banner — stays visible even when scrolled down the list */}
+      {autoRunning && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 40, marginTop: 12,
+          background: 'var(--accent-subtle)', border: '1px solid var(--accent)',
+          borderRadius: 6, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--accent)',
+            display: 'inline-block', animation: 'sd-pulse 1s ease-in-out infinite' }} />
+          <span style={{ ...mono, fontSize: 12, color: 'var(--accent)' }}>
+            {autoMsg || 'Matching ingredients to USDA…'}
+          </span>
+          <button onClick={() => { stopRef.current = true; }}
+            style={{ ...mono, fontSize: 11, padding: '4px 10px', marginLeft: 'auto', cursor: 'pointer',
+              border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', borderRadius: 4 }}>
+            Stop
+          </button>
+        </div>
+      )}
 
       {/* controls */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', margin: '20px 0' }}>
