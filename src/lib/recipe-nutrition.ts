@@ -11,40 +11,13 @@ export interface IngredientNutrition {
   densityGPerMl?:  number;
   typicalUnitWeightG?: number;
   nutritionPer100g?: {
-    calories?:       number;
-    carbohydrates?:  number;
-    sugar?:          number;
-    protein?:        number;
-    fat?:            number;
-    saturated_fat?:  number;
-    fiber?:          number;
-    sodium?:         number;
-    potassium?:      number;
-    vitamin_c?:      number;
-    vitamin_b6?:     number;
-    folate?:         number;
-    iron?:           number;
-    magnesium?:      number;
-    phosphorus?:     number;
-    calcium?:        number;
-    zinc?:           number;
+    [nutrientKey: string]: number | undefined;
   };
 }
 
 export interface RecipeNutritionResult {
   perServing: {
-    calories?:      number;
-    protein?:       number;
-    fat?:           number;
-    saturated_fat?: number;
-    carbohydrates?: number;
-    sugar?:         number;
-    fiber?:         number;
-    sodium?:        number;
-    potassium?:     number;
-    vitamin_c?:     number;
-    iron?:          number;
-    calcium?:       number;
+    [nutrientKey: string]: number | undefined;
   };
   confidence:   'calculated' | 'partial' | 'insufficient';
   coveredPct:   number;  // % of ingredients that had nutrition data
@@ -181,24 +154,13 @@ export function calculateRecipeNutrition(
     const n   = ing.nutritionPer100g;
     const mul = weightG / 100;
 
-    const add = (key: string, val?: number) => {
-      if (val != null && val > 0) {
+    // Generic: sum EVERY nutrient key present (53 nutrients across macro/mineral/
+    // vitamin/fatty_acid/other), not a hardcoded subset.
+    for (const [key, val] of Object.entries(n)) {
+      if (typeof val === 'number' && val > 0) {
         totals[key] = (totals[key] ?? 0) + val * mul;
       }
-    };
-
-    add('calories',      n.calories);
-    add('protein',       n.protein);
-    add('fat',           n.fat);
-    add('saturated_fat', n.saturated_fat);
-    add('carbohydrates', n.carbohydrates);
-    add('sugar',         n.sugar);
-    add('fiber',         n.fiber);
-    add('sodium',        n.sodium);
-    add('potassium',     n.potassium);
-    add('vitamin_c',     n.vitamin_c);
-    add('iron',          n.iron);
-    add('calcium',       n.calcium);
+    }
   }
 
   const total = coveredCount + skippedCount;
@@ -280,26 +242,13 @@ export function applyRetentionFactors(
     // Get retention factors for this ingredient's category + task
     const retFactors = ing.retentionFactors?.[taskSlug] ?? {};
 
-    const addWithRetention = (key: string, val?: number) => {
-      if (val == null || val <= 0) return;
-      const retPct = retFactors[key] ?? 100;  // default: no loss
+    // Generic: apply retention to EVERY nutrient key present. Retention factor
+    // defaults to 100% (no loss) for nutrients without a specific factor.
+    for (const [key, val] of Object.entries(n)) {
+      if (typeof val !== 'number' || val <= 0) continue;
+      const retPct = retFactors[key] ?? 100;
       totals[key] = (totals[key] ?? 0) + (val * mul * retPct / 100);
-    };
-
-    addWithRetention('calories',      n.calories);      // calories don't change much
-    addWithRetention('protein',       n.protein);
-    addWithRetention('fat',           n.fat);
-    addWithRetention('saturated_fat', n.saturated_fat);
-    addWithRetention('carbohydrates', n.carbohydrates);
-    addWithRetention('sugar',         n.sugar);
-    addWithRetention('fiber',         n.fiber);
-    addWithRetention('sodium',        n.sodium);
-    addWithRetention('potassium',     n.potassium);
-    addWithRetention('vitamin_c',     n.vitamin_c);
-    addWithRetention('iron',          n.iron);
-    addWithRetention('calcium',       n.calcium);
-    addWithRetention('magnesium',     n.magnesium);
-    addWithRetention('phosphorus',    n.phosphorus);
+    }
   }
 
   const total      = coveredCount + skippedCount;

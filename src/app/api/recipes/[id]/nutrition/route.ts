@@ -143,5 +143,13 @@ export async function GET(
 
   const phase = hasRetention ? 'post-cooking' : 'pre-cooking';
 
-  return NextResponse.json({ ...result, phase });
+  // ── Nutrient metadata for grouped display (name/category/unit/order) ──
+  // Lets the UI group the 50+ nutrients into macro/vitamin/mineral/fatty_acid
+  // sections, label them, and order them — instead of a hardcoded row list.
+  const { data: nutrientMeta } = await db
+    .from('nutrient')
+    .select('key, name, category, unit, display_order')
+    .order('display_order', { ascending: true });
+
+  return NextResponse.json({ ...result, phase, nutrientMeta: nutrientMeta ?? [] });
 }

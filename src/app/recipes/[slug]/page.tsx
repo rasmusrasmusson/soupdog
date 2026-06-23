@@ -300,6 +300,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 
   const [apiResult, setApiResult] = React.useState<any>(null);
   const [loading,   setLoading]   = React.useState(false);
+  const [showFull,  setShowFull]  = React.useState(false);
 
   React.useEffect(() => {
     if (!versionId) return;
@@ -342,20 +343,56 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   const hasStored = storedNutrition?.calories;
   if (!hasCalc && !hasStored) return null;
 
-  const rows: [string, number | undefined, string][] = [
-    ['Calories',      n?.calories,      'kcal'],
-    ['Protein',       n?.protein,       'g'],
-    ['Fat',           n?.fat,           'g'],
-    ['  Saturated',   n?.saturated_fat, 'g'],
-    ['Carbohydrates', n?.carbohydrates, 'g'],
-    ['  Sugar',       n?.sugar,         'g'],
-    ['  Fiber',       n?.fiber,         'g'],
-    ['Sodium',        n?.sodium,        'mg'],
-    ['Potassium',     n?.potassium,     'mg'],
-    ['Vitamin C',     n?.vitamin_c,     'mg'],
-    ['Iron',          n?.iron,          'mg'],
-    ['Calcium',       n?.calcium,       'mg'],
+  // Nutrient metadata (from the API) lets us group/label/order the full set.
+  const meta: { key: string; name: string; category: string; unit: string; display_order: number }[] =
+    apiResult?.nutrientMeta ?? [];
+  const metaByKey = Object.fromEntries(meta.map(m => [m.key, m]));
+
+  // Roll fatty-acid isomers up into Omega-6 / Omega-3 (USDA stores isomers, not
+  // the sums). n-6 = linoleic (18:2) + arachidonic (20:4) etc; n-3 = ALA (18:3)
+  // + EPA (20:5) + DHA (22:6) etc. We detect by key/name containing the marker.
+  const omega6 = sumIsomers(n, metaByKey, ['n-6', '18:2', '20:4', 'linoleic', 'arachidonic']);
+  const omega3 = sumIsomers(n, metaByKey, ['n-3', '18:3', '20:5', '22:6', 'linolenic', 'epa', 'dha']);
+
+  // The HEADLINE nutrients shown by default (familiar label order).
+  const HEADLINE: [string, string, string][] = [
+    ['calories', 'Calories', 'kcal'],
+    ['protein', 'Protein', 'g'],
+    ['fat', 'Fat', 'g'],
+    ['saturated_fat', '  Saturated', 'g'],
+    ['carbohydrates', 'Carbohydrates', 'g'],
+    ['sugar', '  Sugar', 'g'],
+    ['fiber', '  Fiber', 'g'],
+    ['sodium', 'Sodium', 'mg'],
   ];
+  const headlineRows = HEADLINE
+    .map(([k, label, unit]) => [label, n?.[k], unit] as [string, number | undefined, string])
+    .filter(([, v]) => v != null && (v as number) > 0);
+
+  // The FULL set, grouped by category (everything not in headline), for the expander.
+  const HEADLINE_KEYS = new Set(HEADLINE.map(h => h[0]));
+  const CATEGORY_ORDER = ['macro', 'vitamin', 'mineral', 'fatty_acid', 'other'];
+  const CATEGORY_LABEL: Record<string, string> = {
+    macro: 'Macronutrients', vitamin: 'Vitamins', mineral: 'Minerals',
+    fatty_acid: 'Fats & fatty acids', other: 'Other',
+  };
+  const grouped: Record<string, [string, number, string][]> = {};
+  for (const [key, val] of Object.entries(n)) {
+    if (typeof val !== 'number' || val <= 0) continue;
+    if (HEADLINE_KEYS.has(key)) continue;
+    const m = metaByKey[key];
+    const cat = m?.category ?? 'other';
+    (grouped[cat] ??= []).push([m?.name ?? key, val, m?.unit ?? 'g']);
+  }
+  // Inject the rolled-up omegas at the top of the fatty-acid group.
+  if (omega6 > 0 || omega3 > 0) {
+    grouped['fatty_acid'] = [
+      ...(omega6 > 0 ? [['Omega-6 (total)', omega6, 'g'] as [string, number, string]] : []),
+      ...(omega3 > 0 ? [['Omega-3 (total)', omega3, 'g'] as [string, number, string]] : []),
+      ...(grouped['fatty_acid'] ?? []),
+    ];
+  }
+  const fullCount = Object.values(grouped).reduce((a, g) => a + g.length, 0);
 
   const phaseLabel = loading ? 'calculating…'
     : phase === 'post-cooking'
@@ -366,6 +403,13 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     : phase === 'post-cooking'    ? 'var(--accent)'
     : result?.confidence === 'partial' ? '#b45309'
     : MUT;
+
+  const numCell = (value: number, unit: string) => (
+    <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+      {value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+      <span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
+    </span>
+  );
 
   return (
     <section>
@@ -392,21 +436,63 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
             </tr>
           </thead>
           <tbody>
-            {rows.filter(([, v]) => v != null && (v as number) > 0).map(([label, value, unit]) => (
+            {headlineRows.map(([label, value, unit]) => (
               <tr key={label} style={{ borderTop: B }}>
                 <td style={{ ...td, borderRight: B, paddingLeft: label.startsWith('  ') ? 28 : 14, color: label.startsWith('  ') ? MUT : 'var(--fg)' }}>
                   {label.trim()}
                 </td>
-                <td style={{ ...td, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-                  {typeof value === 'number' ? value.toLocaleString(undefined, { maximumFractionDigits: 2 }) : value}<span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
-                </td>
+                <td style={{ ...td, textAlign: 'right' }}>{numCell(value as number, unit)}</td>
               </tr>
+            ))}
+
+            {showFull && CATEGORY_ORDER.filter(c => grouped[c]?.length).map(cat => (
+              <React.Fragment key={cat}>
+                <tr style={{ borderTop: B, background: 'var(--surface-hover)' }}>
+                  <td colSpan={2} style={{ ...td, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUT }}>
+                    {CATEGORY_LABEL[cat] ?? cat}
+                  </td>
+                </tr>
+                {grouped[cat].map(([label, value, unit]) => (
+                  <tr key={cat + label} style={{ borderTop: B }}>
+                    <td style={{ ...td, borderRight: B }}>{label}</td>
+                    <td style={{ ...td, textAlign: 'right' }}>{numCell(value, unit)}</td>
+                  </tr>
+                ))}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
+
+      {fullCount > 0 && (
+        <button
+          onClick={() => setShowFull(v => !v)}
+          style={{ marginTop: 8, fontFamily: MONO, fontSize: 11, cursor: 'pointer',
+            background: 'transparent', border: B, padding: '6px 12px', color: 'var(--accent)' }}>
+          {showFull ? 'Hide full nutrition' : `Show full nutrition (${fullCount} more)`}
+        </button>
+      )}
     </section>
   );
+}
+
+// Sum the fatty-acid isomers whose key or name matches any marker, into a single
+// omega total. USDA stores isomers (18:2, 18:3, …); the rolled-up omega-6/-3 are
+// the sums of their respective n-6 / n-3 families.
+function sumIsomers(
+  perServing: Record<string, number | undefined>,
+  metaByKey: Record<string, { name: string; category: string }>,
+  markers: string[],
+): number {
+  let total = 0;
+  for (const [key, val] of Object.entries(perServing)) {
+    if (typeof val !== 'number' || val <= 0) continue;
+    const m = metaByKey[key];
+    if (m?.category !== 'fatty_acid') continue;
+    const hay = `${key} ${m?.name ?? ''}`.toLowerCase();
+    if (markers.some(mk => hay.includes(mk))) total += val;
+  }
+  return Math.round(total * 100) / 100;
 }
 
 
