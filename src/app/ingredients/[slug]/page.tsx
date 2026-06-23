@@ -229,10 +229,21 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
     </div>
   );
 
-  const n = ing.nutrition_per_100g ?? {};
+  // Prefer the resolved evidence-graded nutrition (real USDA where matched);
+  // fall back to the legacy blob only if the view has nothing.
+  const resolved: Record<string, number> | null = (ing as any).resolvedNutrition ?? null;
+  const n: Record<string, number> = resolved ?? ing.nutrition_per_100g ?? {};
+  const nutMeta: { key: string; name: string; category: string; unit: string; display_order: number }[] =
+    (ing as any).nutrientMeta ?? [];
+  const metaByKey = Object.fromEntries(nutMeta.map(m => [m.key, m]));
+  const grade: string | null = (ing as any).nutritionGrade ?? null;
+  const GRADE_LABEL: Record<string, string> = {
+    e4_validated: 'Validated', e3_tested: 'Lab tested', e2_expert: 'USDA (Foundation)',
+    e1_literature: 'USDA (SR Legacy)', u_user_feedback: 'User reported', e0_inferred: 'AI estimate',
+  };
   const sec = (key: string) => ing.sections?.[key] ?? [];
-  const hasBasicNutrition = n.calories != null || n.protein != null || n.fat != null;
-  const hasDetailedNutrition = n.vitamin_c != null || n.calcium != null || n.iron != null;
+  const hasBasicNutrition = (n.calories != null) || (n.protein != null) || (n.fat != null);
+  const hasDetailedNutrition = Object.keys(n).length > 4;
   const hasEthical = ing.is_vegan != null || ing.is_vegetarian != null ||
     ing.is_halal != null || ing.is_kosher != null || ing.is_gluten_free != null;
   const hasAllergens = (ing.allergens?.length ?? 0) > 0;
@@ -530,10 +541,14 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                 <>
                   <div style={{ fontSize: 11, color: MUT, fontFamily: MONO, marginBottom: 8,
                     display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span>Source: {ing.nutrition_source ?? 'unknown'}</span>
-                    {ing.nutrition_source === 'usda' && (
+                    <span>Source: {grade ? (GRADE_LABEL[grade] ?? grade) : (ing.nutrition_source ?? 'estimate')}</span>
+                    {grade && grade !== 'e0_inferred' && (
                       <span style={{ border: B, padding: '1px 6px', fontSize: 9,
-                        textTransform: 'uppercase', letterSpacing: '0.1em' }}>USDA estimate</span>
+                        textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--accent)' }}>USDA data</span>
+                    )}
+                    {(!grade || grade === 'e0_inferred') && (
+                      <span style={{ border: B, padding: '1px 6px', fontSize: 9,
+                        textTransform: 'uppercase', letterSpacing: '0.1em' }}>estimate</span>
                     )}
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12 }}>
@@ -552,41 +567,71 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                       <NutrRow label="Cholesterol" value={fmt(n.cholesterol, 'mg')} bold />
                     </tbody>
                   </table>
-                  {hasDetailedNutrition && (
-                    <details style={{ marginTop: 12 }}>
-                      <summary style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
-                        letterSpacing: '0.15em', color: MUT, cursor: 'pointer', padding: '6px 0' }}>
-                        Detailed micronutrients
-                      </summary>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12, marginTop: 8 }}>
-                        <tbody>
-                          <NutrRow label="Omega-3" value={fmt(n.omega3, 'g')} />
-                          <NutrRow label="Omega-6" value={fmt(n.omega6, 'g')} />
-                          <NutrRow label="Vitamin A" value={fmt(n.vitamin_a, 'μg')} />
-                          <NutrRow label="Vitamin C" value={fmt(n.vitamin_c, 'mg')} />
-                          <NutrRow label="Vitamin D" value={fmt(n.vitamin_d, 'μg')} />
-                          <NutrRow label="Vitamin E" value={fmt(n.vitamin_e, 'mg')} />
-                          <NutrRow label="Vitamin K" value={fmt(n.vitamin_k, 'μg')} />
-                          <NutrRow label="Thiamin (B1)" value={fmt(n.thiamin, 'mg')} />
-                          <NutrRow label="Riboflavin (B2)" value={fmt(n.riboflavin, 'mg')} />
-                          <NutrRow label="Niacin (B3)" value={fmt(n.niacin, 'mg')} />
-                          <NutrRow label="Vitamin B6" value={fmt(n.vitamin_b6, 'mg')} />
-                          <NutrRow label="Folate (B9)" value={fmt(n.folate, 'μg')} />
-                          <NutrRow label="Vitamin B12" value={fmt(n.vitamin_b12, 'μg')} />
-                          <NutrRow label="Pantothenic acid" value={fmt(n.pantothenic_acid, 'mg')} />
-                          <NutrRow label="Calcium" value={fmt(n.calcium, 'mg')} />
-                          <NutrRow label="Iron" value={fmt(n.iron, 'mg')} />
-                          <NutrRow label="Magnesium" value={fmt(n.magnesium, 'mg')} />
-                          <NutrRow label="Phosphorus" value={fmt(n.phosphorus, 'mg')} />
-                          <NutrRow label="Potassium" value={fmt(n.potassium, 'mg')} />
-                          <NutrRow label="Zinc" value={fmt(n.zinc, 'mg')} />
-                          <NutrRow label="Copper" value={fmt(n.copper, 'mg')} />
-                          <NutrRow label="Manganese" value={fmt(n.manganese, 'mg')} />
-                          <NutrRow label="Selenium" value={fmt(n.selenium, 'μg')} />
-                        </tbody>
-                      </table>
-                    </details>
-                  )}
+                  {hasDetailedNutrition && (() => {
+                    // Roll fatty-acid isomers into Omega-6 / Omega-3 totals.
+                    const sumIso = (markers: string[]) => {
+                      let t = 0;
+                      for (const [k, v] of Object.entries(n)) {
+                        if (typeof v !== 'number' || v <= 0) continue;
+                        const m = metaByKey[k];
+                        if (m?.category !== 'fatty_acid') continue;
+                        const hay = `${k} ${m?.name ?? ''}`.toLowerCase();
+                        if (markers.some(mk => hay.includes(mk))) t += v;
+                      }
+                      return Math.round(t * 100) / 100;
+                    };
+                    const o6 = sumIso(['n-6', '18:2', '20:4', 'linoleic', 'arachidonic']);
+                    const o3 = sumIso(['n-3', '18:3', '20:5', '22:6', 'linolenic', 'epa', 'dha']);
+
+                    // Group everything not already shown in the basic macro table.
+                    const BASIC = new Set(['calories','carbohydrates','sugar','fiber','protein','fat',
+                      'saturated_fat','monounsaturated_fat','polyunsaturated_fat','trans_fat','sodium','cholesterol']);
+                    const CAT_ORDER = ['vitamin','mineral','fatty_acid','other'];
+                    const CAT_LABEL: Record<string,string> = {
+                      vitamin: 'Vitamins', mineral: 'Minerals', fatty_acid: 'Fats & fatty acids', other: 'Other' };
+                    const groups: Record<string, [string, number, string][]> = {};
+                    for (const [k, v] of Object.entries(n)) {
+                      if (typeof v !== 'number' || v <= 0 || BASIC.has(k)) continue;
+                      const m = metaByKey[k];
+                      const cat = m?.category ?? 'other';
+                      (groups[cat] ??= []).push([m?.name ?? k, v, m?.unit ?? 'g']);
+                    }
+                    if (o6 > 0 || o3 > 0) {
+                      groups['fatty_acid'] = [
+                        ...(o6 > 0 ? [['Omega-6 (total)', o6, 'g'] as [string,number,string]] : []),
+                        ...(o3 > 0 ? [['Omega-3 (total)', o3, 'g'] as [string,number,string]] : []),
+                        ...(groups['fatty_acid'] ?? []),
+                      ];
+                    }
+                    const total = Object.values(groups).reduce((a, g) => a + g.length, 0);
+                    if (total === 0) return null;
+
+                    return (
+                      <details style={{ marginTop: 12 }}>
+                        <summary style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase',
+                          letterSpacing: '0.15em', color: MUT, cursor: 'pointer', padding: '6px 0' }}>
+                          Detailed micronutrients ({total})
+                        </summary>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12, marginTop: 8 }}>
+                          <tbody>
+                            {CAT_ORDER.filter(c => groups[c]?.length).map(cat => (
+                              <React.Fragment key={cat}>
+                                <tr style={{ background: 'var(--surface-hover)' }}>
+                                  <td colSpan={2} style={{ padding: '6px 12px', fontFamily: MONO, fontSize: 9,
+                                    textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT }}>
+                                    {CAT_LABEL[cat] ?? cat}
+                                  </td>
+                                </tr>
+                                {groups[cat].map(([label, value, unit]) => (
+                                  <NutrRow key={cat + label} label={label} value={fmt(value, ` ${unit}`)} />
+                                ))}
+                              </React.Fragment>
+                            ))}
+                          </tbody>
+                        </table>
+                      </details>
+                    );
+                  })()}
                 </>
               )}
             </Section>

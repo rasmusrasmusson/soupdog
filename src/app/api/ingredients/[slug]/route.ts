@@ -157,6 +157,37 @@ export async function GET(
     generateAndCacheAiContent(ing, db).catch(console.error);
   }
 
+  // ── Resolved evidence-graded nutrition (replaces the stale blob) ──────
+  // Pull every nutrient from the resolved view + metadata for grouping, and
+  // the best (highest) evidence grade present, so the page shows real USDA
+  // data with an honest source badge instead of the old AI-estimate blob.
+  const { data: nutRows } = await db
+    .from('ingredient_nutrition_current')
+    .select('nutrient_key, amount_per_100g, evidence_grade, source_kind')
+    .eq('ingredient_id', ing.id);
+
+  let resolvedNutrition: Record<string, number> | null = null;
+  let nutritionGrade: string | null = null;
+  let nutritionSourceKind: string | null = null;
+  if (nutRows && nutRows.length > 0) {
+    resolvedNutrition = {};
+    const RANK: Record<string, number> = {
+      e0_inferred: 0, u_user_feedback: 1, e1_literature: 2,
+      e2_expert: 3, e3_tested: 4, e4_validated: 5,
+    };
+    let bestRank = -1;
+    for (const r of nutRows) {
+      resolvedNutrition[r.nutrient_key] = Number(r.amount_per_100g);
+      const rk = RANK[r.evidence_grade] ?? 0;
+      if (rk > bestRank) { bestRank = rk; nutritionGrade = r.evidence_grade; nutritionSourceKind = r.source_kind; }
+    }
+  }
+
+  const { data: nutrientMeta } = await db
+    .from('nutrient')
+    .select('key, name, category, unit, display_order')
+    .order('display_order', { ascending: true });
+
   return NextResponse.json({
     ingredient: {
       ...ing,
@@ -170,6 +201,10 @@ export async function GET(
       sections,
       transformationRecipe,
       needsAiContent,
+      resolvedNutrition,
+      nutritionGrade,
+      nutritionSourceKind,
+      nutrientMeta:         nutrientMeta ?? [],
     },
   });
 }
