@@ -15,7 +15,7 @@ import { serviceClient, importFdcNutrition } from '@/lib/nutrition/usda';
 
 const ADMIN_IDS = (process.env.SOUPDOG_ADMIN_ACCOUNT_IDS
   ?? 'bb02ae50-436c-4402-8c8c-447344e10151,1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf')
-  .split(',').map(s => s.trim()).filter(Boolean);
+  .split(',').map((s: string) => s.trim()).filter(Boolean);
 
 export async function POST(req: NextRequest) {
   const server = await createServerClient();

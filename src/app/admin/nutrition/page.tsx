@@ -109,7 +109,7 @@ export default function NutritionWorklistPage() {
     let totImported = 0, totFailed = 0, batches = 0;
     try {
       while (!stopRef.current) {
-        const res = await fetch('/api/admin/nutrition/reimport', {
+        const res: Response = await fetch('/api/admin/nutrition/reimport', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ batchSize: 6, cursor }),
         });
