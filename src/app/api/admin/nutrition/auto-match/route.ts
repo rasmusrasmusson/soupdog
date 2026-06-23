@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createServerClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
-import { serviceClient, usdaSearch, importFdcNutrition, looksLikeBlend, UsdaCandidate } from '@/lib/nutrition/usda';
+import { serviceClient, usdaSearch, importFdcNutrition, looksLikeBlend, normalizeIngredientName, UsdaCandidate } from '@/lib/nutrition/usda';
 
 const ADMIN_IDS = (process.env.SOUPDOG_ADMIN_ACCOUNT_IDS
   ?? 'bb02ae50-436c-4402-8c8c-447344e10151,1a0f72dd-f0a7-487c-9ecd-7ef898f8dabf')
@@ -104,7 +104,13 @@ export async function POST(req: NextRequest) {
   for (const ing of (targets ?? [])) {
     let candidates: UsdaCandidate[] = [];
     try {
-      candidates = await usdaSearch(ing.name);
+      // Try a cleaned query first (strips slashes/qualifiers), then the raw
+      // name if that yields nothing.
+      const cleaned = normalizeIngredientName(ing.name);
+      candidates = await usdaSearch(cleaned);
+      if (candidates.length === 0 && cleaned !== ing.name.toLowerCase().trim()) {
+        candidates = await usdaSearch(ing.name);
+      }
     } catch (e: any) {
       // USDA search failed — flag for review rather than leaving it 'unmatched'
       // (else it retries forever on names USDA may never have).

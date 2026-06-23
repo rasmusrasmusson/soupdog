@@ -53,6 +53,34 @@ const apiKey = () => {
   return k;
 };
 
+// Normalise a Soupdog ingredient name into a cleaner USDA search query.
+// Fixes the main miss patterns: slash-variants ("Courgette / Zucchini"),
+// qualifier prefixes ("freshly ground black pepper", "fresh mozzarella",
+// "cold milk"), and "powder/ground" suffixes. Returns the cleaned query, or
+// the original trimmed if cleaning would empty it.
+export function normalizeIngredientName(name: string): string {
+  let s = name.toLowerCase().trim();
+  // Take the first option of a slash pair: "courgette / zucchini" -> "courgette"
+  if (s.includes('/')) s = s.split('/')[0].trim();
+  // Drop parenthetical notes: "dawadawa (fermented locust bean)" -> "dawadawa"
+  s = s.replace(/\([^)]*\)/g, ' ').trim();
+  // Strip leading qualifier words that hurt USDA matching.
+  const STRIP_PREFIX = ['freshly ground', 'fresh', 'cold', 'hot', 'large', 'small',
+    'whole', 'dried', 'ground', 'chopped', 'tinned', 'canned', 'cooked', 'raw',
+    'organic', 'unsalted', 'salted', 'finely', 'roughly'];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const p of STRIP_PREFIX) {
+      if (s.startsWith(p + ' ')) { s = s.slice(p.length + 1).trim(); changed = true; }
+    }
+  }
+  // Drop trailing " powder"/" flakes"/" leaves" descriptors.
+  s = s.replace(/\b(powder|flakes|leaves|leaf|stalk|seeds|seed|sprigs|pods)\b/g, ' ').trim();
+  s = s.replace(/\s+/g, ' ').trim();
+  return s.length >= 2 ? s : name.trim();
+}
+
 // Search USDA → trimmed candidate list with marker nutrients.
 export async function usdaSearch(query: string, pageSize = 50): Promise<UsdaCandidate[]> {
   // Send dataType=Foundation,SR Legacy so LAB-ANALYSED foods rank first —
