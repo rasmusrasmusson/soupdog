@@ -232,7 +232,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
   // Prefer the resolved evidence-graded nutrition (real USDA where matched);
   // fall back to the legacy blob only if the view has nothing.
   const resolved: Record<string, number> | null = (ing as any).resolvedNutrition ?? null;
-  const n: Record<string, number> = resolved ?? ing.nutrition_per_100g ?? {};
+  const n: Record<string, number> = resolved ?? (ing.nutrition_per_100g as Record<string, number>) ?? {};
   const nutMeta: { key: string; name: string; category: string; unit: string; display_order: number }[] =
     (ing as any).nutrientMeta ?? [];
   const metaByKey = Object.fromEntries(nutMeta.map(m => [m.key, m]));
@@ -623,7 +623,9 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                                   </td>
                                 </tr>
                                 {groups[cat].map(([label, value, unit]) => (
-                                  <NutrRow key={cat + label} label={label} value={fmt(value, ` ${unit}`)} />
+                                  <React.Fragment key={cat + label}>
+                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)} />
+                                  </React.Fragment>
                                 ))}
                               </React.Fragment>
                             ))}
