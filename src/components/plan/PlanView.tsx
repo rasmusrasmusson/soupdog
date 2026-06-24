@@ -6,6 +6,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { Participants } from '@/components/people/Participants';
 
 type Participant = { id: string; status: string; personId: string; name: string; avatarColor: string | null; avatarInitials: string | null };
 type Meal = {
@@ -344,10 +345,6 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
   onSwap: (m: Meal) => void; onAddPerson: (mealId: string, personId: string) => void; onRemovePerson: (mealId: string, personId: string) => void;
   onRemove: (mealId: string) => void;
 }) {
-  const [openAdd, setOpenAdd] = useState(false);
-  const [openPerson, setOpenPerson] = useState<string | null>(null); // personId whose popover is open
-  const inMeal = new Set(meal.participants.map(p => p.personId));
-  const addable = household.filter(h => !inMeal.has(h.id));
   const meta = metaLine(meal);
 
   return (
@@ -361,55 +358,18 @@ function MealRow({ meal, household, onSwap, onAddPerson, onRemovePerson, onRemov
           )}
           {meta && <div style={{ fontSize: 13, color: 'var(--muted)' }}>{meta}</div>}
         </div>
-        <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {meal.participants.map((p, i) => (
-              <span key={p.id} title={p.name}
-                onClick={() => { setOpenPerson(v => v === p.personId ? null : p.personId); setOpenAdd(false); }}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, border: '2px solid var(--bg)', marginLeft: i === 0 ? 0 : -6, cursor: 'pointer' }}>
-                {monogram(p.name, p.avatarInitials)}
-              </span>
-            ))}
-            {addable.length > 0 && (
-              <span title="Add someone" onClick={() => { setOpenAdd(v => !v); setOpenPerson(null); }}
-                style={{ width: 30, height: 30, borderRadius: '50%', border: '1px dashed var(--border)', color: 'var(--muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, marginLeft: meal.participants.length ? 4 : 0, cursor: 'pointer' }}>+</span>
-            )}
-          </div>
-
-          {/* person popover: name + remove */}
-          {openPerson && (() => {
-            const p = meal.participants.find(x => x.personId === openPerson);
-            if (!p) return null;
-            return (
-              <div style={popover}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '4px 6px 10px' }}>
-                  <span style={{ width: 28, height: 28, borderRadius: '50%', background: colorFor(p.personId, p.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, flexShrink: 0 }}>{monogram(p.name, p.avatarInitials)}</span>
-                  <span style={{ fontSize: 13.5, color: 'var(--fg)' }}>{p.name}</span>
-                </div>
-                <div onClick={() => { onRemovePerson(meal.id, p.personId); setOpenPerson(null); }}
-                  style={{ borderTop: B, padding: '9px 8px 2px', fontSize: 13, color: '#9c5f4a', cursor: 'pointer' }}>
-                  Remove from this meal
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* add-person picker */}
-          {openAdd && addable.length > 0 && (
-            <div style={popover}>
-              <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', padding: '2px 8px 8px' }}>Add to this meal</div>
-              {addable.map(h => (
-                <div key={h.id} onClick={() => { onAddPerson(meal.id, h.id); setOpenAdd(false); }}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px', cursor: 'pointer', fontSize: 13.5, borderRadius: 6 }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <span style={{ width: 26, height: 26, borderRadius: '50%', background: colorFor(h.id, h.avatarColor), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, flexShrink: 0 }}>{monogram(h.name, h.avatarInitials)}</span>
-                  <span style={{ whiteSpace: 'nowrap' }}>{h.name}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <Participants
+          participants={meal.participants.map(p => ({
+            personId: p.personId, name: p.name,
+            avatarColor: p.avatarColor, avatarInitials: p.avatarInitials,
+          }))}
+          addable={household.map(h => ({
+            id: h.id, name: h.name,
+            avatarColor: h.avatarColor, avatarInitials: h.avatarInitials,
+          }))}
+          onAdd={(personId) => onAddPerson(meal.id, personId)}
+          onRemove={(personId) => onRemovePerson(meal.id, personId)}
+        />
       </div>
       <div style={{ display: 'flex', gap: 18, marginTop: 14 }}>
         <span onClick={() => onSwap(meal)} style={{ fontSize: 12.5, color: 'var(--muted)', cursor: 'pointer' }}>Swap</span>
