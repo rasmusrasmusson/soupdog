@@ -3590,3 +3590,107 @@ Almonds page (live, hard-refreshed) shows: source "USDA (SR Legacy)" + green bad
 nutrition layer is done: evidence-graded spine → USDA ingest → curation worklist → dedup
 → auto-matcher (~75% on real USDA, six bugs fixed) → generic calc → full grouped display
 on recipe + ingredient pages → 71 nutrients incl. 18-amino-acid spine (Effort 1).
+
+---
+
+# SESSION CLOSE (cont.) — Recipe-editor corruption bug GUARDED + DAG-native editor is the next build
+
+## BUG FOUND & GUARDED — two non-round-trip-compatible recipe save paths
+Rasmus found a recipe ("Tarte flambée") rendering procedure but NO ingredients.
+Diagnosed to a real silent data-corruption bug at the OLD/NEW recipe-model seam:
+
+- **decompose-save** (new import path) stores each step's task in the REAL
+  `version_steps.task_id` FK + ingredients in `version_ingredients`; task TOOL goes in
+  `appliance_settings.stepTools`. It does NOT put taskId inside appliance_settings.
+- **The OLD editor** (`/api/my/recipes/[id]` GET/PUT) reads/writes task data via
+  `appliance_settings.taskId` — a DIFFERENT location. So loading a decompose-saved
+  recipe through the old editor's GET returns `taskId: undefined` for every step;
+  saving via PUT then writes those nulls back → `task_id` becomes null and the
+  structured ingredients are lost. Each edit made a NEW version with the data stripped.
+- SYMPTOM: recipe becomes "procedure only, no ingredients." Tarte flambée v1 was healthy
+  (13 ings, 24 task-matched steps); v2/v3/v4 (round-tripped through the old editor) had
+  0 ings, 0 task_ids, quantities baked into instruction prose.
+
+### Data state after this session
+- **Tarte flambée: RECOVERED** — reverted current_version_id to the healthy v1
+  (`c40461d7-...`). Intact.
+- **Tomato soup (`tomato-soup-mpkt7ouk`): still broken**, only one version (v3), no
+  healthy version to revert to → re-import when convenient (NOT urgent; site unused).
+- **4 test Carbonaras** (`spaghetti-carbonara-mq3m1bsv/mqe9uh8h/mqeaj8cv/mqeay7ah`):
+  also 0-ingredient junk → delete/archive whenever.
+- Catalog scan: **27 of 39 recipes are STRUCTURED (steps have real task_id) → now
+  read-only in the old editor; 12 are old-style → still editable.** The 27 are INTACT
+  (Greek Salad confirmed: 20 tasks, 11 ings) — just not editable through the old tool.
+
+### FIX SHIPPED — guard in `src/app/api/my/recipes/[id]/route.ts`
+PUT now counts `version_steps` with a non-null `task_id` on the current version; if any
+exist it returns **409 `structured_recipe_readonly`** ("uses the new structured format…
+re-import to change it") instead of saving — making the flatten-corruption IMPOSSIBLE.
+GET now also selects `task_id` and returns an `isStructured` boolean for the UI. Old-
+style recipes (no task_id on any step) are unaffected and edit normally. Built green,
+pushed, verified live (the 409 fires on structured recipes incl. Greek Salad — CORRECT).
+
+**This is a GUARD, not a cure.** It traded a data-corruption bug for a missing
+capability: ~2/3 of recipes are now read-only. Correct trade (corruption ≫ limitation,
+esp. pre-users), but the limitation is real.
+
+## >>> NEXT BUILD: DAG-NATIVE RECIPE EDITOR <<<
+(Supersedes the old thin backlog line "chat-modify + advanced-editor go DAG-native".)
+The thing that UNBLOCKS editing the 27 (and growing) structured recipes. The old
+editors can't be repointed to a "new editor" because **no editor of EXISTING structured
+recipes exists** — the import path only CREATES new recipes from scratch; the old edit
+pages speak the old format. Editing-after-import is the missing piece.
+
+**Not quick — a real session. But builds on PROVEN machinery (not from scratch):**
+- `decompose-save` already persists the structured format correctly.
+- The import preview already renders an editable-meta + RecipeDisplay view of a DAG
+  (`preview` state + `dagToRecipe` in `/my/recipes/import/page.tsx`).
+- `RecipeDisplay` already renders a recipe from structured data.
+
+**Build shape:**
+1. A GET that RECONSTRUCTS a DAG from `version_steps` (real task_id) +
+   `version_ingredients` (by step_id) + `version_step_dependencies` (edges) — i.e. the
+   inverse of decompose-save. (The current old GET builds the OLD shape; this needs the
+   DAG shape `dagToRecipe`/the preview expects.)
+2. DAG-editing UI (change/add/remove an ingredient, edit a step, reorder) — reuse the
+   import preview components.
+3. Save back through `decompose-save` (or a DAG-aware update) as a NEW version — NOT
+   the old flattening PUT.
+4. Then (trivial LAST step) repoint the edit links (pencil on My Recipes; "Advanced
+   editor →") to the new editor; retire/redirect the old `/my/recipes/[id]` + `/edit`
+   for structured recipes; relax the PUT guard.
+5. Fold in the gated-off chat-modify ("ask AI to make it") + chat-to-GENERATE paths as
+   DAG-native (they're `{false && …}` on the import page now).
+
+**Interim UX option (small, optional):** use the new GET `isStructured` flag to show a
+read-only notice when the editor LOADS (so the edit button explains "re-import to edit"
+up front) instead of the user hitting the 409 after typing changes.
+
+**Priority:** Rasmus is mostly in CREATE mode (import path serves him fully), site
+unused, so this is "soon / next real session," not an emergency. But it's the clear
+forward path for the recipe-editing area.
+
+## ALSO THIS SESSION — Nutrient educational pages designed (doc written, not built)
+`docs/Soupdog_Nutrient_Pages_Design_v0_1.md`. Rasmus wants nutrient names in nutrition
+panels to LINK (modal quick-info + full `/nutrients/[slug]` page), like ingredients/tools.
+Prior content design existed (the 4 educational-content types, nutrients first,
+informational-not-advisory guardrails); this doc adds the mechanics: route structure
+(`/nutrients` index + `[slug]` detail + admin edit, mirroring Techniques), the quick-info
+modal with context-aware "% of your daily target", the "ingredients richest in this
+nutrient" live query (Soupdog's unique value), content storage + generation + guardrails.
+NON-spine, additive, satisfying build. §7 has 6 open decisions (slug source, omega-rollup
+linking, modal reuse, serving sizes, content storage, which nutrients get pages first —
+lean: consumer subset first, amino acids ride the future Effort-2 protein-quality feature).
+
+## NEXT-SESSION CANDIDATES (all design-settled or guarded; pick by energy)
+1. **DAG-native recipe editor** — unblocks editing 27 structured recipes (above). The
+   forward path for recipe editing. Real build, reuses proven machinery.
+2. **Nutrient pages** — additive, non-spine, reader-facing, mostly-designed. Lower risk.
+3. **Ingredient concepts/variants** — spine-level, model decided (m2m), 4 opens remain.
+4. Stripe/enforcement (revenue track, long-neglected).
+
+## CARRIED CLEANUP (none urgent — site unused)
+- Re-import Tomato soup; delete/archive 4 test Carbonaras.
+- USDA key rotation (deferred, low-stakes).
+- Rename "Extra virgin olive oil" cosmetic; batch-tidy lowercase ingredient names.
+- ~69 nutrition needs_review residue; drop nutrition_per_100g blob once nothing reads it.
