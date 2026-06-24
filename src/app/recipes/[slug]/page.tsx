@@ -10,6 +10,7 @@ import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
+import { NutrientDetailModal } from '@/components/recipe/NutrientDetailModal';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -301,6 +302,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   const [apiResult, setApiResult] = React.useState<any>(null);
   const [loading,   setLoading]   = React.useState(false);
   const [showFull,  setShowFull]  = React.useState(false);
+  const [modalNutrient, setModalNutrient] = React.useState<{ key: string; amount: number } | null>(null);
 
   React.useEffect(() => {
     if (!versionId) return;
@@ -366,7 +368,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     ['sodium', 'Sodium', 'mg'],
   ];
   const headlineRows = HEADLINE
-    .map(([k, label, unit]) => [label, n?.[k], unit] as [string, number | undefined, string])
+    .map(([k, label, unit]) => [label, n?.[k], unit, k] as [string, number | undefined, string, string])
     .filter(([, v]) => v != null && (v as number) > 0);
 
   // The FULL set, grouped by category (everything not in headline), for the expander.
@@ -376,19 +378,19 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     macro: 'Macronutrients', vitamin: 'Vitamins', mineral: 'Minerals',
     fatty_acid: 'Fats & fatty acids', other: 'Other',
   };
-  const grouped: Record<string, [string, number, string][]> = {};
+  const grouped: Record<string, [string, number, string, string][]> = {};
   for (const [key, val] of Object.entries(n)) {
     if (typeof val !== 'number' || val <= 0) continue;
     if (HEADLINE_KEYS.has(key)) continue;
     const m = metaByKey[key];
     const cat = m?.category ?? 'other';
-    (grouped[cat] ??= []).push([m?.name ?? key, val, m?.unit ?? 'g']);
+    (grouped[cat] ??= []).push([m?.name ?? key, val, m?.unit ?? 'g', m?.key ?? key]);
   }
   // Inject the rolled-up omegas at the top of the fatty-acid group.
   if (omega6 > 0 || omega3 > 0) {
     grouped['fatty_acid'] = [
-      ...(omega6 > 0 ? [['Omega-6 (total)', omega6, 'g'] as [string, number, string]] : []),
-      ...(omega3 > 0 ? [['Omega-3 (total)', omega3, 'g'] as [string, number, string]] : []),
+      ...(omega6 > 0 ? [['Omega-6 (total)', omega6, 'g', ''] as [string, number, string, string]] : []),
+      ...(omega3 > 0 ? [['Omega-3 (total)', omega3, 'g', ''] as [string, number, string, string]] : []),
       ...(grouped['fatty_acid'] ?? []),
     ];
   }
@@ -436,10 +438,18 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
             </tr>
           </thead>
           <tbody>
-            {headlineRows.map(([label, value, unit]) => (
+            {headlineRows.map(([label, value, unit, nkey]) => (
               <tr key={label} style={{ borderTop: B }}>
                 <td style={{ ...td, borderRight: B, paddingLeft: label.startsWith('  ') ? 28 : 14, color: label.startsWith('  ') ? MUT : 'var(--fg)' }}>
-                  {label.trim()}
+                  {nkey ? (
+                    <button onClick={() => setModalNutrient({ key: nkey, amount: (value as number) })}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit',
+                        color: 'inherit', textAlign: 'left', textDecoration: 'underline',
+                        textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }}
+                      className="hover:text-[var(--accent)] transition-colors">
+                      {label.trim()}
+                    </button>
+                  ) : label.trim()}
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>{numCell(value as number, unit)}</td>
               </tr>
@@ -452,9 +462,19 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
                     {CATEGORY_LABEL[cat] ?? cat}
                   </td>
                 </tr>
-                {grouped[cat].map(([label, value, unit]) => (
+                {grouped[cat].map(([label, value, unit, nkey]) => (
                   <tr key={cat + label} style={{ borderTop: B }}>
-                    <td style={{ ...td, borderRight: B }}>{label}</td>
+                    <td style={{ ...td, borderRight: B }}>
+                      {nkey ? (
+                        <button onClick={() => setModalNutrient({ key: nkey, amount: value })}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit',
+                            color: 'inherit', textAlign: 'left', textDecoration: 'underline',
+                            textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }}
+                          className="hover:text-[var(--accent)] transition-colors">
+                          {label}
+                        </button>
+                      ) : label}
+                    </td>
                     <td style={{ ...td, textAlign: 'right' }}>{numCell(value, unit)}</td>
                   </tr>
                 ))}
@@ -471,6 +491,15 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
             background: 'transparent', border: B, padding: '6px 12px', color: 'var(--accent)' }}>
           {showFull ? 'Hide full nutrition' : `Show full nutrition (${fullCount} more)`}
         </button>
+      )}
+
+      {modalNutrient && (
+        <NutrientDetailModal
+          nutrientKey={modalNutrient.key}
+          amount={modalNutrient.amount}
+          amountLabel="per serving"
+          onClose={() => setModalNutrient(null)}
+        />
       )}
     </section>
   );
