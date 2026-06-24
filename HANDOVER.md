@@ -3694,3 +3694,84 @@ lean: consumer subset first, amino acids ride the future Effort-2 protein-qualit
 - USDA key rotation (deferred, low-stakes).
 - Rename "Extra virgin olive oil" cosmetic; batch-tidy lowercase ingredient names.
 - ~69 nutrition needs_review residue; drop nutrition_per_100g blob once nothing reads it.
+
+---
+
+# SESSION (cont.) — NUTRIENT PAGES + LINKING + MODAL — BUILT & LIVE
+
+The nutrient educational layer (designed in docs/Soupdog_Nutrient_Pages_Design_v0_1.md)
+is now built end to end. All three steps shipped.
+
+## Step 1 — Pages (live)
+- **Migration `nutrient_pages_01_content_columns.sql`** (RAN): added content columns to
+  `nutrient` — summary, description, how_much, too_little, too_much, food_sources_note,
+  tips, aliases (text[]), rda_reference, published (bool), content_reviewed (bool). Slug
+  source = the existing `key` (already URL-safe; NO separate slug column). Re-granted select.
+- **Routes/pages (all placed, in build route list):**
+  - `src/app/nutrients/page.tsx` — index, all 71 grouped by category (Macros/Vitamins/
+    Minerals/Fats & fatty acids/Amino acids/Other), search + category filter buttons.
+  - `src/app/nutrients/[key]/page.tsx` — detail. Renders content sections WHERE PRESENT +
+    always the live "Ingredients richest in this nutrient" bar list. Reachable regardless
+    of `published` (published only controls the index listing + DRAFT badge).
+  - `src/app/nutrients/[key]/edit/page.tsx` — admin content edit form, fixed bottom save bar.
+  - `src/app/api/nutrients/[key]/route.ts` — public data API: nutrient facts + richest-
+    ingredients query over `ingredient_nutrition_current` (filters out is_product/
+    is_category/archived; top 12 real foods).
+  - `src/app/api/admin/nutrients/[key]/route.ts` — admin PATCH, whitelisted fields,
+    ACCOUNT-id gated (env SOUPDOG_ADMIN_ACCOUNT_IDS).
+- **Content `nutrient_pages_02_content.sql`** (RAN): one-time content fill for all 71.
+  Rich content for common nutrients (macros, vitamins, minerals, sodium); brief factual
+  notes for obscure fatty-acid isomers; amino acids labelled essential/conditional/
+  non-essential. Guardrails: informational not advisory, ranges with "needs vary",
+  toxicity flagged "consult a professional" (iron/selenium/vit A/vit D/sodium), no
+  invented authority claims, PKU note under phenylalanine. Set published=true,
+  **content_reviewed=false** — LIVE as a start but NOT personally vetted. ⚠️ This content
+  is from the model's general knowledge, written to a well-informed standard, NOT checked
+  against authoritative dietary references — wants a real review pass before being treated
+  as health-grade, and certainly before/at user launch. Editable per-nutrient via the edit
+  form (flip content_reviewed as vetted).
+
+## Steps 2+3 — Linking + Modal (live)
+- **`src/components/recipe/NutrientDetailModal.tsx`** — quick-info modal, MIRRORS the
+  existing `ToolDetailModal`/`TaskDetailModal` pattern (this resolved design-doc [OPEN] 4c:
+  reusable modals already existed; built nutrient-shaped matching them). Props:
+  `nutrientKey`, optional `amount` + `amountLabel`, `onClose`. Fetches /api/nutrients/[key],
+  shows category + name + (if amount passed) the amount-in-context + summary +
+  rda_reference + "Learn more →" to /nutrients/[key]. Escape/backdrop close.
+- **Wired into BOTH nutrition surfaces** (nutrient rows are now tappable buttons, subtle
+  underline, open the modal with the row's amount):
+  - `src/app/ingredients/[slug]/page.tsx` — headline macros (Calories, Carbs, Sugar,
+    Fiber, Protein, Fat, Saturated, Mono/Polyunsaturated, Sodium, Cholesterol) + detailed
+    micronutrients + amino acids. Label "per 100g". Mono→`mufa_total`, Poly→`pufa_total`
+    (blob field names differ from nutrient keys). Trans fat NOT linked (no nutrient page).
+  - `src/app/recipes/[slug]/page.tsx` — headline nutrients + full grouped expander rows.
+    Label "per serving".
+  - **Omega-6/-3 rollup rows NON-tappable on both** (computed aggregates, no nutrient row;
+    given empty-string key).
+
+## REMAINING ENHANCEMENT (designed, NOT built) — "% of daily target" in the modal
+The design doc's nicest idea (§4.3): show not just "Vitamin E 25.63 mg" but
+"…= 171% of your daily target". SHIPPED VERSION shows the raw amount only. Adding the %
+needs the demand-model target for that nutrient for the logged-in person
+(`person_nutrient_targets` / resolve-requirement cascade) + the context amount. Clean
+follow-up, its own small piece. Logged-out → show the generic reference instead.
+
+## OTHER FOLLOW-UPS
+- **No nav link to /nutrients yet** — add "Nutrients" to the Sidebar manually (stale-
+  snapshot risk; not shipped), like Techniques.
+- Content review pass (flip content_reviewed per nutrient as vetted).
+- Design-doc remaining [OPEN]s (mostly moot now): 4b omega-rollup linking (resolved: non-
+  linked), 5a serving sizes (the "% of target in a serving" graph would need per-ingredient
+  servings; 100g/​per-serving used for now), 6a content storage (resolved: columns on
+  nutrient).
+
+## PROCESS NOTE (cost real time this session)
+File PLACEMENT was the single most error-prone step — multiple rounds where delivered
+files (API routes, the recipe page) simply weren't placed/committed, producing 404s and
+"feature missing" symptoms that looked like bugs but were just absent files. Reliable
+checks: `Get-ChildItem -Recurse <folder>` to see real contents; `Get-Content -LiteralPath
+"...[slug]..." | Select-String "<marker>"` to confirm a file has the expected code;
+and the **`npm run build` route list** as the authoritative proof a route is placed
+(if /nutrients and ƒ /api/nutrients/[key] appear, files are right). `Test-Path` gives
+FALSE NEGATIVES on [bracket] paths (treats them as wildcards) — don't trust it for
+dynamic-route files; use -LiteralPath or Get-ChildItem.

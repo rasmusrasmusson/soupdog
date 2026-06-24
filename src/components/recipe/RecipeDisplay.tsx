@@ -24,6 +24,7 @@ import { APPLIANCES } from '@/lib/appliances';
 import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { TaskDetailModal } from '@/components/techniques/TaskDetailModal';
 import { ToolDetailModal } from '@/components/recipe/ToolDetailModal';
+import { IngredientDetailModal } from '@/components/recipe/IngredientDetailModal';
 import { useLocale } from '@/lib/locale-context';
 
 const B    = '1px solid var(--border)';
@@ -291,6 +292,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
   const { locale } = useLocale();
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openToolSlug, setOpenToolSlug] = useState<string | null>(null);
+  const [openIngredientSlug, setOpenIngredientSlug] = useState<string | null>(null);
   const tbl: React.CSSProperties   = { borderCollapse: 'collapse', border: B, width: '100%', fontSize: 12 };
   const thead: React.CSSProperties = { background: 'var(--surface-hover)' };
   const td: React.CSSProperties    = { padding: '9px 14px', color: 'var(--fg)', verticalAlign: 'middle' };
@@ -403,7 +405,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                   <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
                   <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                     {linkIngredients && ing.ingredientSlug
-                      ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</a>
+                      ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontWeight: 'inherit', color: 'var(--fg)', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
                       : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                     {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
                   </td>
@@ -424,9 +426,11 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           <SectionHeader title="Tools" meta={`${derivedTools.length} items`} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginTop: 4 }}>
             {derivedTools.map((t) => (
-              <span key={t} style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)' }}>
+              <button type="button" key={t} onClick={() => setOpenToolSlug(t)}
+                style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit' }}
+                className="hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
                 {capitalizeLabel(t)}
-              </span>
+              </button>
             ))}
           </div>
         </section>
@@ -539,7 +543,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             {isOn && rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} /></td>}
                             <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                               {linkIngredients && ing.ingredientSlug
-                                ? <a href={`/ingredients/${ing.ingredientSlug}`} style={{ color: 'var(--fg)', textDecoration: 'none' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</a>
+                                ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontWeight: 'inherit', color: 'var(--fg)', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
                                 : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
@@ -570,6 +574,9 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
       )}
       {openToolSlug && (
         <ToolDetailModal slug={openToolSlug} onClose={() => setOpenToolSlug(null)} />
+      )}
+      {openIngredientSlug && (
+        <IngredientDetailModal slug={openIngredientSlug} onClose={() => setOpenIngredientSlug(null)} />
       )}
     </div>
   );
