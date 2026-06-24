@@ -20,6 +20,7 @@ import {
   InlineToc, useTocProvider, TocProvider, anchorId,
 } from '@/components/knowledge/KnowledgePage';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
+import { NutrientDetailModal } from '@/components/recipe/NutrientDetailModal';
 import { IngredientPreviewCard, type CompositionEntry } from '@/components/knowledge/CompositionEditor';
 
 // ── Types ─────────────────────────────────────────────────────
@@ -86,16 +87,30 @@ function fmt(v: number | undefined, unit: string): string | null {
 }
 
 // ── small presentational helpers ──────────────────────────────
-function NutrRow({ label, value, indent = false, bold = false }: {
+function NutrRow({ label, value, indent = false, bold = false, nutrientKey, amount, onPick }: {
   label: string; value: string | null; indent?: boolean; bold?: boolean;
+  nutrientKey?: string; amount?: number; onPick?: (key: string, amount: number) => void;
 }) {
   if (value == null) return null;
+  const pickable = !!nutrientKey && !!onPick;
   return (
     <tr style={{ borderTop: B }}>
       <td style={{
         padding: '7px 0 7px 12px', paddingLeft: indent ? 28 : 12,
         fontSize: 12, color: bold ? FG : MUT, fontWeight: bold ? 600 : 400,
-      }}>{label}</td>
+      }}>
+        {pickable ? (
+          <button
+            onClick={() => onPick!(nutrientKey!, amount ?? 0)}
+            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+              font: 'inherit', color: 'inherit', fontWeight: 'inherit', textAlign: 'left',
+              textDecoration: 'underline', textDecorationColor: 'var(--border)',
+              textUnderlineOffset: '2px' }}
+            className="hover:text-[var(--accent)] transition-colors">
+            {label}
+          </button>
+        ) : label}
+      </td>
       <td style={{
         padding: '7px 12px 7px 0', textAlign: 'right',
         fontFamily: MONO, fontSize: 12, color: FG, fontVariantNumeric: 'tabular-nums',
@@ -155,6 +170,7 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
   const [error, setError] = useState<string | null>(null);
   const [aiPolling, setAiPolling] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [modalNutrient, setModalNutrient] = useState<{ key: string; amount: number } | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
 
@@ -589,17 +605,17 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                     const CAT_ORDER = ['vitamin','mineral','fatty_acid','other'];
                     const CAT_LABEL: Record<string,string> = {
                       vitamin: 'Vitamins', mineral: 'Minerals', fatty_acid: 'Fats & fatty acids', other: 'Other' };
-                    const groups: Record<string, [string, number, string][]> = {};
+                    const groups: Record<string, [string, number, string, string][]> = {};
                     for (const [k, v] of Object.entries(n)) {
                       if (typeof v !== 'number' || v <= 0 || BASIC.has(k)) continue;
                       const m = metaByKey[k];
                       const cat = m?.category ?? 'other';
-                      (groups[cat] ??= []).push([m?.name ?? k, v, m?.unit ?? 'g']);
+                      (groups[cat] ??= []).push([m?.name ?? k, v, m?.unit ?? 'g', m?.key ?? k]);
                     }
                     if (o6 > 0 || o3 > 0) {
                       groups['fatty_acid'] = [
-                        ...(o6 > 0 ? [['Omega-6 (total)', o6, 'g'] as [string,number,string]] : []),
-                        ...(o3 > 0 ? [['Omega-3 (total)', o3, 'g'] as [string,number,string]] : []),
+                        ...(o6 > 0 ? [['Omega-6 (total)', o6, 'g', ''] as [string,number,string,string]] : []),
+                        ...(o3 > 0 ? [['Omega-3 (total)', o3, 'g', ''] as [string,number,string,string]] : []),
                         ...(groups['fatty_acid'] ?? []),
                       ];
                     }
@@ -623,9 +639,11 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                                     {CAT_LABEL[cat] ?? cat}
                                   </td>
                                 </tr>
-                                {groups[cat].map(([label, value, unit]) => (
+                                {groups[cat].map(([label, value, unit, nkey]) => (
                                   <React.Fragment key={cat + label}>
-                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)} />
+                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)}
+                                      nutrientKey={nkey || undefined} amount={value}
+                                      onPick={(k, a) => setModalNutrient({ key: k, amount: a })} />
                                   </React.Fragment>
                                 ))}
                               </React.Fragment>
@@ -641,9 +659,11 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                             </summary>
                             <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12, marginTop: 8 }}>
                               <tbody>
-                                {aminoRows.map(([label, value, unit]) => (
+                                {aminoRows.map(([label, value, unit, nkey]) => (
                                   <React.Fragment key={'aa' + label}>
-                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)} />
+                                    <NutrRow label={label} value={fmt(value, ` ${unit}`)}
+                                      nutrientKey={nkey || undefined} amount={value}
+                                      onPick={(k, a) => setModalNutrient({ key: k, amount: a })} />
                                   </React.Fragment>
                                 ))}
                               </tbody>
@@ -827,6 +847,15 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
       </div>
 
       <style>{`@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
+
+      {modalNutrient && (
+        <NutrientDetailModal
+          nutrientKey={modalNutrient.key}
+          amount={modalNutrient.amount}
+          amountLabel="per 100g"
+          onClose={() => setModalNutrient(null)}
+        />
+      )}
     </TocProvider>
   );
 }
