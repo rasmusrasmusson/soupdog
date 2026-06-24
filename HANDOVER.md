@@ -3032,3 +3032,561 @@ records as a tiebreaker to reduce sparse matches). DO NOT IMPROVISE — spine-le
   the view; check the recipe-page client fallback + RecipePrintLayout first).
 - Matcher refinement idea: prefer higher-nutrient-COUNT records as a tiebreaker (would
   fix the sparse "Olive oil" match).
+# SESSION UPDATE — 2026-06-22 (cont.) — Nutrition Phase 2C: AI auto-matcher + ingredient dedup; catalog populated with USDA data
+
+Continuation of the same long session (Phase 1 spine + 2A USDA ingest + 2B curation
+worklist were earlier the same day). This stretch: deduped the ingredient list, built
+the AI auto-matcher, debugged it through SIX real issues, and populated the bulk of the
+catalog with lab-grade USDA nutrition. Net result: nutrition went from 100% AI estimates
+this morning to ~80% of real ingredients on evidence-graded USDA data.
+
+## INGREDIENT DEDUP — DONE (dry-run first; see prior handover block for full detail)
+- Patched `merge_ingredient()` to re-point the new `ingredient_nutrient_value` table +
+  carry `fdc_id` forward (it predated Phase 1; would've orphaned nutrition rows).
+- 15 merges of clear duplicates; "Onions"/"Tomatoes" plurals MARKED is_category (they
+  parent 5/4 child ingredients — caught in dry-run, NOT merged). 12 category nodes +
+  3 non-foods flagged. Result: 318 → 274 real ingredients.
+- Multi-source merge PROVEN: olive oil survivor holds 53 e1 + 6 e2 + 8 e0 rows, view
+  resolves per-nutrient. Files: dedup_00..03.
+
+## AUTO-MATCHER — BUILT (Phase 2C). The bulk-population engine.
+- **`nutrition_match_status` enum** on ingredients (unmatched/auto_matched/needs_review/
+  confirmed). Migration: nutrition_phase2c_match_status.sql.
+- **Shared lib `src/lib/nutrition/usda.ts`** — usdaSearch + importFdcNutrition +
+  looksLikeBlend + normalizeIngredientName + serviceClient. Both the manual 2B route and
+  the auto-matcher use it (one ingest path).
+- **`POST /api/admin/nutrition/auto-match`** (batch): for each unmatched real ingredient →
+  USDA search → Haiku (claude-haiku-4-5) picks best candidate + confidence → guardrails →
+  high-confidence+clean ⇒ import + auto_matched; else needs_review. Feature logged as
+  `nutrition_match`. **batchSize=8** (was 20; see timeout bug).
+- **Worklist page** gained "Run until done" (loops batches until drained, with Stop) +
+  "Needs review" filter + status badges. Manual route now marks `confirmed`.
+- **Quality verified**: spot-checked auto-matched calories all correct (Almonds 579,
+  Banana 89, Carrots 41, Butter 717, etc.). Matcher picks the plain/raw form, punts hard
+  ones to review. Safe failure direction (over-flag, never mis-import).
+
+## SIX BUGS FIXED (the real story of this stretch — all USDA/matcher issues)
+1. **USDA 400 on dataType encoding** — sending `dataType=Foundation,SR Legacy,Survey
+   (FNDDS)` 400'd because of the PARENS in "(FNDDS)". Fix: send only `Foundation,SR
+   Legacy` (space is fine, parens aren't). Diagnosed via direct browser USDA call (worked
+   without dataType) vs deployed call (failed with it).
+2. **Branded-noise ranking** — without dataType, USDA returned thousands of Branded
+   "APPLES" products burying plain "Apples, raw". Fix: send the dataType filter so lab
+   foods rank first.
+3. **Plain food not surfacing** — even filtered, "apples" returned "Croissants, apple"
+   etc. above "Apples, raw". Fix: fetch pageSize=50 + RE-RANK in code (boost leading-word
+   + "raw", demote dessert/product words).
+4. **OVER-FLAGGING (the big one)** — match rate crashed to ~33% (Cucumber, Egg, Chicken
+   all flagged!). Root cause: the re-rank + prompt + looksLikeBlend ALL penalized commas
+   and "with" — but USDA's CANONICAL plain foods are comma-heavy ("Cucumber, with peel,
+   raw"). Fix: stop penalizing commas/"with"; loosen prompt to confidently pick obvious
+   plain foods; narrow looksLikeBlend to genuine blends ("X and Y", "blend", "mixed").
+   Match rate recovered to ~80%.
+5. **Vercel timeout halting the auto-loop** — batchSize=20 = ~20 sequential USDA+Haiku
+   calls per invocation, exceeding the function timeout → loop stopped early. Fix:
+   batchSize=8 (finishes well within timeout); 19 batches ran clean.
+6. **Slash-names + qualifiers flagged** — "Courgette / Zucchini", "freshly ground black
+   pepper", "fresh mozzarella" searched literally → junk. Fix: `normalizeIngredientName`
+   strips slash-variants (take first), qualifier prefixes (fresh/cold/whole/ground/...),
+   and powder/flakes/leaves suffixes before searching; Haiku still judges against the REAL
+   name. Recovers ~40 common foods.
+
+## RESET PATTERN (important for re-runs)
+`nutrition_reset_false_review.sql` flips needs_review → unmatched so an IMPROVED matcher
+retries them. Used after each matcher fix. Keeps auto_matched + confirmed untouched.
+
+## FINAL STATE (verified end of session)
+Out of **274 real ingredients**: **203 auto_matched + 2 confirmed = 205 on real USDA
+data (~75%)**, **69 needs_review**, 0 unmatched. (Catalog went from 100% AI estimates
+this morning to ~75% on lab-grade, evidence-graded USDA nutrition in one session.)
+
+The **69 needs_review is the honest USDA coverage FLOOR**, not a failure:
+- Non-US / specialty ingredients USDA genuinely lacks: dawadawa, goraka, egusi, kithul
+  treacle, sera (lemongrass), rampe (screwpine), pandan, bitterleaf, scotch bonnet,
+  dashi stock, tiger nut flour, maldive fish flakes, smoked catfish, fonio.
+- Compound / branded: green & Tikka curry paste, Garam masala, Indian Spice Mix,
+  dark/milk/white chocolate couverture.
+- Alcohol: Campari, sweet red vermouth, Red/White wine, gin, Beer.
+- A few non-foods that slipped dedup's category-marking: ice / Ice cube / large ice
+  cube, milk (egg wash), salt and black pepper — mark these is_product/is_category in a
+  cleanup pass so they leave the review queue.
+These stay on e0 AI estimates (or get hand-matched rarely). Correct outcome.
+
+Possible quick win left (~15 min, diminishing returns): a handful of common foods may
+still sit in review on a naming quirk the normalizer didn't catch — hand-match them in
+the worklist (search the simple term, pick the plain/raw USDA food). Optional.
+
+
+## KEY LESSONS
+- **USDA's plain foods are comma-heavy** ("Egg, whole, raw, fresh") — never penalize
+  commas/qualifiers when ranking or blend-detecting; that buries the right answers.
+- **Sequential API batches + serverless timeouts** — keep batch size small (8) so each
+  invocation finishes; loop client-side for volume.
+- **Over-flagging is the safe failure** — the matcher never mis-imported; worst case was
+  flagging easy foods, fixable by loosening. Verify match QUALITY (spot-check calories)
+  separately from match RATE.
+- **Normalize the query, judge on the real name** — clean term for FINDING candidates,
+  original name for the AI's MATCH decision.
+- ROTATE the USDA API key (pasted in chat/screenshots during debugging — treat burned);
+  it lives in Vercel env `USDA_FDC_API_KEY`.
+
+## NEXT (nutrition)
+- Hand-match or accept-estimate the needs_review residue (worklist, ~20 min).
+- Mark the slipped non-foods (ice/ice cube/egg wash/salt-and-pepper) is_product/category.
+- Foundation-vs-SR-Legacy: matcher prefers SR Legacy (coverage); could STACK both for
+  high-value ingredients later (architecture supports per-nutrient resolution).
+- Surface evidence grade in recipe UI (min-grade source badge — small, uses existing data).
+- Drop the nutrition_per_100g blob after the recipe-page client fallback repoints to the view.
+- typical_unit_weight_g backfill (countable ingredients silently dropped from totals).
+
+---
+
+## DISPLAY LAYER + AMINO ACIDS (same session, after the matcher)
+
+### Generic calc + full nutrient display (SHIPPED)
+- `src/lib/recipe-nutrition.ts` — the sum + cooking-retention loops are now GENERIC
+  (iterate every nutrient key, not a hardcoded 12). Interface types loosened to index
+  signatures. This was the real bottleneck — the view always had 53 nutrients; the calc
+  layer was dropping all but 12.
+- `src/app/api/recipes/[id]/nutrition/route.ts` — returns `nutrientMeta`
+  (key/name/category/unit/display_order) so the UI groups/labels the full set.
+- `src/app/recipes/[slug]/page.tsx` — headline nutrients shown by default +
+  "Show full nutrition (N more)" expander, grouped Macros/Vitamins/Minerals/Fats &
+  fatty acids/Other, with an OMEGA-6/-3 ROLLUP (sums the n-6 / n-3 isomers into labeled
+  totals; verified on olive oil: O6 9.76g = linoleic, O3 0.76g = ALA — correct).
+- `src/app/ingredients/[slug]/page.tsx` — NOW READS THE RESOLVED VIEW
+  (`ingredient_nutrition_current`), NOT the stale `nutrition_per_100g` blob. Shows an
+  honest evidence-grade source label ("USDA (SR Legacy)" + green badge / "AI estimate" +
+  plain badge) from the best grade present. Generic grouped micronutrients + omega
+  rollup. The blob is now SUPERSEDED on recipe + ingredient pages (still a fallback if
+  the view is empty; safe to drop once nothing reads it).
+- Print layout (`RecipePrintLayout`) deliberately LEFT on the compact hardcoded macro
+  list — a printed card shouldn't have 53 rows. Intentional scope boundary.
+
+### Amino acids — Effort 1 (data spine) SHIPPED
+- `nutrition_amino_acids.sql` — adds 18 amino acids as a new `amino_acid` category with
+  USDA fdc_nutrient_ids (1210–1227). importFdcNutrition maps by fdc_nutrient_id, so a
+  re-import populates them from the SAME matched USDA records (no re-matching, no AI cost).
+- `src/app/api/admin/nutrition/reimport/route.ts` (NEW) — admin batch route: re-fetches
+  USDA for already-matched ingredients (those with fdc_id), pages via a `cursor`. Use
+  after adding ANY new nutrient. Idempotent.
+- `src/app/admin/nutrition/page.tsx` — "Re-import nutrients" button (loops the route).
+- Ingredient page shows amino acids in a NESTED collapsed "Amino acids (N)" expander,
+  kept OUT of the main micronutrient count — present but not cluttering. Only appears
+  where USDA has amino data (protein foods); correctly hidden for oils/sugar.
+- **Effort 2 (NOT built, by design):** the "special" protein-quality feature —
+  complete-protein indicator, protein-quality score, athlete leucine view. Amino acids
+  are the data spine under it. Serves vegans (complementary protein), athletes (leucine/
+  BCAA), PKU (phenylalanine). Build as its own designed feature; don't ship 18 raw rows
+  as if that's the feature.
+
+### TWO FAILED BUILDS this session — the lesson
+Both deploys failed on TYPE errors my local check missed:
+1. `transpileModule` checks SYNTAX ONLY, not type assignability — missed a
+   NutritionPer100g → Record<string,number> assignment error.
+2. Then I added real `tsc` but OVER-FILTERED — excluded all TS7006 implicit-any as
+   "pre-existing noise," which hid a REAL implicit-any (`res`, `s`) in new code, since
+   the project uses noImplicitAny.
+**RULE GOING FORWARD: run `npm run build` LOCALLY before pushing.** It's the exact
+check Vercel runs (~30s) and catches these instantly. Isolated `tsc` gives both false
+negatives (over-filtering) and false positives (a `.map(s=>...)` that ships fine in
+other files flagged in isolation). Only the real build is authoritative.
+
+---
+
+## >>> NEXT SESSION HEADLINE: INGREDIENT CONCEPTS & VARIANTS (spine-level, DESIGN FIRST) <<<
+The olive-oil / apple problem. "Olive oil / Extra virgin / Light olive oil" and
+"Apples / Fuji / Gala" are variants of ONE concept but stored as independent ingredients
+with inconsistent USDA matches (EVOO matched a rich 53-nutrient SR Legacy record; "Olive
+oil" matched a sparse 5-nutrient one → wildly different detail for the "same" thing).
+
+CURRENT STATE (verified via SQL):
+- `ingredients` has ONLY `parent_id` (uuid, self-FK) for grouping. NO concept/family/
+  variant column. **`food_families` does NOT exist** (earlier handover guess was wrong —
+  do not assume it's there).
+- `parent_id` is HALF-USED: "Light olive oil" → parent "Olive oil"; but "Extra virgin
+  olive oil" (the dedup survivor bad2098d) is orphaned (parent_id null); "apples" null.
+
+MODEL — NOW LARGELY DECIDED (Rasmus settled the direction; build is next session):
+- **Concepts, NOT parent-child.** Rasmus rejects parent_id trees for food: "parent of X"
+  is subjective (is olive oil under oils? fats? Mediterranean? pressed-from-fruit?). A
+  tree forces one parent and pretends the rest don't exist. Concepts are MANY-TO-MANY —
+  an ingredient belongs to several concepts, none "the" parent. Consistent with the
+  "everything is one ingredient" invariant (a flat ingredient space + overlapping concept
+  groupings, not a rigid hierarchy over ingredients). This IS the recipe-model concept-
+  fork doc's design (curated, global, m2m, overlapping — e-commerce multi-category). The
+  existing half-used parent_id is the lesser/older idea; keep it only for the narrow
+  mechanical case (branded product -> its generic), use concepts for perceptual grouping.
+- **Purpose of a concept:** browse / drill-down to more specific versions of an
+  ingredient — and FREQUENTLY (not always) that drill-down is to find alternatives. So
+  the concept layer and the SUBSTITUTION surface are the same structure viewed two ways
+  (connects to the role-strength / substitution design docs).
+- **Nutrition resolution (the angle that surfaced this) — STRONG PROPOSAL, verify in
+  design:** a concept is generic (not lab-tested); a specific variety IS. For "which
+  nutrition does the generic concept use" — DON'T compute averages (fake precision +
+  unsolvable consumption-weighting). Instead: **USDA usually publishes a GENERIC entry
+  alongside the varieties** ("Oil, olive, salad or cooking"; "Apples, raw, with skin"),
+  so match the concept to USDA's generic entry where one exists; fall back to a
+  designated REPRESENTATIVE variety where it doesn't. RESEARCH NOTE: verify how nutrition
+  DBs / other systems handle generic-vs-variety before finalizing. (Most real Soupdog
+  ingredients — olive oil, apple, flour, milk — have USDA generics, so this covers the
+  common case and the sparse-vs-rich match mismatch stops mattering: recipe reads the
+  concept's nutrition, not whichever variant it happened to link to.)
+- **Recipe reference:** a recipe-ingredient points at EITHER a concept ("olive oil",
+  "apples") OR a specific variant ("EVOO", "Granny Smith"). AI-generated recipes pick
+  concept/tier level (olive oil, or "extra virgin"), not brands. Specificity is a QUALITY
+  SIGNAL — "apples" works, "a tart apple like Granny Smith" is a better recipe; the system
+  can NUDGE toward specificity (nice Soupdog-ish feature falling out of the structure).
+  Brand-level differences are minor but occasionally worth recognizing.
+- **Membership governance:** sometimes objective (Granny Smith IS an apple, not a pear),
+  sometimes subjective — and that's FINE. m2m tolerates ambiguity (tomato can be in both
+  "fruits" and "cooking vegetables"). AI suggests memberships, human curator confirms
+  ("system measures & suggests, human names & decides").
+
+REMAINING [OPEN] for the design doc (narrower than first thought):
+1. **Do concepts NEST?** (Olive oil -> Extra virgin olive oil -> brands; the "extra virgin
+   vs other oils matters, brand matters less" point implies mild hierarchy WITHIN the m2m
+   world.) Or flat membership only?
+2. **No-generic-exists fallback** — representative variety vs average (lean: representative;
+   verify what's standard — see research note above).
+3. **Migration mechanics** — re-home existing variant-dupes (3 olive oils, apple varieties)
+   onto concepts WITHOUT breaking version_ingredients / recipes FKs (dry-run discipline,
+   reuse merge_ingredient tooling).
+4. **Schema shape** — `concept` table + `concept_members` m2m join; how a recipe-ingredient
+   references concept-OR-variant; where concept-level nutrition lives (FK to the chosen
+   USDA-generic ingredient? its own nutrition rows?).
+
+Connects to: `Soupdog_Recipe_Model_Concept_Fork_Design` (concept layer), the dedup
+merge_ingredient tooling (for migration), the matcher (could prefer higher-coverage
+records as a tiebreaker to reduce sparse matches). DO NOT IMPROVISE — spine-level.
+
+## OTHER OPEN ITEMS (nutrition)
+- ROTATE the USDA API key (exposed in debugging screenshots; Vercel env USDA_FDC_API_KEY).
+- ~69 needs_review residue: hand-match easy ones / accept estimates for genuinely-absent
+  non-US foods; mark slipped non-foods (ice/egg wash/salt-and-pepper) is_product/category.
+- Trans fat: quick future add (clean per-ingredient USDA value, label-standard) — nutrient
+  row + re-import.
+- Added sugars: NOT a simple nutrient add (raw ingredients have none). Better as a
+  RECIPE-LEVEL computed field (sum sugar from added-sugar-type ingredients). Small feature.
+- B2B/lab nutrients (add when commercial track activates): Ash (1007), Starch, individual
+  sugars, sugar alcohols, carotenoid breakdowns. (Water already present.)
+- Drop nutrition_per_100g blob once nothing reads it (recipe + ingredient pages now use
+  the view; check the recipe-page client fallback + RecipePrintLayout first).
+- Matcher refinement idea: prefer higher-nutrient-COUNT records as a tiebreaker (would
+  fix the sparse "Olive oil" match).
+
+---
+
+## VERIFICATION LESSON — browser cache faked a "missing" deploy (cost ~20min)
+After pushing the amino-acid page code, `fetch('/ingredients/almonds').then(r=>r.text())
+.then(h=>h.includes('Amino acids'))` returned FALSE repeatedly — looked like the code
+wasn't deployed. Chased it through: data confirmed (SQL: 18 aminos/ingredient), route
+confirmed (console: 18 values + 18 meta rows arrive, category exactly "amino_acid",
+values typed number), file placement confirmed (uploaded src.zip → file in right place,
+contains "Amino acids"), git confirmed (HEAD = origin/main = 23ba95f, contains the code),
+Vercel confirmed (23ba95f built Ready; redeploy ce17b92 Ready in Production). Everything
+was healthy — the FALSE was purely a STALE CACHED browser response. Hard-refresh
+(Ctrl-Shift-R) → the "Amino acids (18)" panel rendered perfectly (tryptophan 0.211g …
+leucine 1.473g, all 18).
+**LESSONS:**
+- `fetch()` from the console is itself cacheable — a "missing feature" check can return a
+  stale bundle. When verifying a fresh deploy: hard-refresh first, OR cache-bust
+  (`fetch('/path?x=' + Date.now())`).
+- Confirm a push landed via `git log --oneline origin/main -3` (shows what GitHub
+  ACTUALLY has) + `git status` saying "up to date with origin/main" — not just that
+  `git push` ran. ("Everything up-to-date" means it was already pushed.)
+- **GitHub token rotation affects LOCAL git push only, NOT Vercel.** Vercel→GitHub uses
+  Vercel's own GitHub App integration (authorized in Vercel settings), independent of
+  your personal access token. A rotated token can break `git push` (auth fail → commit
+  never reaches origin) but needs NO Vercel update.
+- If a local `npm run build` fails on a file you DIDN'T touch (e.g. equipment/page),
+  suspect stale `.next` cache FIRST: `Remove-Item -Recurse -Force .next; npm run build`.
+  Vercel builds clean every time (no cache), so if Vercel was green, a local fail on an
+  untouched file is almost always stale cache.
+
+## NUTRITION ARC — COMPLETE & VERIFIED LIVE (end state)
+Almonds page (live, hard-refreshed) shows: source "USDA (SR Legacy)" + green badge,
+8 macros, "Detailed micronutrients (27)" grouped vitamins/minerals/fats(+omega-6 rollup)
+/other(water), and nested "Amino acids (18)" with all 18 AAs at real values. The whole
+nutrition layer is done: evidence-graded spine → USDA ingest → curation worklist → dedup
+→ auto-matcher (~75% on real USDA, six bugs fixed) → generic calc → full grouped display
+on recipe + ingredient pages → 71 nutrients incl. 18-amino-acid spine (Effort 1).
+# SESSION UPDATE — 2026-06-22 (cont.) — Nutrition Phase 2C: AI auto-matcher + ingredient dedup; catalog populated with USDA data
+
+Continuation of the same long session (Phase 1 spine + 2A USDA ingest + 2B curation
+worklist were earlier the same day). This stretch: deduped the ingredient list, built
+the AI auto-matcher, debugged it through SIX real issues, and populated the bulk of the
+catalog with lab-grade USDA nutrition. Net result: nutrition went from 100% AI estimates
+this morning to ~80% of real ingredients on evidence-graded USDA data.
+
+## INGREDIENT DEDUP — DONE (dry-run first; see prior handover block for full detail)
+- Patched `merge_ingredient()` to re-point the new `ingredient_nutrient_value` table +
+  carry `fdc_id` forward (it predated Phase 1; would've orphaned nutrition rows).
+- 15 merges of clear duplicates; "Onions"/"Tomatoes" plurals MARKED is_category (they
+  parent 5/4 child ingredients — caught in dry-run, NOT merged). 12 category nodes +
+  3 non-foods flagged. Result: 318 → 274 real ingredients.
+- Multi-source merge PROVEN: olive oil survivor holds 53 e1 + 6 e2 + 8 e0 rows, view
+  resolves per-nutrient. Files: dedup_00..03.
+
+## AUTO-MATCHER — BUILT (Phase 2C). The bulk-population engine.
+- **`nutrition_match_status` enum** on ingredients (unmatched/auto_matched/needs_review/
+  confirmed). Migration: nutrition_phase2c_match_status.sql.
+- **Shared lib `src/lib/nutrition/usda.ts`** — usdaSearch + importFdcNutrition +
+  looksLikeBlend + normalizeIngredientName + serviceClient. Both the manual 2B route and
+  the auto-matcher use it (one ingest path).
+- **`POST /api/admin/nutrition/auto-match`** (batch): for each unmatched real ingredient →
+  USDA search → Haiku (claude-haiku-4-5) picks best candidate + confidence → guardrails →
+  high-confidence+clean ⇒ import + auto_matched; else needs_review. Feature logged as
+  `nutrition_match`. **batchSize=8** (was 20; see timeout bug).
+- **Worklist page** gained "Run until done" (loops batches until drained, with Stop) +
+  "Needs review" filter + status badges. Manual route now marks `confirmed`.
+- **Quality verified**: spot-checked auto-matched calories all correct (Almonds 579,
+  Banana 89, Carrots 41, Butter 717, etc.). Matcher picks the plain/raw form, punts hard
+  ones to review. Safe failure direction (over-flag, never mis-import).
+
+## SIX BUGS FIXED (the real story of this stretch — all USDA/matcher issues)
+1. **USDA 400 on dataType encoding** — sending `dataType=Foundation,SR Legacy,Survey
+   (FNDDS)` 400'd because of the PARENS in "(FNDDS)". Fix: send only `Foundation,SR
+   Legacy` (space is fine, parens aren't). Diagnosed via direct browser USDA call (worked
+   without dataType) vs deployed call (failed with it).
+2. **Branded-noise ranking** — without dataType, USDA returned thousands of Branded
+   "APPLES" products burying plain "Apples, raw". Fix: send the dataType filter so lab
+   foods rank first.
+3. **Plain food not surfacing** — even filtered, "apples" returned "Croissants, apple"
+   etc. above "Apples, raw". Fix: fetch pageSize=50 + RE-RANK in code (boost leading-word
+   + "raw", demote dessert/product words).
+4. **OVER-FLAGGING (the big one)** — match rate crashed to ~33% (Cucumber, Egg, Chicken
+   all flagged!). Root cause: the re-rank + prompt + looksLikeBlend ALL penalized commas
+   and "with" — but USDA's CANONICAL plain foods are comma-heavy ("Cucumber, with peel,
+   raw"). Fix: stop penalizing commas/"with"; loosen prompt to confidently pick obvious
+   plain foods; narrow looksLikeBlend to genuine blends ("X and Y", "blend", "mixed").
+   Match rate recovered to ~80%.
+5. **Vercel timeout halting the auto-loop** — batchSize=20 = ~20 sequential USDA+Haiku
+   calls per invocation, exceeding the function timeout → loop stopped early. Fix:
+   batchSize=8 (finishes well within timeout); 19 batches ran clean.
+6. **Slash-names + qualifiers flagged** — "Courgette / Zucchini", "freshly ground black
+   pepper", "fresh mozzarella" searched literally → junk. Fix: `normalizeIngredientName`
+   strips slash-variants (take first), qualifier prefixes (fresh/cold/whole/ground/...),
+   and powder/flakes/leaves suffixes before searching; Haiku still judges against the REAL
+   name. Recovers ~40 common foods.
+
+## RESET PATTERN (important for re-runs)
+`nutrition_reset_false_review.sql` flips needs_review → unmatched so an IMPROVED matcher
+retries them. Used after each matcher fix. Keeps auto_matched + confirmed untouched.
+
+## FINAL STATE (verified end of session)
+Out of **274 real ingredients**: **203 auto_matched + 2 confirmed = 205 on real USDA
+data (~75%)**, **69 needs_review**, 0 unmatched. (Catalog went from 100% AI estimates
+this morning to ~75% on lab-grade, evidence-graded USDA nutrition in one session.)
+
+The **69 needs_review is the honest USDA coverage FLOOR**, not a failure:
+- Non-US / specialty ingredients USDA genuinely lacks: dawadawa, goraka, egusi, kithul
+  treacle, sera (lemongrass), rampe (screwpine), pandan, bitterleaf, scotch bonnet,
+  dashi stock, tiger nut flour, maldive fish flakes, smoked catfish, fonio.
+- Compound / branded: green & Tikka curry paste, Garam masala, Indian Spice Mix,
+  dark/milk/white chocolate couverture.
+- Alcohol: Campari, sweet red vermouth, Red/White wine, gin, Beer.
+- A few non-foods that slipped dedup's category-marking: ice / Ice cube / large ice
+  cube, milk (egg wash), salt and black pepper — mark these is_product/is_category in a
+  cleanup pass so they leave the review queue.
+These stay on e0 AI estimates (or get hand-matched rarely). Correct outcome.
+
+Possible quick win left (~15 min, diminishing returns): a handful of common foods may
+still sit in review on a naming quirk the normalizer didn't catch — hand-match them in
+the worklist (search the simple term, pick the plain/raw USDA food). Optional.
+
+
+## KEY LESSONS
+- **USDA's plain foods are comma-heavy** ("Egg, whole, raw, fresh") — never penalize
+  commas/qualifiers when ranking or blend-detecting; that buries the right answers.
+- **Sequential API batches + serverless timeouts** — keep batch size small (8) so each
+  invocation finishes; loop client-side for volume.
+- **Over-flagging is the safe failure** — the matcher never mis-imported; worst case was
+  flagging easy foods, fixable by loosening. Verify match QUALITY (spot-check calories)
+  separately from match RATE.
+- **Normalize the query, judge on the real name** — clean term for FINDING candidates,
+  original name for the AI's MATCH decision.
+- ROTATE the USDA API key (pasted in chat/screenshots during debugging — treat burned);
+  it lives in Vercel env `USDA_FDC_API_KEY`.
+
+## NEXT (nutrition)
+- Hand-match or accept-estimate the needs_review residue (worklist, ~20 min).
+- Mark the slipped non-foods (ice/ice cube/egg wash/salt-and-pepper) is_product/category.
+- Foundation-vs-SR-Legacy: matcher prefers SR Legacy (coverage); could STACK both for
+  high-value ingredients later (architecture supports per-nutrient resolution).
+- Surface evidence grade in recipe UI (min-grade source badge — small, uses existing data).
+- Drop the nutrition_per_100g blob after the recipe-page client fallback repoints to the view.
+- typical_unit_weight_g backfill (countable ingredients silently dropped from totals).
+
+---
+
+## DISPLAY LAYER + AMINO ACIDS (same session, after the matcher)
+
+### Generic calc + full nutrient display (SHIPPED)
+- `src/lib/recipe-nutrition.ts` — the sum + cooking-retention loops are now GENERIC
+  (iterate every nutrient key, not a hardcoded 12). Interface types loosened to index
+  signatures. This was the real bottleneck — the view always had 53 nutrients; the calc
+  layer was dropping all but 12.
+- `src/app/api/recipes/[id]/nutrition/route.ts` — returns `nutrientMeta`
+  (key/name/category/unit/display_order) so the UI groups/labels the full set.
+- `src/app/recipes/[slug]/page.tsx` — headline nutrients shown by default +
+  "Show full nutrition (N more)" expander, grouped Macros/Vitamins/Minerals/Fats &
+  fatty acids/Other, with an OMEGA-6/-3 ROLLUP (sums the n-6 / n-3 isomers into labeled
+  totals; verified on olive oil: O6 9.76g = linoleic, O3 0.76g = ALA — correct).
+- `src/app/ingredients/[slug]/page.tsx` — NOW READS THE RESOLVED VIEW
+  (`ingredient_nutrition_current`), NOT the stale `nutrition_per_100g` blob. Shows an
+  honest evidence-grade source label ("USDA (SR Legacy)" + green badge / "AI estimate" +
+  plain badge) from the best grade present. Generic grouped micronutrients + omega
+  rollup. The blob is now SUPERSEDED on recipe + ingredient pages (still a fallback if
+  the view is empty; safe to drop once nothing reads it).
+- Print layout (`RecipePrintLayout`) deliberately LEFT on the compact hardcoded macro
+  list — a printed card shouldn't have 53 rows. Intentional scope boundary.
+
+### Amino acids — Effort 1 (data spine) SHIPPED
+- `nutrition_amino_acids.sql` — adds 18 amino acids as a new `amino_acid` category with
+  USDA fdc_nutrient_ids (1210–1227). importFdcNutrition maps by fdc_nutrient_id, so a
+  re-import populates them from the SAME matched USDA records (no re-matching, no AI cost).
+- `src/app/api/admin/nutrition/reimport/route.ts` (NEW) — admin batch route: re-fetches
+  USDA for already-matched ingredients (those with fdc_id), pages via a `cursor`. Use
+  after adding ANY new nutrient. Idempotent.
+- `src/app/admin/nutrition/page.tsx` — "Re-import nutrients" button (loops the route).
+- Ingredient page shows amino acids in a NESTED collapsed "Amino acids (N)" expander,
+  kept OUT of the main micronutrient count — present but not cluttering. Only appears
+  where USDA has amino data (protein foods); correctly hidden for oils/sugar.
+- **Effort 2 (NOT built, by design):** the "special" protein-quality feature —
+  complete-protein indicator, protein-quality score, athlete leucine view. Amino acids
+  are the data spine under it. Serves vegans (complementary protein), athletes (leucine/
+  BCAA), PKU (phenylalanine). Build as its own designed feature; don't ship 18 raw rows
+  as if that's the feature.
+
+### TWO FAILED BUILDS this session — the lesson
+Both deploys failed on TYPE errors my local check missed:
+1. `transpileModule` checks SYNTAX ONLY, not type assignability — missed a
+   NutritionPer100g → Record<string,number> assignment error.
+2. Then I added real `tsc` but OVER-FILTERED — excluded all TS7006 implicit-any as
+   "pre-existing noise," which hid a REAL implicit-any (`res`, `s`) in new code, since
+   the project uses noImplicitAny.
+**RULE GOING FORWARD: run `npm run build` LOCALLY before pushing.** It's the exact
+check Vercel runs (~30s) and catches these instantly. Isolated `tsc` gives both false
+negatives (over-filtering) and false positives (a `.map(s=>...)` that ships fine in
+other files flagged in isolation). Only the real build is authoritative.
+
+---
+
+## >>> NEXT SESSION HEADLINE: INGREDIENT CONCEPTS & VARIANTS (spine-level, DESIGN FIRST) <<<
+The olive-oil / apple problem. "Olive oil / Extra virgin / Light olive oil" and
+"Apples / Fuji / Gala" are variants of ONE concept but stored as independent ingredients
+with inconsistent USDA matches (EVOO matched a rich 53-nutrient SR Legacy record; "Olive
+oil" matched a sparse 5-nutrient one → wildly different detail for the "same" thing).
+
+CURRENT STATE (verified via SQL):
+- `ingredients` has ONLY `parent_id` (uuid, self-FK) for grouping. NO concept/family/
+  variant column. **`food_families` does NOT exist** (earlier handover guess was wrong —
+  do not assume it's there).
+- `parent_id` is HALF-USED: "Light olive oil" → parent "Olive oil"; but "Extra virgin
+  olive oil" (the dedup survivor bad2098d) is orphaned (parent_id null); "apples" null.
+
+MODEL — NOW LARGELY DECIDED (Rasmus settled the direction; build is next session):
+- **Concepts, NOT parent-child.** Rasmus rejects parent_id trees for food: "parent of X"
+  is subjective (is olive oil under oils? fats? Mediterranean? pressed-from-fruit?). A
+  tree forces one parent and pretends the rest don't exist. Concepts are MANY-TO-MANY —
+  an ingredient belongs to several concepts, none "the" parent. Consistent with the
+  "everything is one ingredient" invariant (a flat ingredient space + overlapping concept
+  groupings, not a rigid hierarchy over ingredients). This IS the recipe-model concept-
+  fork doc's design (curated, global, m2m, overlapping — e-commerce multi-category). The
+  existing half-used parent_id is the lesser/older idea; keep it only for the narrow
+  mechanical case (branded product -> its generic), use concepts for perceptual grouping.
+- **Purpose of a concept:** browse / drill-down to more specific versions of an
+  ingredient — and FREQUENTLY (not always) that drill-down is to find alternatives. So
+  the concept layer and the SUBSTITUTION surface are the same structure viewed two ways
+  (connects to the role-strength / substitution design docs).
+- **Nutrition resolution (the angle that surfaced this) — STRONG PROPOSAL, verify in
+  design:** a concept is generic (not lab-tested); a specific variety IS. For "which
+  nutrition does the generic concept use" — DON'T compute averages (fake precision +
+  unsolvable consumption-weighting). Instead: **USDA usually publishes a GENERIC entry
+  alongside the varieties** ("Oil, olive, salad or cooking"; "Apples, raw, with skin"),
+  so match the concept to USDA's generic entry where one exists; fall back to a
+  designated REPRESENTATIVE variety where it doesn't. RESEARCH NOTE: verify how nutrition
+  DBs / other systems handle generic-vs-variety before finalizing. (Most real Soupdog
+  ingredients — olive oil, apple, flour, milk — have USDA generics, so this covers the
+  common case and the sparse-vs-rich match mismatch stops mattering: recipe reads the
+  concept's nutrition, not whichever variant it happened to link to.)
+- **Recipe reference:** a recipe-ingredient points at EITHER a concept ("olive oil",
+  "apples") OR a specific variant ("EVOO", "Granny Smith"). AI-generated recipes pick
+  concept/tier level (olive oil, or "extra virgin"), not brands. Specificity is a QUALITY
+  SIGNAL — "apples" works, "a tart apple like Granny Smith" is a better recipe; the system
+  can NUDGE toward specificity (nice Soupdog-ish feature falling out of the structure).
+  Brand-level differences are minor but occasionally worth recognizing.
+- **Membership governance:** sometimes objective (Granny Smith IS an apple, not a pear),
+  sometimes subjective — and that's FINE. m2m tolerates ambiguity (tomato can be in both
+  "fruits" and "cooking vegetables"). AI suggests memberships, human curator confirms
+  ("system measures & suggests, human names & decides").
+
+REMAINING [OPEN] for the design doc (narrower than first thought):
+1. **Do concepts NEST?** (Olive oil -> Extra virgin olive oil -> brands; the "extra virgin
+   vs other oils matters, brand matters less" point implies mild hierarchy WITHIN the m2m
+   world.) Or flat membership only?
+2. **No-generic-exists fallback** — representative variety vs average (lean: representative;
+   verify what's standard — see research note above).
+3. **Migration mechanics** — re-home existing variant-dupes (3 olive oils, apple varieties)
+   onto concepts WITHOUT breaking version_ingredients / recipes FKs (dry-run discipline,
+   reuse merge_ingredient tooling).
+4. **Schema shape** — `concept` table + `concept_members` m2m join; how a recipe-ingredient
+   references concept-OR-variant; where concept-level nutrition lives (FK to the chosen
+   USDA-generic ingredient? its own nutrition rows?).
+
+Connects to: `Soupdog_Recipe_Model_Concept_Fork_Design` (concept layer), the dedup
+merge_ingredient tooling (for migration), the matcher (could prefer higher-coverage
+records as a tiebreaker to reduce sparse matches). DO NOT IMPROVISE — spine-level.
+
+## OTHER OPEN ITEMS (nutrition)
+- ROTATE the USDA API key (exposed in debugging screenshots; Vercel env USDA_FDC_API_KEY).
+- ~69 needs_review residue: hand-match easy ones / accept estimates for genuinely-absent
+  non-US foods; mark slipped non-foods (ice/egg wash/salt-and-pepper) is_product/category.
+- Trans fat: quick future add (clean per-ingredient USDA value, label-standard) — nutrient
+  row + re-import.
+- Added sugars: NOT a simple nutrient add (raw ingredients have none). Better as a
+  RECIPE-LEVEL computed field (sum sugar from added-sugar-type ingredients). Small feature.
+- B2B/lab nutrients (add when commercial track activates): Ash (1007), Starch, individual
+  sugars, sugar alcohols, carotenoid breakdowns. (Water already present.)
+- Drop nutrition_per_100g blob once nothing reads it (recipe + ingredient pages now use
+  the view; check the recipe-page client fallback + RecipePrintLayout first).
+- Matcher refinement idea: prefer higher-nutrient-COUNT records as a tiebreaker (would
+  fix the sparse "Olive oil" match).
+
+---
+
+## VERIFICATION LESSON — browser cache faked a "missing" deploy (cost ~20min)
+After pushing the amino-acid page code, `fetch('/ingredients/almonds').then(r=>r.text())
+.then(h=>h.includes('Amino acids'))` returned FALSE repeatedly — looked like the code
+wasn't deployed. Chased it through: data confirmed (SQL: 18 aminos/ingredient), route
+confirmed (console: 18 values + 18 meta rows arrive, category exactly "amino_acid",
+values typed number), file placement confirmed (uploaded src.zip → file in right place,
+contains "Amino acids"), git confirmed (HEAD = origin/main = 23ba95f, contains the code),
+Vercel confirmed (23ba95f built Ready; redeploy ce17b92 Ready in Production). Everything
+was healthy — the FALSE was purely a STALE CACHED browser response. Hard-refresh
+(Ctrl-Shift-R) → the "Amino acids (18)" panel rendered perfectly (tryptophan 0.211g …
+leucine 1.473g, all 18).
+**LESSONS:**
+- `fetch()` from the console is itself cacheable — a "missing feature" check can return a
+  stale bundle. When verifying a fresh deploy: hard-refresh first, OR cache-bust
+  (`fetch('/path?x=' + Date.now())`).
+- Confirm a push landed via `git log --oneline origin/main -3` (shows what GitHub
+  ACTUALLY has) + `git status` saying "up to date with origin/main" — not just that
+  `git push` ran. ("Everything up-to-date" means it was already pushed.)
+- **GitHub token rotation affects LOCAL git push only, NOT Vercel.** Vercel→GitHub uses
+  Vercel's own GitHub App integration (authorized in Vercel settings), independent of
+  your personal access token. A rotated token can break `git push` (auth fail → commit
+  never reaches origin) but needs NO Vercel update.
+- If a local `npm run build` fails on a file you DIDN'T touch (e.g. equipment/page),
+  suspect stale `.next` cache FIRST: `Remove-Item -Recurse -Force .next; npm run build`.
+  Vercel builds clean every time (no cache), so if Vercel was green, a local fail on an
+  untouched file is almost always stale cache.
+
+## NUTRITION ARC — COMPLETE & VERIFIED LIVE (end state)
+Almonds page (live, hard-refreshed) shows: source "USDA (SR Legacy)" + green badge,
+8 macros, "Detailed micronutrients (27)" grouped vitamins/minerals/fats(+omega-6 rollup)
+/other(water), and nested "Amino acids (18)" with all 18 AAs at real values. The whole
+nutrition layer is done: evidence-graded spine → USDA ingest → curation worklist → dedup
+→ auto-matcher (~75% on real USDA, six bugs fixed) → generic calc → full grouped display
+on recipe + ingredient pages → 71 nutrients incl. 18-amino-acid spine (Effort 1).

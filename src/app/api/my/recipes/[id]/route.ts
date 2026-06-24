@@ -69,7 +69,7 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
         difficulty, total_time_seconds, active_time_seconds, hero_image_url,
         version_steps (
           id, order_index, step_type, group_label, instruction,
-          duration_seconds, temperature_celsius, appliance_settings
+          duration_seconds, temperature_celsius, appliance_settings, task_id
         ),
         version_ingredients (
           id, order_index, quantity_value, quantity_unit,
@@ -91,6 +91,12 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
   const rv = Array.isArray(data.recipe_versions) ? data.recipe_versions[0] : data.recipe_versions;
 
   const allVersionIngredients = rv?.version_ingredients ?? [];
+
+  // Is this a NEW-MODEL (decomposed/DAG) recipe? Decompose-save writes a REAL
+  // task_id FK on each step (the old editor stores task data in
+  // appliance_settings.taskId instead). If any step has a real task_id, this
+  // recipe uses the structured format the old editor cannot round-trip safely.
+  const isStructured = (rv?.version_steps ?? []).some((s: any) => !!s.task_id);
 
   const steps = (rv?.version_steps ?? [])
     .sort((a: any, b: any) => a.order_index - b.order_index)
@@ -142,6 +148,9 @@ export async function GET(_: NextRequest, context: { params: Promise<{ id: strin
     versionId:         rv?.id ?? '',
     slug:              data.slug,
     isPublished:       data.is_published,
+    // Signal to the editor UI that this recipe is structured (DAG) and should be
+    // shown read-only / not editable through the old form (see PUT guard below).
+    isStructured,
     title:             rv?.title ?? '',
     description:       rv?.description ?? '',
     cuisine:           rv?.cuisine ?? '',
@@ -170,12 +179,37 @@ export async function PUT(req: NextRequest, context: { params: Promise<{ id: str
   // Verify ownership
   const { data: canonical } = await db
     .from('recipe_canonicals')
-    .select('id, slug')
+    .select('id, slug, current_version_id')
     .eq('id', id)
     .eq('author_id', user.id)
     .single();
 
   if (!canonical) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+  // ── GUARD: refuse to overwrite a STRUCTURED (DAG / decompose-saved) recipe. ──
+  // The new import path (decompose-save) stores each step's task in the REAL
+  // `version_steps.task_id` FK and ingredients in `version_ingredients`. This old
+  // editor reads/writes task data via `appliance_settings.taskId` instead — a
+  // DIFFERENT location — so round-tripping a structured recipe through this PUT
+  // reads nulls for the task and rewrites them, stripping task_id (and, in the
+  // editor's lossy ingredient handling, the ingredients too). That silently
+  // corrupted recipes into "procedure only, no ingredients" (e.g. Tarte flambée
+  // v2–v4). Until the editor is made DAG-native, REFUSE the save rather than
+  // destroy the data. Old-style recipes (no real task_id on any step) are
+  // unaffected and edit normally.
+  if (canonical.current_version_id) {
+    const { count: structuredSteps } = await db
+      .from('version_steps')
+      .select('id', { count: 'exact', head: true })
+      .eq('version_id', canonical.current_version_id)
+      .not('task_id', 'is', null);
+    if ((structuredSteps ?? 0) > 0) {
+      return NextResponse.json({
+        error: 'This recipe uses the new structured format and can’t be edited here yet. To change it, re-import the recipe.',
+        code:  'structured_recipe_readonly',
+      }, { status: 409 });
+    }
+  }
 
   const totalTimeSeconds = calculateTotalSecondsForSave(data.steps ?? []);
 
