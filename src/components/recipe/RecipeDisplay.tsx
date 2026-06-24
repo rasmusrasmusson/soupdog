@@ -324,15 +324,16 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
   }, [recipe.ingredients]);
 
   // derived recipe-level tool list (tools live per-step in applianceSettings)
-  const derivedTools: string[] = React.useMemo(() => {
+  const derivedTools: { slug: string; label: string }[] = React.useMemo(() => {
     const seen = new Set<string>();
-    const out: string[] = [];
+    const out: { slug: string; label: string }[] = [];
     const add = (t?: string) => {
-      const name = humanizeTool(t);
-      if (!name) return;
-      const key = name.toLowerCase();
+      const raw = (t ?? '').trim();
+      const label = humanizeTool(raw);
+      if (!label) return;
+      const key = label.toLowerCase();
       if (seen.has(key)) return;
-      seen.add(key); out.push(name);
+      seen.add(key); out.push({ slug: raw, label });
     };
     (recipe.equipment ?? []).forEach((e: any) => add(e.name));
     recipe.steps.forEach(s => {
@@ -426,10 +427,10 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           <SectionHeader title="Tools" meta={`${derivedTools.length} items`} />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 10px', marginTop: 4 }}>
             {derivedTools.map((t) => (
-              <button type="button" key={t} onClick={() => setOpenToolSlug(t)}
+              <button type="button" key={t.slug || t.label} onClick={() => setOpenToolSlug(t.slug || t.label)}
                 style={{ fontSize: 13, color: 'var(--fg)', border: B, borderRadius: 6, padding: '4px 10px', background: 'var(--surface)', cursor: 'pointer', fontFamily: 'inherit' }}
                 className="hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors">
-                {capitalizeLabel(t)}
+                {capitalizeLabel(t.label)}
               </button>
             ))}
           </div>
