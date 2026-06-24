@@ -569,18 +569,18 @@ export default function IngredientPage({ params }: { params: Promise<{ slug: str
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', border: B, fontSize: 12 }}>
                     <tbody>
-                      <NutrRow label="Calories" value={fmt(n.calories, ' kcal')} bold />
-                      <NutrRow label="Carbohydrates" value={fmt(n.carbohydrates, 'g')} bold />
-                      <NutrRow label="Sugar" value={fmt(n.sugar, 'g')} indent />
-                      <NutrRow label="Fiber" value={fmt(n.fiber, 'g')} indent />
-                      <NutrRow label="Protein" value={fmt(n.protein, 'g')} bold />
-                      <NutrRow label="Fat" value={fmt(n.fat, 'g')} bold />
-                      <NutrRow label="Saturated" value={fmt(n.saturated_fat, 'g')} indent />
-                      <NutrRow label="Monounsaturated" value={fmt(n.monounsaturated_fat, 'g')} indent />
-                      <NutrRow label="Polyunsaturated" value={fmt(n.polyunsaturated_fat, 'g')} indent />
+                      <NutrRow label="Calories" value={fmt(n.calories, ' kcal')} bold nutrientKey="calories" amount={n.calories} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Carbohydrates" value={fmt(n.carbohydrates, 'g')} bold nutrientKey="carbohydrates" amount={n.carbohydrates} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Sugar" value={fmt(n.sugar, 'g')} indent nutrientKey="sugar" amount={n.sugar} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Fiber" value={fmt(n.fiber, 'g')} indent nutrientKey="fiber" amount={n.fiber} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Protein" value={fmt(n.protein, 'g')} bold nutrientKey="protein" amount={n.protein} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Fat" value={fmt(n.fat, 'g')} bold nutrientKey="fat" amount={n.fat} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Saturated" value={fmt(n.saturated_fat, 'g')} indent nutrientKey="saturated_fat" amount={n.saturated_fat} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Monounsaturated" value={fmt(n.monounsaturated_fat, 'g')} indent nutrientKey="mufa_total" amount={n.monounsaturated_fat} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Polyunsaturated" value={fmt(n.polyunsaturated_fat, 'g')} indent nutrientKey="pufa_total" amount={n.polyunsaturated_fat} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
                       <NutrRow label="Trans fat" value={fmt(n.trans_fat, 'g')} indent />
-                      <NutrRow label="Sodium" value={fmt(n.sodium, 'mg')} bold />
-                      <NutrRow label="Cholesterol" value={fmt(n.cholesterol, 'mg')} bold />
+                      <NutrRow label="Sodium" value={fmt(n.sodium, 'mg')} bold nutrientKey="sodium" amount={n.sodium} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
+                      <NutrRow label="Cholesterol" value={fmt(n.cholesterol, 'mg')} bold nutrientKey="cholesterol" amount={n.cholesterol} onPick={(k,a)=>setModalNutrient({key:k,amount:a})} />
                     </tbody>
                   </table>
                   {hasDetailedNutrition && (() => {
