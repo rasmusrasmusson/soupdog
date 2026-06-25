@@ -51,6 +51,7 @@ export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { vers
   const [showConfNote, setShowConfNote] = useState(false);
   const [dirty, setDirty] = useState(false);   // changed from saved default?
   const [savedMsg, setSavedMsg] = useState(false);
+  const [expanded, setExpanded] = useState(true); // detail open when data exists
 
   // prefill from the default set + load addable household
   useEffect(() => {
@@ -106,56 +107,69 @@ export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { vers
   const band = match ? confidenceBand(match.table.confidence) : null;
   const multi = (match?.plating.length ?? 0) > 1;
   const hasNutrition = !!perServing && Object.keys(perServing).length > 0;
+  const hasDetail = !!match; // something to expand into
 
   const participants: ParticipantPerson[] = people.map(p => ({
     personId: p.personId, name: p.name, avatarColor: p.avatarColor, avatarInitials: p.avatarInitials,
   }));
 
   return (
-    <div style={{ marginTop: 30, marginBottom: 26, border: '1px solid var(--border)', borderRadius: 12, padding: '18px 18px 20px', background: 'var(--surface)' }}>
-      {/* header + who's eating */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', flex: 1 }}>
+    <div style={{ marginTop: 22, marginBottom: 22, border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px', background: 'var(--surface)' }}>
+      {/* compact one-line header: label · avatars+add · confidence · expand */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f' }}>
           Who&rsquo;s eating
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Participants
+            participants={participants}
+            addable={addable}
+            onAdd={addPerson}
+            onRemove={removePerson}
+            size={26}
+            emptyHint="Add who this is for"
+          />
         </div>
         {band && (
           <button type="button" onClick={() => setShowConfNote(v => !v)} title={band.label}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
             <span style={{ width: 9, height: 9, borderRadius: '50%', background: band.color, display: 'inline-block' }} />
-            <span style={{ ...MONO, fontSize: 10, color: 'var(--muted)' }}>{band.label}</span>
+          </button>
+        )}
+        {hasDetail && (
+          <button type="button" onClick={() => setExpanded(v => !v)} aria-label={expanded ? 'Collapse' : 'Expand'}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--muted)', lineHeight: 0 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ transform: expanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
           </button>
         )}
       </div>
 
-      <Participants
-        participants={participants}
-        addable={addable}
-        onAdd={addPerson}
-        onRemove={removePerson}
-        emptyHint="Add who this is for"
-      />
-
-      {/* save-as-default affordance */}
-      <div style={{ marginTop: 10, minHeight: 18 }}>
-        {dirty ? (
-          <span onClick={saveDefault} style={{ ...MONO, fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>
-            Save as who I usually cook for
-          </span>
-        ) : savedMsg ? (
-          <span style={{ ...MONO, fontSize: 11, color: '#9a978f' }}>Saved</span>
-        ) : null}
-      </div>
+      {/* save-as-default affordance (compact, only when changed) */}
+      {(dirty || savedMsg) && (
+        <div style={{ marginTop: 8 }}>
+          {dirty ? (
+            <span onClick={saveDefault} style={{ ...MONO, fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>
+              Save as who I usually cook for
+            </span>
+          ) : (
+            <span style={{ ...MONO, fontSize: 11, color: '#9a978f' }}>Saved</span>
+          )}
+        </div>
+      )}
 
       {showConfNote && band && (
-        <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, margin: '12px 0', paddingBottom: 12, borderBottom: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           {band.note}
         </div>
       )}
 
-      {/* satiety + plating + per-person nutrition (mirrors the meal panel) */}
-      {match && (
-        <>
-          <div style={{ fontSize: 14, color: 'var(--fg)', marginTop: 14, marginBottom: multi ? 16 : 2 }}>
+      {/* expandable detail: satiety + plating + per-person nutrition */}
+      {expanded && match && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          <div style={{ fontSize: 14, color: 'var(--fg)', marginBottom: multi ? 16 : 0 }}>
             {match.score.satietyOk ? 'This should leave everyone comfortably full.' : 'This may be a little light \u2014 some at the table might still be peckish.'}
           </div>
 
@@ -213,7 +227,7 @@ export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { vers
               </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

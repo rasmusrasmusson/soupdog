@@ -675,6 +675,12 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
           </div>
         </div>
 
+        {/* Who's eating + per-person nutrition (what-if; nothing scheduled).
+            Sits high — "who's eating" frames the page. */}
+        <div className="px-4 md:px-8">
+          <RecipePeoplePanel versionId={(recipe as any).recipeVersionId} />
+        </div>
+
         {/* Inline controls: servings + progress (desktop). Replaces the old
             right-hand panel now that the assistant owns the right rail. */}
         <div className="hidden md:flex items-center gap-6 px-8 py-3 border-b border-[var(--border)] no-print">
@@ -712,9 +718,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
             storedNutrition={recipe.nutrition}
             onComputed={(perServing, atServings) => setLiveNutrition({ perServing, atServings })}
           />
-
-          {/* Who's eating + per-person nutrition (what-if; nothing scheduled) */}
-          <RecipePeoplePanel versionId={(recipe as any).recipeVersionId} />
 
           <div className="md:hidden h-16" />
         </div>
