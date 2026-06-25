@@ -302,7 +302,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 
   const [apiResult, setApiResult] = React.useState<any>(null);
   const [loading,   setLoading]   = React.useState(false);
-  const [showFull,  setShowFull]  = React.useState(false);
+  const [activeCat, setActiveCat] = React.useState<string | null>(null); // null = headline only
   const [modalNutrient, setModalNutrient] = React.useState<{ key: string; amount: number } | null>(null);
 
   React.useEffect(() => {
@@ -456,15 +456,15 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
               </tr>
             ))}
 
-            {showFull && CATEGORY_ORDER.filter(c => grouped[c]?.length).map(cat => (
-              <React.Fragment key={cat}>
+            {activeCat && grouped[activeCat]?.length && (
+              <React.Fragment>
                 <tr style={{ borderTop: B, background: 'var(--surface-hover)' }}>
                   <td colSpan={2} style={{ ...td, fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.16em', color: MUT }}>
-                    {CATEGORY_LABEL[cat] ?? cat}
+                    {CATEGORY_LABEL[activeCat] ?? activeCat}
                   </td>
                 </tr>
-                {grouped[cat].map(([label, value, unit, nkey]) => (
-                  <tr key={cat + label} style={{ borderTop: B }}>
+                {grouped[activeCat].map(([label, value, unit, nkey]) => (
+                  <tr key={activeCat + label} style={{ borderTop: B }}>
                     <td style={{ ...td, borderRight: B }}>
                       {nkey ? (
                         <button onClick={() => setModalNutrient({ key: nkey, amount: value })}
@@ -480,18 +480,32 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
                   </tr>
                 ))}
               </React.Fragment>
-            ))}
+            )}
           </tbody>
         </table>
       </div>
 
       {fullCount > 0 && (
-        <button
-          onClick={() => setShowFull(v => !v)}
-          style={{ marginTop: 8, fontFamily: MONO, fontSize: 11, cursor: 'pointer',
-            background: 'transparent', border: B, padding: '6px 12px', color: 'var(--accent)' }}>
-          {showFull ? 'Hide full nutrition' : `Show full nutrition (${fullCount} more)`}
-        </button>
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {CATEGORY_ORDER.filter(c => grouped[c]?.length).map(cat => {
+            const on = activeCat === cat;
+            return (
+              <button key={cat}
+                onClick={() => setActiveCat(on ? null : cat)}
+                style={{
+                  fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
+                  cursor: 'pointer', padding: '5px 11px', borderRadius: 999,
+                  border: on ? '1px solid var(--accent)' : B,
+                  background: on ? 'var(--accent)' : 'transparent',
+                  color: on ? '#fff' : 'var(--muted)',
+                  transition: 'all 0.12s ease',
+                }}>
+                {CATEGORY_LABEL[cat] ?? cat}
+                <span style={{ marginLeft: 6, opacity: 0.7 }}>{grouped[cat].length}</span>
+              </button>
+            );
+          })}
+        </div>
       )}
 
       {modalNutrient && (
