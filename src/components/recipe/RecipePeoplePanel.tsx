@@ -43,6 +43,17 @@ const MACRO_LABEL: Record<string, string> = { calories: 'kcal', protein: 'protei
 function fmtAmount(key: string, v: number): string { return key === 'calories' ? String(Math.round(v)) : `${Math.round(v)} g`; }
 const SHARE_COLORS = ['#5f7a4f', '#8a9a6b', '#b5a468', '#c08a3e', '#7a8b9a', '#9a7a6b'];
 
+// Plain-language summary of the plating — "what we're cooking for each person".
+// Reads off the plating split; degrades gracefully for one person.
+function platingSummary(plating: { name: string; share: number; phrase: string }[]): string {
+  if (plating.length === 0) return '';
+  if (plating.length === 1) return `Cooking for ${plating[0].name}.`;
+  const sorted = plating.slice().sort((a, b) => b.share - a.share);
+  const parts = sorted.map(p => `${p.name} — ${p.phrase}`);
+  if (parts.length === 2) return `${parts[0]}; ${parts[1]}.`;
+  return parts.slice(0, -1).join('; ') + '; and ' + parts[parts.length - 1] + '.';
+}
+
 export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { versionId?: string; slot?: string }) {
   const [people, setPeople] = useState<Person[]>([]);
   const [addable, setAddable] = useState<AddablePerson[]>([]);
@@ -166,9 +177,14 @@ export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { vers
         </div>
       )}
 
-      {/* expandable detail: satiety + plating + per-person nutrition */}
+      {/* expandable detail: summary + satiety + plating + per-person nutrition */}
       {expanded && match && (
         <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+          {match.plating.length > 0 && (
+            <div style={{ ...SERIF, fontSize: 14.5, color: 'var(--fg)', lineHeight: 1.5, marginBottom: 14 }}>
+              {platingSummary(match.plating)}
+            </div>
+          )}
           <div style={{ fontSize: 14, color: 'var(--fg)', marginBottom: multi ? 16 : 0 }}>
             {match.score.satietyOk ? 'This should leave everyone comfortably full.' : 'This may be a little light \u2014 some at the table might still be peckish.'}
           </div>

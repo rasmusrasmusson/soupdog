@@ -8,46 +8,96 @@ recipe page, so they aren't lost. House style: olive `#2E4638`, IBM Plex Serif.
 
 ---
 
-## 1. People drive servings (settle-then-build) — `[OPEN]`
+## 1. Scaling is VARIATION SELECTION, not multiplication (FOUNDATION) — `[OPEN]`
 
-**Observation (Rasmus):** now that the recipe page knows *who's eating* (the people
-panel), the generic **servings number** may be redundant — the recipe should size
-to the assigned people, not an arbitrary count.
+**Correction (Rasmus) — supersedes the earlier "people drive servings via scaling"
+framing.** A fundamental principle: **each recipe produces a unique final
+ingredient; the smallest change renders a different recipe and a different
+end-ingredient.** Therefore changing serving size is **NOT a multiplier on one
+recipe — it is a SWITCH to a different recipe** (a different end-ingredient).
 
-**This is true to the demand model:** the dish already scales to the table's summed
-need (`scoreMeal` → `recommendedServings`). So "who's eating" *is* the portion
-signal; a manual servings stepper is a second, competing source of truth.
+- At SMALL deltas the difference is negligible → cheap to generate the new
+  recipe on request (or fall back to the base).
+- At LARGER deltas proportions genuinely change — spice ratios (non-linear),
+  tools (different pan), method, timing. A linear `× servings` stretch is a
+  *falsehood* the old UI told.
 
-**But two honest caveats before deleting the stepper:**
-1. **Ingredient scaling currently keys off the servings number,** not the people.
-   The recipe page's ingredient quantities, progress bars, and `RecipeDisplay`
-   all read `servings`. Making people drive quantity is a *rewire* ("scale to the
-   table"), not a delete — it threads `recommendedServings` (or the table's need)
-   into the ingredient display.
-2. **Sometimes you want the neutral view** — "just show me the recipe for 4" while
-   browsing or sharing, without assigning anyone. So the stepper still has a job
-   when no people are assigned.
+**So "people drive servings" actually means:** the assigned people sum to a target
+quantity, and the system **selects (or generates) the recipe VARIATION that
+produces that quantity** — discrete sibling recipes, not a stretched one. This is
+exactly the concept/sibling/variation structure already designed (Recipe Model
+docs; `execution_variants.variant_axes` — yield is an axis) and the
+variation-generation flywheel (`Soupdog_Variation_Generation_And_Content_Pipeline`).
+Trigger: *who's eating determines which variation you're looking at.*
 
-**Two numbers, don't conflate:**
-- **Base servings (YIELD, first meta panel)** = metadata about how the recipe is
-  *written* (its reference yield). Intrinsic to the recipe. **Keep regardless.**
-- **Active servings (the stepper)** = the working portion count. This is the one
-  that becomes "derived from people when people are present."
+**Consequence — DO NOT build a scale-ingredients-to-people multiplier.** That
+contradicts the foundation. The honest feature is variation selection, which is
+its own design-led effort (cost-gated generation, sibling resolution). Removing
+the servings stepper waits for that — until then the stepper stays as the manual
+"which yield am I looking at" control, but it is understood as *selecting a
+variation*, not multiplying one recipe.
 
-**Proposed model (to settle):**
-- No people assigned → stepper drives quantity (today's behaviour).
-- People assigned → the table's need drives quantity; the stepper either hides or
-  becomes a manual override of the derived value.
-- Base-servings YIELD stays as recipe metadata in all cases.
+**Appetite folds in here too.** A per-meal "hungrier tonight" is arguably also a
+different yield → a different end-product, not a multiplier on the plate. So
+per-meal appetite is captured as part of the variation question, NOT built as a
+separate knob.
 
-`[OPEN 1a]` When people are present: hide the stepper, or keep it as an override?
-`[OPEN 1b]` Rewire ingredient scaling to read the table need vs the servings
-number — confirm the seam in `RecipeDisplay` / the page's `servings` state.
-**Build only after settled — it touches ingredient scaling, a core path.**
+`[OPEN 1a]` How yield-variations resolve: pick nearest existing sibling vs
+generate-on-request; the negligible-delta threshold for falling back to base.
+`[OPEN 1b]` Whether the servings stepper becomes an explicit "variation picker"
+once variations exist.
 
 ---
 
-## 2. Duplicate meta panel (bug, not feature) — follow-up
+## 2. Plating — summary now; section + reusable content object later
+
+Plating has **two layers** (Rasmus):
+1. **What to plate for whom** — per person, how much of each component. The
+   demand/plating split (extended to per-component in Demand Phase 4).
+2. **How to plate it nicely** — a **reusable plating CONTENT OBJECT**: almost a
+   mini-recipe for presentation. Which plate/glass/vessel, arrangement, garnish.
+   Attachable to a dish / drink / ingredient and REUSED across recipes (a "how to
+   plate a clear soup" object serves many soups). Same pattern as Techniques
+   (curated content over a structured spine), and the recipe model's
+   pull-by-reference reuse — improving one plating guide improves every dish that
+   references it.
+
+**Shipped now (small):** a plain-language **plating summary** sentence at the top
+of the "Cook for" panel's expanded detail — "Rasmus — the larger helping; Natasha
+— a neater portion." Reads off the existing plating split; descriptive, not a
+control. Degrades to "Cooking for Rasmus." for one person.
+
+**Design / future (NAMED PROJECT — own doc when pursued):**
+- **Plating as its own recipe SECTION** (promoted out of the people panel) — what
+  + how, shown with the recipe.
+- **Plating content object** — the reusable how-to-plate-nicely mini-recipe:
+  per-component what-to-plate + vessels/tools (plates, glasses) + arrangement +
+  garnish. New content type; needs its own model (attach point, authoring,
+  curation, reuse across dishes/dish-families).
+- **Visual plating** — arrangement diagram or generative plate/vessel selection.
+  Hardest; downstream of the above. (Handover: "plating-for-beauty — its own
+  project.")
+
+`[OPEN 2a]` Where a plating object attaches: dish, dish-family/concept, or both.
+`[OPEN 2b]` Vessel/tool vocabulary — reuse `equipment` (plates/glasses as
+equipment) vs a presentation-specific set.
+`[OPEN 2c]` Visual approach (diagram vs generated vs schema) — defer.
+
+---
+
+## 3. The "Cook for" section — shape (current + intended)
+
+- **One line:** label + avatars + add/remove + confidence dot + expand chevron.
+  (Shipped.)
+- **A comment / summary** of what we're cooking for each person — the plating
+  summary sentence (shipped) — with the fuller plating + per-person nutrition in
+  the expandable detail.
+- Intended end-state: the summary is the panel's "headline"; the full plating
+  (what + how, via the content object) becomes its own section below the recipe.
+
+---
+
+## 4. Duplicate meta panel (bug, not feature) — follow-up
 
 The recipe page renders the YIELD / TOTAL TIME / ACTIVE TIME / DIFFICULTY / RATING
 / CUISINE block **twice** (a table-style grid AND a stacked 2-column version). Looks
@@ -58,7 +108,7 @@ one by breakpoint. Small, separate cleanup.
 
 ---
 
-## 3. Nutrient view: show more / all, one-at-a-time (next small slice) — `[OPEN]`
+## 5. Nutrient view: show more / all, one-at-a-time (next small slice) — `[OPEN]`
 
 **Observation (Rasmus):** nutrition can stay at the bottom, but it'd be good to show
 **more or all** the nutrients we have (71), with a **tab / one-at-a-time** selector
@@ -80,55 +130,19 @@ Own contained slice; build after the people-panel settles.
 
 ---
 
-## 4. Plating content object (NAMED FUTURE PROJECT) — design-doc-first
-
-**Observation (Rasmus):** develop the plating section to show **how to plate the
-dish per person** — ideally **visually** — and build a set of **instructions /
-content for how to plate nicely**, as **a new type of content object.**
-
-This is a genuinely new capability, not a tweak. It has three distinct parts, each
-its own design effort:
-
-1. **Per-person plating instruction** (extends the current plating split). Today:
-   "the larger, more generous helping" (a share + phrase). Next: concrete plating
-   guidance per person — quantity per component, arrangement. This ties to the
-   v2 per-component plating (Demand Model Phase 4) and to participant-scoped
-   components (different dishes per person).
-
-2. **A plating-content object** — "how to plate nicely" as first-class,
-   curated/authored content (like Techniques are content over `tasks`). A plating
-   object would describe arrangement, garnish, vessel, composition principles —
-   attachable to a dish or a dish-family. New content type; needs its own model
-   (where it attaches, who authors/curates, how it's reused across dishes).
-
-3. **Visual plating** — rendering a plate visually (arrangement diagram, or
-   generative plate/vessel selection). The handover already flagged this:
-   "plating-for-beauty (generative plate/equipment selection — its own project)."
-   Hardest part; likely downstream of (1) and (2). Needs a deliberate approach to
-   *how* (illustrative SVG? generated image? a vessel + arrangement schema?).
-
-**Guidance:** treat as a named future project with its own design doc
-(`Soupdog_Plating_Content_And_Visual_Design_v0_1` when pursued). Do NOT scope into
-the current people-panel work. The seam it rides: the plating section of the
-per-person panel is its entry point; a dish (and dish-family) can carry a plating
-content object the way a recipe carries nutrition.
-
-`[OPEN 4a]` Where a plating object attaches: dish, dish-family/concept, or both.
-`[OPEN 4b]` Visual approach (diagram vs generated vs schema) — defer until (1)/(2).
-
----
-
-## 5. Done in this slice (for the record)
+## 6. Done in this slice (for the record)
 - People panel moved to the TOP of the recipe page (under the meta panel).
 - People panel made compact: one-line header (label + avatars + add + confidence
   dot + chevron); detail (satiety / plating / per-person nutrition) is collapsible,
   expanded by default when there is data.
 
-## 6. Sequence
-- **Now (shipped):** panel relocation + compact/expandable (this slice).
-- **Next small:** nutrient tab/all-nutrients view (§3).
-- **Settle-then-build:** people-drive-servings (§1) — touches ingredient scaling.
-- **Separate cleanup:** duplicate meta panel (§2).
-- **Named future project:** plating content object + visual (§4) — own design doc.
-- **Spine session (from Dish·Schedule·Start v0.2):** retire meal_component,
+## 7. Sequence
+- **Now (shipped):** panel relocation + compact/expandable + plating summary line.
+- **Next small:** nutrient tab/all-nutrients view (§5).
+- **Design-led project:** plating as a section + reusable plating content object
+  + visual (§2) — own design doc.
+- **Foundation-led (big):** scaling-as-variation-selection (§1) — the variation
+  system; appetite folds in here. NOT a multiplier.
+- **Separate cleanup:** duplicate meta panel (§4).
+- **Spine session (Dish·Schedule·Start v0.2):** retire meal_component,
   recipe-native composition, Start relocation, persona-people.
