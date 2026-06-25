@@ -1,6 +1,8 @@
 // src/app/recipes/[slug]/page.tsx
 'use client';
 import React, { useState, useEffect, use } from 'react';
+import { formatDuration } from '@/lib/utils';
+import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { PrintButton } from '@/components/recipe/PrintRecipe';
 import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
@@ -613,7 +615,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
   const [servings, setServings] = useState(recipe.servings);
   const [addedIngs, setAddedIngs] = useState<Record<string, boolean>>({});
   const toggleAddedIng = (key: string) => setAddedIngs(p => ({ ...p, [key]: !p[key] }));
-  const changeServings = (delta: number) => setServings((prev: number) => Math.max(1, prev + delta));
 
   // Live per-serving nutrition reported up from RecipeNutritionSection (the same
   // figures shown on the page). Falls back to stored nutrition if present.
@@ -650,11 +651,27 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
 
 
   // Presentation (ingredients/tools/steps) lives in the shared <RecipeDisplay>.
-  // The shell keeps only what it needs for the sidebar.
+  // The shell keeps only what it needs for the meta grid + sidebar.
+  const timing = calculateRecipeTiming(recipe.steps);
+  const displayTotalSeconds = recipe.totalTimeSeconds > 0
+    ? recipe.totalTimeSeconds
+    : timing.totalSeconds;
+
   const B    = '1px solid var(--border)';
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
 
+  const cap = (s: string | null | undefined) => {
+    const t = (s ?? '').trim();
+    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '—';
+  };
+  const metaItems: [string, string][] = [
+    ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
+    ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
+    ['DIFFICULTY',  cap(recipe.difficulty)],
+    ['RATING',      recipe.ratings ? `${(recipe.ratings as any).average.toFixed(1)} / 5` : '—'],
+    ['CUISINE',     cap(recipe.cuisine)],
+  ];
 
   return (
     <>
@@ -714,6 +731,28 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
               </div>
             )}
           </div>
+
+          {/* Meta stats — below the intro (time/difficulty/cuisine glance) */}
+          <div className="hidden md:grid border border-[var(--border)] text-[11px] mt-5"
+            style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
+            {metaItems.map(([label, value], i) => (
+              <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
+                <div className="px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)]">
+                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</span>
+                </div>
+                <div className="px-3 py-2 font-mono text-[11px] text-[var(--fg)]">{value}</div>
+              </div>
+            ))}
+          </div>
+          <div className="md:hidden border border-[var(--border)] mt-5"
+            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}>
+            {metaItems.map(([label, value]) => (
+              <div key={label} style={{ background: 'var(--surface)', padding: '8px 12px' }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT, marginBottom: 3 }}>{label}</div>
+                <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Who's eating + per-person nutrition (what-if; nothing scheduled).
@@ -722,17 +761,9 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
           <RecipePeoplePanel versionId={(recipe as any).recipeVersionId} />
         </div>
 
-        {/* Inline controls: servings + progress (desktop). Replaces the old
-            right-hand panel now that the assistant owns the right rail. */}
+        {/* Inline controls: progress (desktop). Servings is driven by who's
+            eating now, so the manual stepper is gone. */}
         <div className="hidden md:flex items-center gap-6 px-8 py-3 border-b border-[var(--border)] no-print">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">Servings</span>
-            <div className="flex items-center border border-[var(--border)]">
-              <button onClick={() => changeServings(-1)} className="w-7 h-7 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">−</button>
-              <span className="px-3 font-mono tabular-nums text-[13px] text-[var(--fg)]">{servings}</span>
-              <button onClick={() => changeServings(+1)} className="w-7 h-7 font-mono text-[var(--muted)] hover:text-[var(--fg)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors">+</button>
-            </div>
-          </div>
           <div className="flex-1 flex items-center gap-5 min-w-0">
             <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
             {(recipe.equipment?.length ?? 0) > 0 && (
@@ -773,13 +804,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
         <div className="flex-1 min-w-0"><ProgressBar label="Ingredients" done={ingChecks.checked.filter(Boolean).length} total={recipe.ingredients.length} /></div>
         <div className="flex-1 min-w-0"><ProgressBar label="Tools" done={toolChecks.checked.filter(Boolean).length} total={recipe.equipment?.length ?? 0} /></div>
         <div className="flex-1 min-w-0"><ProgressBar label="Steps" done={stepChecks.checked.filter(Boolean).length} total={recipe.steps.length} /></div>
-        <div className="flex items-center border border-[var(--border)] flex-shrink-0">
-          <button onClick={() => changeServings(-1)} className="w-7 h-7 font-mono text-[var(--muted)] border-r border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">−</button>
-          <span className="px-2 font-mono tabular-nums text-[12px]">
-            {servings}
-          </span>
-          <button onClick={() => changeServings(+1)} className="w-7 h-7 font-mono text-[var(--muted)] border-l border-[var(--border)] flex items-center justify-center hover:bg-[var(--surface-hover)] transition-colors text-[13px]">+</button>
-        </div>
       </div>
     </div>
 

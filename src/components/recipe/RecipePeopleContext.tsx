@@ -113,10 +113,17 @@ export function RecipePeopleProvider({ versionId, slot = 'dinner', children }: {
   }, []);
 
   const saveDefault = useCallback(async () => {
-    await fetch('/api/my/cooking-defaults', {
+    // never persist the persona stand-in as a default; only real people.
+    const realIds = people.map(p => p.personId).filter(id => id !== PERSONA_ADULT.personId);
+    const res = await fetch('/api/my/cooking-defaults', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personIds: people.map(p => p.personId) }),
+      body: JSON.stringify({ personIds: realIds }),
     });
+    // reseed from what actually persisted, so a reload matches exactly.
+    try {
+      const d = await res.json();
+      if (Array.isArray(d?.people)) setPeople(d.people);
+    } catch { /* ignore */ }
     setDirty(false); setSavedMsg(true);
   }, [people]);
 
