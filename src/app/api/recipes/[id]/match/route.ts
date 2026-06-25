@@ -37,8 +37,13 @@ export async function POST(
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const db = supabase as any;
+
+  // A fixed synthetic id for the "average adult" persona. It matches no real
+  // person row, so resolveRequirement's maybeSingle() lookups all return null
+  // and it falls to the adult_unspecified persona floor (low/grey confidence).
+  // Used for logged-out visitors and as the ultimate fallback.
+  const PERSONA_ADULT_ID = '00000000-0000-0000-0000-0000000000a1';
 
   // --- the candidate dish: this version's nutrition rollup (for scoring) ---
   const { data: version, error: vErr } = await db
@@ -49,33 +54,37 @@ export async function POST(
   if (vErr) return NextResponse.json({ error: vErr.message }, { status: 500 });
   if (!version) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // --- participants: the panel's ad-hoc list; fall back to the caller's self ---
+  // --- participants: the panel's ad-hoc list; resolve who we may use ---
   let personIds = (body.personIds ?? []).filter(Boolean);
-  if (personIds.length === 0) {
-    const { data: selfGrant } = await db
-      .from('person_access')
-      .select('person_id')
-      .eq('account_id', user.id)
-      .eq('role', 'self')
-      .is('revoked_at', null)
-      .maybeSingle();
-    if (selfGrant?.person_id) personIds = [selfGrant.person_id];
-  }
-  if (personIds.length === 0) {
-    return NextResponse.json({ error: 'No participants and no self-person' }, { status: 400 });
-  }
 
-  // access: a caller may only what-if against persons they can access.
-  const { data: grants } = await db
-    .from('person_access')
-    .select('person_id')
-    .eq('account_id', user.id)
-    .is('revoked_at', null)
-    .in('person_id', personIds);
-  const allowed = new Set((grants ?? []).map((g: any) => g.person_id));
-  personIds = personIds.filter((pid: string) => allowed.has(pid));
-  if (personIds.length === 0) {
-    return NextResponse.json({ error: 'No accessible participants' }, { status: 403 });
+  if (!user) {
+    // logged-out: ignore any supplied ids (can't access-check them); show the
+    // average-adult persona so the page still has honest (grey) guidance.
+    personIds = [PERSONA_ADULT_ID];
+  } else {
+    if (personIds.length === 0) {
+      // logged-in, none supplied: fall back to the caller's self-person
+      const { data: selfGrant } = await db
+        .from('person_access')
+        .select('person_id')
+        .eq('account_id', user.id)
+        .eq('role', 'self')
+        .is('revoked_at', null)
+        .maybeSingle();
+      if (selfGrant?.person_id) personIds = [selfGrant.person_id];
+    } else {
+      // access: a caller may only what-if against persons they can access
+      const { data: grants } = await db
+        .from('person_access')
+        .select('person_id')
+        .eq('account_id', user.id)
+        .is('revoked_at', null)
+        .in('person_id', personIds);
+      const allowed = new Set((grants ?? []).map((g: any) => g.person_id));
+      personIds = personIds.filter((pid: string) => allowed.has(pid));
+    }
+    // logged-in but nothing resolved → average-adult persona, not an error
+    if (personIds.length === 0) personIds = [PERSONA_ADULT_ID];
   }
 
   // --- resolve each participant's requirement, then aggregate + plate ---
@@ -95,13 +104,16 @@ export async function POST(
   const plating = platingSplit(table, 'energy_kcal');
 
   // names for the UI
-  const nameById: Record<string, string> = {};
+  const nameById: Record<string, string> = { [PERSONA_ADULT_ID]: 'A typical adult' };
   {
-    const { data: persons } = await db
-      .from('person')
-      .select('id, display_name, full_name')
-      .in('id', Array.from(new Set(personIds)));
-    for (const p of persons ?? []) nameById[p.id] = p.display_name || p.full_name || 'Someone';
+    const realIds = Array.from(new Set(personIds)).filter((id: string) => id !== PERSONA_ADULT_ID);
+    if (realIds.length > 0) {
+      const { data: persons } = await db
+        .from('person')
+        .select('id, display_name, full_name')
+        .in('id', realIds);
+      for (const p of persons ?? []) nameById[p.id] = p.display_name || p.full_name || 'Someone';
+    }
   }
   const platingNamed = plating.map((p) => ({ ...p, name: nameById[p.personId] ?? 'Someone' }));
 

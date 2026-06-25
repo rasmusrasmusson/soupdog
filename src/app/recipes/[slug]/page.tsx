@@ -305,6 +305,27 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   const [activeCat, setActiveCat] = React.useState<string | null>(null); // null = headline only
   const [modalNutrient, setModalNutrient] = React.useState<{ key: string; amount: number } | null>(null);
 
+  // Per-person view: fetch the recipe what-if match (people + shares + daily
+  // targets). One person is shown at a time; switching re-scales the whole
+  // section to that person's portion. Falls back gracefully to per-serving if
+  // match is unavailable.
+  const [match, setMatch] = React.useState<any>(null);
+  const [activePerson, setActivePerson] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!versionId) return;
+    fetch(`/api/recipes/${versionId}/match`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!d || d.error) return;
+        setMatch(d);
+        const first = d.perParticipant?.[0]?.personId ?? null;
+        setActivePerson(prev => prev ?? first);
+      })
+      .catch(() => {});
+  }, [versionId]);
+
   React.useEffect(() => {
     if (!versionId) return;
     setLoading(true);
@@ -342,6 +363,22 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     if ((n?.calories ?? 0) > 0) onComputed(n, servings);
   }, [n, servings, onComputed]);
 
+  // Per-person scaling: the active participant's portion = their plating share
+  // × recommendedServings of the dish. We scale the per-serving figures by that
+  // factor so the whole section reflects that person's plate. factor falls back
+  // to 1 (per-serving) if no match/person. Also pull their daily targets for the
+  // "% of day" badges on the headline macros.
+  const activeP = match?.perParticipant?.find((p: any) => p.personId === activePerson) ?? null;
+  const personFactor = activeP ? (activeP.share * (match?.recommendedServings || 0)) : 1;
+  const dailyTargets: Record<string, number | null> = activeP?.dailyTargets ?? {};
+  const TARGET_KEY: Record<string, string> = { calories: 'calories', protein: 'protein', fat: 'fat', carbohydrates: 'carbohydrates', fiber: 'fiber' };
+  // displayN = per-serving × factor (or unscaled per-serving when no person).
+  const displayN: Record<string, number> = {};
+  for (const [k, v] of Object.entries(n)) {
+    if (typeof v === 'number') displayN[k] = v * personFactor;
+  }
+  const perPersonMode = !!activeP;
+
   const hasCalc   = result?.confidence !== 'insufficient' && (n?.calories ?? 0) > 0;
   const hasStored = storedNutrition?.calories;
   if (!hasCalc && !hasStored) return null;
@@ -354,8 +391,8 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   // Roll fatty-acid isomers up into Omega-6 / Omega-3 (USDA stores isomers, not
   // the sums). n-6 = linoleic (18:2) + arachidonic (20:4) etc; n-3 = ALA (18:3)
   // + EPA (20:5) + DHA (22:6) etc. We detect by key/name containing the marker.
-  const omega6 = sumIsomers(n, metaByKey, ['n-6', '18:2', '20:4', 'linoleic', 'arachidonic']);
-  const omega3 = sumIsomers(n, metaByKey, ['n-3', '18:3', '20:5', '22:6', 'linolenic', 'epa', 'dha']);
+  const omega6 = sumIsomers(displayN, metaByKey, ['n-6', '18:2', '20:4', 'linoleic', 'arachidonic']);
+  const omega3 = sumIsomers(displayN, metaByKey, ['n-3', '18:3', '20:5', '22:6', 'linolenic', 'epa', 'dha']);
 
   // The HEADLINE nutrients shown by default (familiar label order).
   const HEADLINE: [string, string, string][] = [
@@ -369,7 +406,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     ['sodium', 'Sodium', 'mg'],
   ];
   const headlineRows = HEADLINE
-    .map(([k, label, unit]) => [label, n?.[k], unit, k] as [string, number | undefined, string, string])
+    .map(([k, label, unit]) => [label, displayN?.[k], unit, k] as [string, number | undefined, string, string])
     .filter(([, v]) => v != null && (v as number) > 0);
 
   // The FULL set, grouped by category (everything not in headline), for the expander.
@@ -380,7 +417,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     fatty_acid: 'Fats & fatty acids', other: 'Other',
   };
   const grouped: Record<string, [string, number, string, string][]> = {};
-  for (const [key, val] of Object.entries(n)) {
+  for (const [key, val] of Object.entries(displayN)) {
     if (typeof val !== 'number' || val <= 0) continue;
     if (HEADLINE_KEYS.has(key)) continue;
     const m = metaByKey[key];
@@ -419,7 +456,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.22em', color: MUT }}>Nutrition</span>
         <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT }}>per serving</span>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT }}>{perPersonMode ? `${match.perParticipant.find((p:any)=>p.personId===activePerson)?.name ?? 'per serving'}’s portion` : 'per serving'}</span>
       </div>
       <div style={{
         marginBottom: 8, padding: '4px 10px',
@@ -430,6 +467,28 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
           {phaseLabel}
         </span>
       </div>
+
+      {/* Person selector — shows nutrition for one assigned person at a time
+          (their portion = share × recommended servings). */}
+      {match?.perParticipant?.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {match.perParticipant.map((p: any) => {
+            const on = activePerson === p.personId;
+            return (
+              <button key={p.personId} onClick={() => setActivePerson(p.personId)}
+                style={{
+                  fontFamily: MONO, fontSize: 10, letterSpacing: '0.04em',
+                  cursor: 'pointer', padding: '5px 11px', borderRadius: 999,
+                  border: on ? '1px solid var(--accent)' : B,
+                  background: on ? 'var(--accent)' : 'transparent',
+                  color: on ? '#fff' : 'var(--muted)', transition: 'all 0.12s ease',
+                }}>
+                {p.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table style={{ ...tbl, minWidth: 260 }}>
           <thead>
@@ -452,7 +511,16 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
                     </button>
                   ) : label.trim()}
                 </td>
-                <td style={{ ...td, textAlign: 'right' }}>{numCell(value as number, unit)}</td>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  {numCell(value as number, unit)}
+                  {perPersonMode && (() => {
+                    const tk = TARGET_KEY[nkey];
+                    const tgt = tk ? dailyTargets[tk] : null;
+                    if (!tgt || tgt <= 0) return null;
+                    const pct = Math.round(((value as number) / tgt) * 100);
+                    return <span style={{ fontFamily: MONO, fontSize: 9, color: MUT, marginLeft: 8 }}>{pct}% of day</span>;
+                  })()}
+                </td>
               </tr>
             ))}
 
@@ -512,7 +580,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
         <NutrientDetailModal
           nutrientKey={modalNutrient.key}
           amount={modalNutrient.amount}
-          amountLabel="per serving"
+          amountLabel={perPersonMode ? 'in this portion' : 'per serving'}
           onClose={() => setModalNutrient(null)}
         />
       )}
