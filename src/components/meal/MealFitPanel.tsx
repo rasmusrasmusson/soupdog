@@ -20,12 +20,18 @@ const SERIF: React.CSSProperties = { fontFamily: 'IBM Plex Serif, serif' };
 
 type PlatingPortion = { personId: string; name: string; share: number; phrase: string };
 type Participant = { personId: string; name: string; personaId: string; confidence: number; satietyNeed: number };
+type PerParticipant = {
+  personId: string; name: string; confidence: number; share: number;
+  portion: Record<string, number>;
+  percentOfDaily: Record<string, number | null>;
+};
 type MatchData = {
   slot: string;
   meal: { id: string; title: string; baseServings: number };
   table: { participants: Participant[]; confidence: number; satietyFloor: number };
   score: { recommendedServings: number; satietyOk: boolean; notes: string[] };
   plating: PlatingPortion[];
+  perParticipant: PerParticipant[];
   hasNutrition: boolean;
 };
 
@@ -135,8 +141,56 @@ export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: stri
           </div>
         </>
       )}
+
+      {/* Per-person nutrition summary — the 5 headline macros + "% of daily".
+          Honest: % is against a DAILY target, so one meal reads low by design.
+          Only shown when the dish has nutrition data to scale. */}
+      {data.hasNutrition && data.perParticipant.some(p => Object.keys(p.portion).length > 0) && (
+        <div style={{ marginTop: multi ? 22 : 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+          <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 10 }}>
+            What each portion gives
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {data.perParticipant
+              .slice()
+              .sort((a, b) => b.share - a.share)
+              .map(p => (
+                <div key={p.personId}>
+                  <div style={{ ...SERIF, fontSize: 15, color: 'var(--fg)', marginBottom: 5 }}>{p.name}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+                    {MACRO_ORDER.filter(k => p.portion[k] != null).map(k => {
+                      const pct = p.percentOfDaily[k];
+                      return (
+                        <span key={k} style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                          <span style={{ color: 'var(--fg)' }}>{fmtAmount(k, p.portion[k])}</span>
+                          {' '}{MACRO_LABEL[k]}
+                          {pct != null && (
+                            <span style={{ color: '#9a978f' }}> · {Math.round(pct)}% of day</span>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#9a978f', marginTop: 12, lineHeight: 1.5 }}>
+            Shown as a share of each person’s estimated daily needs — one meal is only part of a day.
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+// 5 headline macros: order, labels, and amount formatting.
+const MACRO_ORDER = ['calories', 'protein', 'fat', 'carbohydrates', 'fiber'] as const;
+const MACRO_LABEL: Record<string, string> = {
+  calories: 'kcal', protein: 'protein', fat: 'fat', carbohydrates: 'carbs', fiber: 'fibre',
+};
+function fmtAmount(key: string, v: number): string {
+  if (key === 'calories') return String(Math.round(v));
+  return `${Math.round(v)} g`;
 }
 
 // A calm, food-friendly palette for the share segments (not alarming reds).

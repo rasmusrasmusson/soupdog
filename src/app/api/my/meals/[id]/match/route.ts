@@ -104,6 +104,48 @@ export async function GET(
     ...p,
     name: nameById[p.personId] ?? 'Someone',
   }));
+
+  // --- per-participant portion nutrition + "% of daily target" (v1 §3.3) ---
+  // Each person's recommended portion = their plating share of the scaled dish:
+  //   portion[field] = share × recommendedServings × perServing[field]
+  // Their "% of daily" = that portion ÷ their resolved DAILY target for the
+  // field. Macros only (the 5 the demand model resolves); the full 71-nutrient
+  // per-person breakdown is a later slice that scales recipe-level nutrition.
+  // %-of-daily is honestly per-OCCASION against a DAILY figure, so one dinner
+  // reads ~25–40% — we do NOT imply a meal should reach 100% (§10a).
+  const reqById: Record<string, (typeof reqs)[number]> = {};
+  for (const r of reqs) reqById[r.personId] = r;
+
+  // map perServing (calories/protein/carbohydrates/fat/fiber) → portion + %daily
+  const NUTRIENT_KEYS = ['calories', 'protein', 'carbohydrates', 'fat', 'fiber'] as const;
+  // bridge each perServing key to the resolver's daily field
+  const DAILY_FIELD: Record<(typeof NUTRIENT_KEYS)[number], 'energy_kcal' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fiber_g'> = {
+    calories: 'energy_kcal', protein: 'protein_g', carbohydrates: 'carbs_g', fat: 'fat_g', fiber: 'fiber_g',
+  };
+  const recServings = score.recommendedServings || 0;
+
+  const perParticipant = platingNamed.map((p) => {
+    const portion: Record<string, number> = {};
+    const percentOfDaily: Record<string, number | null> = {};
+    const factor = p.share * recServings; // servings-worth of the dish for this person
+    for (const k of NUTRIENT_KEYS) {
+      const perSv = candidate.perServing[k];
+      if (perSv == null) { continue; } // dish lacks this nutrient → omit (honest)
+      const amount = perSv * factor;
+      portion[k] = amount;
+      const dailyField = reqById[p.personId]?.[DAILY_FIELD[k]];
+      const dailyVal = dailyField?.value ?? null;
+      percentOfDaily[k] = (dailyVal && dailyVal > 0) ? (amount / dailyVal) * 100 : null;
+    }
+    return {
+      personId: p.personId,
+      name: p.name,
+      confidence: reqById[p.personId]?.overallConfidence ?? 0,
+      share: p.share,
+      portion,
+      percentOfDaily,
+    };
+  });
   const participantsNamed = table.participants.map((p) => ({
     personId: p.personId,
     personaId: p.personaId,
@@ -118,6 +160,7 @@ export async function GET(
     table: { ...table, participants: participantsNamed },
     score,
     plating: platingNamed,
+    perParticipant,
     // honesty surface for the UI: did this meal have nutrition data to assess?
     hasNutrition: Object.keys(candidate.perServing).length > 0,
   });
