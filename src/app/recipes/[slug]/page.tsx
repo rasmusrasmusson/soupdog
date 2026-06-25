@@ -287,6 +287,30 @@ async function attachIntermediates(supabase: any, recipe: Recipe): Promise<Recip
 }
 
 // ── Recipe nutrition section ──────────────────────────────────
+// Same palette + monogram as the <Participants> component, so the nutrition
+// selector discs match the "Who's eating" avatars exactly.
+const AV_PALETTE: Record<string, string> = {
+  olive: '#5a6b52', sage: '#7d8c6a', clay: '#a8634a', slate: '#5c6b72',
+  plum: '#6d5168', teal: '#3f6b63', ochre: '#9c7a3c', rose: '#9c5f6b',
+};
+function avatarDisc(id: string, colorKey: string | null, initials: string | null, name: string) {
+  let bg: string;
+  if (colorKey && AV_PALETTE[colorKey]) bg = AV_PALETTE[colorKey];
+  else {
+    let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) | 0;
+    const keys = Object.keys(AV_PALETTE);
+    bg = AV_PALETTE[keys[Math.abs(h) % keys.length]];
+  }
+  let mono: string;
+  const o = initials?.trim();
+  if (o) mono = o.slice(0, 3).toUpperCase();
+  else {
+    const parts = (name ?? '').trim().split(/\s+/);
+    mono = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
+  }
+  return { bg, mono };
+}
+
 function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition, onComputed }: {
   versionId?: string;
   ingredients: RecipeIngredientRef[];
@@ -311,6 +335,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   // a time; switching re-scales the whole section to that person's portion.
   const rp = useRecipePeople();
   const match = rp?.match ?? null;
+  const rpPeople = rp?.people ?? [];
   const [activePerson, setActivePerson] = React.useState<string | null>(null);
   React.useEffect(() => {
     const first = match?.perParticipant?.[0]?.personId ?? null;
@@ -439,12 +464,28 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
     : result?.confidence === 'partial' ? '#b45309'
     : MUT;
 
-  const numCell = (value: number, unit: string) => (
-    <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
-      {value.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-      <span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
-    </span>
-  );
+  const numCell = (value: number, unit: string) => {
+    // Precision should match the estimate's confidence — 2 decimals on
+    // averaged USDA data reads as false precision. kcal/mg/µg → whole numbers;
+    // grams → whole, but 1 decimal below 1 g where it carries real meaning.
+    const u = (unit || '').toLowerCase();
+    let display: string;
+    if (u === 'kcal' || u === 'mg' || u === 'µg' || u === 'mcg' || u === 'iu') {
+      display = Math.round(value).toLocaleString();
+    } else if (u === 'g') {
+      display = value < 1
+        ? value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+        : Math.round(value).toLocaleString();
+    } else {
+      display = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    }
+    return (
+      <span style={{ fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>
+        {display}
+        <span style={{ color: MUT, marginLeft: 3 }}>{unit}</span>
+      </span>
+    );
+  };
 
   return (
     <section>
@@ -469,21 +510,21 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, alignItems: 'center' }}>
           {match?.perParticipant?.map((p: any) => {
             const on = activePerson === p.personId;
-            const parts = (p.name ?? '?').trim().split(/\s+/);
-            const mono = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
+            const rpp = rpPeople.find((x: any) => x.personId === p.personId);
+            const disc = avatarDisc(p.personId, rpp?.avatarColor ?? null, rpp?.avatarInitials ?? null, p.name);
             return (
               <button key={p.personId} onClick={() => setActivePerson(p.personId)} title={p.name}
                 aria-label={p.name} aria-pressed={on}
                 style={{
                   width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', padding: 0,
-                  background: 'var(--accent)', color: '#fff',
+                  background: disc.bg, color: '#fff',
                   fontFamily: MONO, fontSize: 11,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   border: on ? '2px solid var(--fg)' : '2px solid transparent',
                   outline: on ? '2px solid var(--bg)' : 'none', outlineOffset: on ? '-4px' : 0,
                   opacity: on ? 1 : 0.55, transition: 'opacity 0.12s ease, border 0.12s ease',
                 }}>
-                {mono}
+                {disc.mono}
               </button>
             );
           })}
@@ -733,7 +774,7 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
           </div>
 
           {/* Meta stats — below the intro (time/difficulty/cuisine glance) */}
-          <div className="hidden md:grid border border-[var(--border)] text-[11px] mt-5"
+          <div className="grid border border-[var(--border)] text-[11px] mt-5"
             style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
             {metaItems.map(([label, value], i) => (
               <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
@@ -741,15 +782,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
                   <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</span>
                 </div>
                 <div className="px-3 py-2 font-mono text-[11px] text-[var(--fg)]">{value}</div>
-              </div>
-            ))}
-          </div>
-          <div className="md:hidden border border-[var(--border)] mt-5"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}>
-            {metaItems.map(([label, value]) => (
-              <div key={label} style={{ background: 'var(--surface)', padding: '8px 12px' }}>
-                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT, marginBottom: 3 }}>{label}</div>
-                <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{value}</div>
               </div>
             ))}
           </div>
