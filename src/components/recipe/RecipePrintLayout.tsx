@@ -48,12 +48,25 @@ const ICONS = {
   cuisine: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z|M3 12h18|M12 3a15 15 0 0 1 0 18|M12 3a15 15 0 0 0 0 18', // globe
 };
 
+const capFirst = (s: string | null | undefined) => {
+  const t = (s ?? '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+};
+// "Rasmus", "Rasmus and Natasha", "Rasmus, Natasha and Sam"
+function formatNameList(names: string[]): string {
+  const n = names.filter(Boolean);
+  if (n.length === 0) return '';
+  if (n.length === 1) return n[0];
+  if (n.length === 2) return `${n[0]} and ${n[1]}`;
+  return `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`;
+}
+
 function OverviewItem({ icon, label, value }: { icon: keyof typeof ICONS; label: string; value: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: '#222' }}>
-      <span style={{ color: '#7a8a7f' }}><Icon d={ICONS[icon]} /></span>
-      <span style={{ ...MONO, fontSize: 8.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#999' }}>{label}</span>
-      <span style={{ ...SANS, fontSize: 11.5, color: '#111', fontWeight: 500 }}>{value}</span>
+      <span style={{ color: '#7a8a7f', display: 'flex', alignItems: 'center' }}><Icon d={ICONS[icon]} /></span>
+      <span style={{ ...MONO, fontSize: 8.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#999', lineHeight: 1 }}>{label}</span>
+      <span style={{ ...SANS, fontSize: 11.5, color: '#111', fontWeight: 500, lineHeight: 1 }}>{value}</span>
     </div>
   );
 }
@@ -185,7 +198,7 @@ function groupSteps(steps: RecipeStep[]) {
   return groups;
 }
 
-export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: string }) {
+export function RecipePrintLayout({ recipe, url, peopleNames }: { recipe: Recipe; url?: string; peopleNames?: string[] }) {
   // Map step → its ingredients via each ingredient's stepId (same as the web
   // RecipeDisplay). The mapper links ingredients to steps this way, NOT via a
   // step.ingredients id-array — so building from s.ingredients would come up empty.
@@ -236,10 +249,13 @@ export function RecipePrintLayout({ recipe, url }: { recipe: Recipe; url?: strin
 
         {/* Icon overview strip */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px 22px', marginTop: 12 }}>
-          <OverviewItem icon="yield" label="Serves" value={`${recipe.servings}`} />
+          {peopleNames && peopleNames.length > 0
+            ? <OverviewItem icon="yield" label="For" value={formatNameList(peopleNames)} />
+            : <OverviewItem icon="yield" label="Serves" value={`${recipe.servings}`} />}
           <OverviewItem icon="total" label="Total" value={formatDuration(recipe.totalTimeSeconds)} />
-          {recipe.activeTimeSeconds ? <OverviewItem icon="active" label="Active" value={formatDuration(recipe.activeTimeSeconds)} /> : null}
-          <OverviewItem icon="difficulty" label="Level" value={recipe.difficulty} />
+          {/* Active time left blank until derived from the task graph (see
+              Time Model design note) — the stored AI estimate is unreliable. */}
+          <OverviewItem icon="difficulty" label="Level" value={capFirst(recipe.difficulty)} />
         </div>
       </div>
 

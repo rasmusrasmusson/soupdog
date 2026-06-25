@@ -56,19 +56,21 @@ function BookmarkButton({ canonicalId }: { canonicalId: string }) {
 
   return (
     <button onClick={toggle}
+      className="no-print"
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
+        fontFamily: 'var(--font-mono)', fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase',
+        display: 'inline-flex', alignItems: 'center', gap: 6,
         border: `1px solid ${saved ? 'var(--accent)' : 'var(--border)'}`,
-        padding: '6px 12px', fontSize: 11, cursor: 'pointer',
-        fontFamily: 'var(--font-mono)', background: saved ? 'var(--accent-subtle)' : 'transparent',
-        color: saved ? 'var(--accent)' : 'var(--fg)',
+        borderRadius: 6, padding: '5px 12px', cursor: 'pointer',
+        background: saved ? 'var(--accent-subtle)' : 'none',
+        color: saved ? 'var(--accent)' : 'var(--muted)',
         flexShrink: 0, transition: 'all 0.15s', opacity: loading ? 0.6 : 1,
       }}
       title={saved ? 'Remove from saved' : 'Save recipe'}
     >
       {saved
-        ? <><BookmarkCheck size={11} strokeWidth={1.5} /> Saved</>
-        : <><Bookmark size={11} strokeWidth={1.5} /> Save</>
+        ? <><BookmarkCheck size={12} strokeWidth={1.5} /> Saved</>
+        : <><Bookmark size={12} strokeWidth={1.5} /> Save</>
       }
     </button>
   );
@@ -309,6 +311,18 @@ function avatarDisc(id: string, colorKey: string | null, initials: string | null
     mono = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
   }
   return { bg, mono };
+}
+
+// Reads the shared people list (inside RecipePeopleProvider) and passes real
+// people's names to the print layout for the "For …" line. Filters the persona.
+const PERSONA_ADULT_ID = '00000000-0000-0000-0000-0000000000a1';
+function PrintLayoutWithPeople({ recipe, url }: { recipe: Recipe; url?: string }) {
+  const rp = useRecipePeople();
+  const names = (rp?.people ?? [])
+    .filter((p: any) => p.personId !== PERSONA_ADULT_ID)
+    .map((p: any) => p.name)
+    .filter(Boolean);
+  return <RecipePrintLayout recipe={recipe} url={url} peopleNames={names} />;
 }
 
 function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition, onComputed }: {
@@ -708,7 +722,9 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
   };
   const metaItems: [string, string][] = [
     ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
-    ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
+    // Active time left blank until derived from the task graph — the stored AI
+    // estimate is unreliable (could be > total). See Time Model design note.
+    ['ACTIVE TIME', ''],
     ['DIFFICULTY',  cap(recipe.difficulty)],
     ['RATING',      recipe.ratings ? `${(recipe.ratings as any).average.toFixed(1)} / 5` : '—'],
     ['CUISINE',     cap(recipe.cuisine)],
@@ -840,7 +856,7 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
     </div>
 
     {/* Dedicated cookbook print layout (renders only when printing). */}
-    <RecipePrintLayout recipe={recipe} url={typeof window !== 'undefined' ? window.location.href : undefined} />
+    <PrintLayoutWithPeople recipe={recipe} url={typeof window !== 'undefined' ? window.location.href : undefined} />
     </RecipePeopleProvider>
     </>
   );
