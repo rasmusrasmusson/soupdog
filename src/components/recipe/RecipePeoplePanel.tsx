@@ -14,8 +14,9 @@
 // (Dish·Schedule·Start v0.2 §8): Start relocates from the meal once meals are
 // the thin instance layer. This panel is the people + nutrition view only.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Participants, type ParticipantPerson, type AddablePerson } from '@/components/people/Participants';
+import { useRecipePeople } from '@/components/recipe/RecipePeopleContext';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono, monospace)' };
 const SERIF: React.CSSProperties = { fontFamily: 'IBM Plex Serif, serif' };
@@ -54,67 +55,14 @@ function platingSummary(plating: { name: string; share: number; phrase: string }
   return parts.slice(0, -1).join('; ') + '; and ' + parts[parts.length - 1] + '.';
 }
 
-export default function RecipePeoplePanel({ versionId, slot = 'dinner' }: { versionId?: string; slot?: string }) {
-  const [people, setPeople] = useState<Person[]>([]);
-  const [addable, setAddable] = useState<AddablePerson[]>([]);
-  const [match, setMatch] = useState<MatchData | null>(null);
-  const [perServing, setPerServing] = useState<PerServing | null>(null);
+export default function RecipePeoplePanel({ versionId }: { versionId?: string }) {
+  void versionId; // people/match now come from context (provider owns versionId)
+  const ctx = useRecipePeople();
   const [showConfNote, setShowConfNote] = useState(false);
-  const [dirty, setDirty] = useState(false);   // changed from saved default?
-  const [savedMsg, setSavedMsg] = useState(false);
   const [expanded, setExpanded] = useState(true); // detail open when data exists
 
-  // prefill from the default set + load addable household
-  useEffect(() => {
-    let active = true;
-    fetch('/api/my/cooking-defaults').then(r => r.json()).then(d => { if (active) setPeople(d.people ?? []); }).catch(() => {});
-    fetch('/api/my/meal-plan/group').then(r => r.json()).then(d => { if (active) setAddable(d.people ?? []); }).catch(() => {});
-    return () => { active = false; };
-  }, []);
-
-  // recipe what-if match whenever the people list changes
-  const runMatch = useCallback(async (ids: string[]) => {
-    if (!versionId || ids.length === 0) { setMatch(null); return; }
-    try {
-      const d = await fetch(`/api/recipes/${versionId}/match`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ personIds: ids, slot }),
-      }).then(r => r.json());
-      if (!d.error) setMatch(d);
-    } catch { /* enhancement — fail quiet */ }
-  }, [versionId, slot]);
-
-  useEffect(() => { runMatch(people.map(p => p.personId)); }, [people, runMatch]);
-
-  // nutrition from the canonical route (single source of truth)
-  useEffect(() => {
-    if (!versionId) { setPerServing(null); return; }
-    let active = true;
-    fetch(`/api/recipes/${versionId}/nutrition`).then(r => r.json())
-      .then(d => { if (active) setPerServing((d?.perServing as PerServing) ?? null); })
-      .catch(() => { if (active) setPerServing(null); });
-    return () => { active = false; };
-  }, [versionId]);
-
-  function addPerson(personId: string) {
-    const a = addable.find(x => x.id === personId);
-    if (!a) return;
-    setPeople(prev => prev.some(p => p.personId === personId) ? prev
-      : [...prev, { personId: a.id, name: a.name, avatarColor: a.avatarColor, avatarInitials: a.avatarInitials }]);
-    setDirty(true); setSavedMsg(false);
-  }
-  function removePerson(personId: string) {
-    setPeople(prev => prev.filter(p => p.personId !== personId));
-    setDirty(true); setSavedMsg(false);
-  }
-  async function saveDefault() {
-    await fetch('/api/my/cooking-defaults', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personIds: people.map(p => p.personId) }),
-    });
-    setDirty(false); setSavedMsg(true);
-  }
-
+  if (!ctx) return null;
+  const { people, addable, match, perServing, dirty, savedMsg, addPerson, removePerson, saveDefault } = ctx;
   const band = match ? confidenceBand(match.table.confidence) : null;
   const multi = (match?.plating.length ?? 0) > 1;
   const hasNutrition = !!perServing && Object.keys(perServing).length > 0;

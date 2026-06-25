@@ -12,6 +12,7 @@ import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 import { NutrientDetailModal } from '@/components/recipe/NutrientDetailModal';
 import RecipePeoplePanel from '@/components/recipe/RecipePeoplePanel';
+import { RecipePeopleProvider, useRecipePeople } from '@/components/recipe/RecipePeopleContext';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -305,26 +306,20 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
   const [activeCat, setActiveCat] = React.useState<string | null>(null); // null = headline only
   const [modalNutrient, setModalNutrient] = React.useState<{ key: string; amount: number } | null>(null);
 
-  // Per-person view: fetch the recipe what-if match (people + shares + daily
-  // targets). One person is shown at a time; switching re-scales the whole
-  // section to that person's portion. Falls back gracefully to per-serving if
-  // match is unavailable.
-  const [match, setMatch] = React.useState<any>(null);
+  // Per-person view: the shared people + match come from RecipePeopleProvider
+  // (same source as the Cook-for panel — they never drift). One person shown at
+  // a time; switching re-scales the whole section to that person's portion.
+  const rp = useRecipePeople();
+  const match = rp?.match ?? null;
   const [activePerson, setActivePerson] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!versionId) return;
-    fetch(`/api/recipes/${versionId}/match`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d || d.error) return;
-        setMatch(d);
-        const first = d.perParticipant?.[0]?.personId ?? null;
-        setActivePerson(prev => prev ?? first);
-      })
-      .catch(() => {});
-  }, [versionId]);
+    const first = match?.perParticipant?.[0]?.personId ?? null;
+    setActivePerson(prev => {
+      // keep current selection if still present, else default to first
+      if (prev && match?.perParticipant?.some((p: any) => p.personId === prev)) return prev;
+      return first;
+    });
+  }, [match]);
 
   React.useEffect(() => {
     if (!versionId) return;
@@ -468,22 +463,28 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
         </span>
       </div>
 
-      {/* Person selector — shows nutrition for one assigned person at a time
-          (their portion = share × recommended servings). */}
+      {/* Person selector — avatars (consistent with the Cook-for panel); one
+          active at a time, switching re-scales the section to their portion. */}
       {match?.perParticipant?.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
           {match.perParticipant.map((p: any) => {
             const on = activePerson === p.personId;
+            const mono = (p.name ?? '?').trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
             return (
-              <button key={p.personId} onClick={() => setActivePerson(p.personId)}
+              <button key={p.personId} onClick={() => setActivePerson(p.personId)} title={p.name}
                 style={{
-                  fontFamily: MONO, fontSize: 10, letterSpacing: '0.04em',
-                  cursor: 'pointer', padding: '5px 11px', borderRadius: 999,
+                  display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer',
+                  padding: '3px 10px 3px 3px', borderRadius: 999,
                   border: on ? '1px solid var(--accent)' : B,
-                  background: on ? 'var(--accent)' : 'transparent',
-                  color: on ? '#fff' : 'var(--muted)', transition: 'all 0.12s ease',
+                  background: on ? 'var(--accent)' : 'transparent', transition: 'all 0.12s ease',
                 }}>
-                {p.name}
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto',
+                  background: on ? '#fff' : 'var(--accent)', color: on ? 'var(--accent)' : '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: MONO, fontSize: 10,
+                }}>{mono}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, color: on ? '#fff' : 'var(--muted)' }}>{p.name}</span>
               </button>
             );
           })}
@@ -678,6 +679,7 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
 
   return (
     <>
+    <RecipePeopleProvider versionId={(recipe as any).recipeVersionId}>
     <div className="flex h-full screen-only">
       <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
 
@@ -826,6 +828,7 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
 
     {/* Dedicated cookbook print layout (renders only when printing). */}
     <RecipePrintLayout recipe={recipe} url={typeof window !== 'undefined' ? window.location.href : undefined} />
+    </RecipePeopleProvider>
     </>
   );
 }
