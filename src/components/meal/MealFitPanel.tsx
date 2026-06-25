@@ -20,20 +20,24 @@ const SERIF: React.CSSProperties = { fontFamily: 'IBM Plex Serif, serif' };
 
 type PlatingPortion = { personId: string; name: string; share: number; phrase: string };
 type Participant = { personId: string; name: string; personaId: string; confidence: number; satietyNeed: number };
+type DailyTargets = { calories: number | null; protein: number | null; carbohydrates: number | null; fat: number | null; fiber: number | null };
 type PerParticipant = {
   personId: string; name: string; confidence: number; share: number;
-  portion: Record<string, number>;
-  percentOfDaily: Record<string, number | null>;
+  dailyTargets: DailyTargets;
 };
 type MatchData = {
   slot: string;
-  meal: { id: string; title: string; baseServings: number };
+  meal: { id: string; title: string; baseServings: number; versionId: string | null };
   table: { participants: Participant[]; confidence: number; satietyFloor: number };
   score: { recommendedServings: number; satietyOk: boolean; notes: string[] };
   plating: PlatingPortion[];
   perParticipant: PerParticipant[];
-  hasNutrition: boolean;
+  recommendedServings: number;
 };
+
+// per-serving nutrition from the canonical recipe-nutrition route (same source
+// as the recipe page — single source of truth).
+type PerServing = Record<string, number>;
 
 // Confidence → presentation. Grey for low (unknown, not bad).
 function confidenceBand(c: number): { color: string; label: string; note: string } {
@@ -53,6 +57,7 @@ function confidenceBand(c: number): { color: string; label: string; note: string
 
 export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: string; slot?: string }) {
   const [data, setData] = useState<MatchData | null>(null);
+  const [perServing, setPerServing] = useState<PerServing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showConfNote, setShowConfNote] = useState(false);
@@ -68,6 +73,20 @@ export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: stri
     return () => { active = false; };
   }, [mealId, slot]);
 
+  // Nutrition comes from the SAME route the recipe page uses (single source of
+  // truth — numbers always match the recipe page). Fetched once we know the
+  // recipe's current version id from match.
+  const versionId = data?.meal.versionId ?? null;
+  useEffect(() => {
+    if (!versionId) { setPerServing(null); return; }
+    let active = true;
+    fetch(`/api/recipes/${versionId}/nutrition`)
+      .then(r => r.json())
+      .then(d => { if (active) setPerServing((d?.perServing as PerServing) ?? null); })
+      .catch(() => { if (active) setPerServing(null); });
+    return () => { active = false; };
+  }, [versionId]);
+
   if (loading) return (
     <div style={{ ...MONO, fontSize: 12, color: 'var(--muted)', padding: '14px 0' }}>Working out portions…</div>
   );
@@ -76,6 +95,7 @@ export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: stri
   const band = confidenceBand(data.table.confidence);
   const multi = data.plating.length > 1;
   const everyoneFull = data.score.satietyOk;
+  const hasNutrition = !!perServing && Object.keys(perServing).length > 0;
 
   return (
     <div style={{ marginTop: 30, marginBottom: 26, border: '1px solid var(--border)', borderRadius: 12, padding: '18px 18px 20px', background: 'var(--surface)' }}>
@@ -143,9 +163,10 @@ export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: stri
       )}
 
       {/* Per-person nutrition summary — the 5 headline macros + "% of daily".
-          Honest: % is against a DAILY target, so one meal reads low by design.
-          Only shown when the dish has nutrition data to scale. */}
-      {data.hasNutrition && data.perParticipant.some(p => Object.keys(p.portion).length > 0) && (
+          Nutrition from the canonical recipe-nutrition route (same as recipe
+          page); portion = share × recommendedServings × perServing. "% of day"
+          is against a DAILY target, so one meal reads low by design (§10a). */}
+      {hasNutrition && (
         <div style={{ marginTop: multi ? 22 : 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
           <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 10 }}>
             What each portion gives
@@ -154,25 +175,30 @@ export default function MealFitPanel({ mealId, slot = 'dinner' }: { mealId: stri
             {data.perParticipant
               .slice()
               .sort((a, b) => b.share - a.share)
-              .map(p => (
-                <div key={p.personId}>
-                  <div style={{ ...SERIF, fontSize: 15, color: 'var(--fg)', marginBottom: 5 }}>{p.name}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
-                    {MACRO_ORDER.filter(k => p.portion[k] != null).map(k => {
-                      const pct = p.percentOfDaily[k];
-                      return (
-                        <span key={k} style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-                          <span style={{ color: 'var(--fg)' }}>{fmtAmount(k, p.portion[k])}</span>
-                          {' '}{MACRO_LABEL[k]}
-                          {pct != null && (
-                            <span style={{ color: '#9a978f' }}> · {Math.round(pct)}% of day</span>
-                          )}
-                        </span>
-                      );
-                    })}
+              .map(p => {
+                const factor = p.share * (data.recommendedServings || 0);
+                return (
+                  <div key={p.personId}>
+                    <div style={{ ...SERIF, fontSize: 15, color: 'var(--fg)', marginBottom: 5 }}>{p.name}</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
+                      {MACRO_ORDER.map(k => {
+                        const perSv = perServing![k];
+                        if (perSv == null) return null;
+                        const amount = perSv * factor;
+                        const target = p.dailyTargets[k as keyof DailyTargets];
+                        const pct = (target && target > 0) ? (amount / target) * 100 : null;
+                        return (
+                          <span key={k} style={{ fontSize: 12.5, color: 'var(--muted)' }}>
+                            <span style={{ color: 'var(--fg)' }}>{fmtAmount(k, amount)}</span>
+                            {' '}{MACRO_LABEL[k]}
+                            {pct != null && <span style={{ color: '#9a978f' }}> · {Math.round(pct)}% of day</span>}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
           </div>
           <div style={{ fontSize: 11.5, color: '#9a978f', marginTop: 12, lineHeight: 1.5 }}>
             Shown as a share of each person’s estimated daily needs — one meal is only part of a day.

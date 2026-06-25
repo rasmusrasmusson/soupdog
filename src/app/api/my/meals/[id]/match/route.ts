@@ -74,8 +74,8 @@ export async function GET(
   const canonicalQuery = db
     .from('recipe_canonicals')
     .select(`
-      id, slug, author_id,
-      recipe_versions!current_version_id ( title, base_servings, nutrition_per_serving )
+      id, slug, author_id, current_version_id,
+      recipe_versions!current_version_id ( id, title, base_servings, nutrition_per_serving )
     `)
     .eq('id', canonicalId)
     .maybeSingle();
@@ -145,45 +145,31 @@ export async function GET(
     name: nameById[p.personId] ?? 'Someone',
   }));
 
-  // --- per-participant portion nutrition + "% of daily target" (v1 §3.3) ---
-  // Each person's recommended portion = their plating share of the scaled dish:
-  //   portion[field] = share × recommendedServings × perServing[field]
-  // Their "% of daily" = that portion ÷ their resolved DAILY target for the
-  // field. Macros only (the 5 the demand model resolves); the full 71-nutrient
-  // per-person breakdown is a later slice that scales recipe-level nutrition.
-  // %-of-daily is honestly per-OCCASION against a DAILY figure, so one dinner
-  // reads ~25–40% — we do NOT imply a meal should reach 100% (§10a).
+  // --- per-participant DAILY targets (for the panel's "% of daily" math) ---
+  // Nutrition itself is fetched by the panel from the canonical recipe-nutrition
+  // route (single source of truth — same numbers as the recipe page). Here we
+  // only return, per person: their plating share + their resolved DAILY target
+  // for each of the 5 macros, with confidence. The panel computes:
+  //   portion[field]  = share × recommendedServings × perServing[field]
+  //   %ofDaily[field] = portion[field] ÷ dailyTarget[field]
   const reqById: Record<string, (typeof reqs)[number]> = {};
   for (const r of reqs) reqById[r.personId] = r;
 
-  // map perServing (calories/protein/carbohydrates/fat/fiber) → portion + %daily
-  const NUTRIENT_KEYS = ['calories', 'protein', 'carbohydrates', 'fat', 'fiber'] as const;
-  // bridge each perServing key to the resolver's daily field
-  const DAILY_FIELD: Record<(typeof NUTRIENT_KEYS)[number], 'energy_kcal' | 'protein_g' | 'carbs_g' | 'fat_g' | 'fiber_g'> = {
-    calories: 'energy_kcal', protein: 'protein_g', carbohydrates: 'carbs_g', fat: 'fat_g', fiber: 'fiber_g',
-  };
-  const recServings = score.recommendedServings || 0;
-
   const perParticipant = platingNamed.map((p) => {
-    const portion: Record<string, number> = {};
-    const percentOfDaily: Record<string, number | null> = {};
-    const factor = p.share * recServings; // servings-worth of the dish for this person
-    for (const k of NUTRIENT_KEYS) {
-      const perSv = candidate.perServing[k];
-      if (perSv == null) { continue; } // dish lacks this nutrient → omit (honest)
-      const amount = perSv * factor;
-      portion[k] = amount;
-      const dailyField = reqById[p.personId]?.[DAILY_FIELD[k]];
-      const dailyVal = dailyField?.value ?? null;
-      percentOfDaily[k] = (dailyVal && dailyVal > 0) ? (amount / dailyVal) * 100 : null;
-    }
+    const req = reqById[p.personId];
+    const dailyTargets = {
+      calories: req?.energy_kcal?.value ?? null,
+      protein: req?.protein_g?.value ?? null,
+      carbohydrates: req?.carbs_g?.value ?? null,
+      fat: req?.fat_g?.value ?? null,
+      fiber: req?.fiber_g?.value ?? null,
+    };
     return {
       personId: p.personId,
       name: p.name,
-      confidence: reqById[p.personId]?.overallConfidence ?? 0,
+      confidence: req?.overallConfidence ?? 0,
       share: p.share,
-      portion,
-      percentOfDaily,
+      dailyTargets,
     };
   });
   const participantsNamed = table.participants.map((p) => ({
@@ -196,12 +182,18 @@ export async function GET(
 
   return NextResponse.json({
     slot,
-    meal: { id: meal.id, title: candidate.title, baseServings: candidate.baseServings },
+    meal: {
+      id: meal.id,
+      title: candidate.title,
+      baseServings: candidate.baseServings,
+      // the panel fetches /api/recipes/[versionId]/nutrition (single source of
+      // truth) and scales perServing by share × recommendedServings.
+      versionId: meal.current_version_id ?? (Array.isArray(meal.recipe_versions) ? meal.recipe_versions[0]?.id : meal.recipe_versions?.id) ?? null,
+    },
     table: { ...table, participants: participantsNamed },
     score,
     plating: platingNamed,
     perParticipant,
-    // honesty surface for the UI: did this meal have nutrition data to assess?
-    hasNutrition: Object.keys(candidate.perServing).length > 0,
+    recommendedServings: score.recommendedServings ?? 0,
   });
 }
