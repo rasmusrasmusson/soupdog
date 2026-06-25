@@ -31,6 +31,16 @@ const B    = '1px solid var(--border)';
 const MONO = 'var(--font-mono)';
 const MUT  = 'var(--muted)';
 
+// Shared "click to learn more" affordance — one dotted underline everywhere
+// (ingredient, tool, task) so the page has a single consistent signal instead
+// of three (dotted word / plain tool / ⓘ icon).
+const LEARN_MORE_BTN: React.CSSProperties = {
+  background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit',
+  color: 'inherit', textAlign: 'left',
+  textDecoration: 'underline', textDecorationStyle: 'dotted',
+  textDecorationColor: 'var(--muted)', textUnderlineOffset: '3px',
+};
+
 // Tool names are stored as slugs ("frying-pan", "large-pot"). Humanize for display:
 // hyphens → spaces. Lowercase is kept (matches the calm cookbook tone). Used at every
 // point a raw slug becomes visible text (the [tool] fill, the per-step tool cell, and
@@ -172,7 +182,7 @@ function ToolCell({ settings, onOpenTool }: { settings: any; onOpenTool?: (slug:
       <div>
         {onOpenTool && slug
           ? <button type="button" onClick={() => onOpenTool(slug)}
-              style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500, border: 'none', background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+              style={{ ...LEARN_MORE_BTN, fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}
               className="hover:text-[var(--accent)] transition-colors">{label}</button>
           : <span style={{ fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{label}</span>}
         {hasSettings && tool.applianceModeId && (
@@ -265,25 +275,15 @@ function StepLine({ taskName, template, singleTool, ingredientName, toolName, in
 }) {
   return (
     <>
-      {composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)}
-      {notes && <span style={{ color: MUT }}> → {notes}</span>}
-      {taskId && onOpenTask && (
-        <button
-          type="button"
-          onClick={() => onOpenTask(taskId)}
-          title="How to do this"
-          aria-label="How to do this"
-          style={{
-            marginLeft: 6, padding: 0, border: 'none', background: 'none', cursor: 'pointer',
-            fontFamily: MONO, fontSize: 11, lineHeight: 1, color: 'var(--muted)',
-            verticalAlign: 'baseline', transition: 'color 0.15s',
-          }}
-          onMouseEnter={e => (e.currentTarget.style.color = 'var(--accent)')}
-          onMouseLeave={e => (e.currentTarget.style.color = 'var(--muted)')}
-        >
-          ⓘ
+      {taskId && onOpenTask ? (
+        <button type="button" onClick={() => onOpenTask(taskId)} title="How to do this"
+          style={LEARN_MORE_BTN} className="hover:text-[var(--accent)] transition-colors">
+          {composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)}
         </button>
+      ) : (
+        composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)
       )}
+      {notes && <span style={{ color: MUT }}> → {notes}</span>}
     </>
   );
 }
@@ -406,7 +406,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                   <td style={{ ...td, borderRight: B, fontFamily: MONO, fontSize: 10, color: MUT, textAlign: 'center' }}>{i + 1}</td>
                   <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                     {linkIngredients && ing.ingredientSlug
-                      ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontWeight: 'inherit', color: 'var(--fg)', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
+                      ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ ...LEARN_MORE_BTN, color: 'var(--fg)', fontWeight: 'inherit' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
                       : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                     {ing.optional && <span style={{ marginLeft: 8, fontSize: 10, color: MUT, fontFamily: MONO }}>(opt)</span>}
                   </td>
@@ -544,7 +544,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                             {isOn && rowIdx === 0 && <td rowSpan={rowCount} style={{ ...td, borderRight: B, textAlign: 'center', verticalAlign: 'middle' }}><Checkbox checked={done} onChange={() => interactive!.stepChecks.toggle(gIdx)} /></td>}
                             <td style={{ ...td, borderRight: B, fontWeight: 500 }}>
                               {linkIngredients && ing.ingredientSlug
-                                ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit', fontWeight: 'inherit', color: 'var(--fg)', textAlign: 'left', textDecoration: 'underline', textDecorationColor: 'var(--border)', textUnderlineOffset: '2px' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
+                                ? <button type="button" onClick={() => setOpenIngredientSlug(ing.ingredientSlug!)} style={{ ...LEARN_MORE_BTN, color: 'var(--fg)', fontWeight: 'inherit' }} className="hover:text-[var(--accent)] transition-colors">{capitalizeLabel(ing.name)}</button>
                                 : <span style={{ color: 'var(--fg)' }}>{capitalizeLabel(ing.name)}</span>}
                             </td>
                             <td style={{ ...td, borderRight: B, textAlign: 'right', fontFamily: MONO, fontVariantNumeric: 'tabular-nums' }}>{fmtAmount(ing.quantity.value, ing.quantity.unit).qty}</td>
