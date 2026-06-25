@@ -11,6 +11,7 @@ import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 import { NutrientDetailModal } from '@/components/recipe/NutrientDetailModal';
+import RecipePeoplePanel from '@/components/recipe/RecipePeoplePanel';
 
 function useChecklist(count: number) {
   const [checked, setChecked] = useState<boolean[]>(Array(count).fill(false));
@@ -711,6 +712,9 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
             storedNutrition={recipe.nutrition}
             onComputed={(perServing, atServings) => setLiveNutrition({ perServing, atServings })}
           />
+
+          {/* Who's eating + per-person nutrition (what-if; nothing scheduled) */}
+          <RecipePeoplePanel versionId={(recipe as any).recipeVersionId} />
 
           <div className="md:hidden h-16" />
         </div>

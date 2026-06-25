@@ -1,9 +1,10 @@
-// src/app/api/my/cooking/route.ts
-// Cooking-skills competency matrix for the account's self-person.
-// GET  → { overall, areas: { area: level } }  (overall comes from user_profiles.skill_level)
-// PUT  → upserts competency rows + overall skill_level.
-//
-// level: 0 none · 1 can follow a recipe · 2 confident · 3 can improvise/teach.
+// src/app/api/my/cooking-defaults/route.ts
+// The caller's default participant set — "who I usually cook for".
+//   GET  → { people: [{ personId, name, avatarColor, avatarInitials }] }
+//          (lazily seeds the caller's self-person if the set is empty)
+//   PUT  → body { personIds: string[] } replaces the set (access-checked)
+// One set per account; first default is the user himself. Used to prefill the
+// recipe people panel. SQL: cooking_default_participants.sql
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -19,27 +20,51 @@ async function selfPersonId(db: any, accountId: string): Promise<string | null> 
   return data?.person_id ?? null;
 }
 
+async function hydrate(db: any, personIds: string[]) {
+  if (personIds.length === 0) return [];
+  const { data: persons } = await db
+    .from('person')
+    .select('id, display_name, full_name, avatar_color, avatar_initials')
+    .in('id', personIds);
+  const byId: Record<string, any> = {};
+  for (const p of persons ?? []) byId[p.id] = p;
+  // preserve input order
+  return personIds
+    .map((pid) => byId[pid])
+    .filter(Boolean)
+    .map((p) => ({
+      personId: p.id,
+      name: p.display_name || p.full_name || 'Someone',
+      avatarColor: p.avatar_color ?? null,
+      avatarInitials: p.avatar_initials ?? null,
+    }));
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const db = supabase as any;
 
-  const pid = await selfPersonId(db, user.id);
-  const areas: Record<string, number> = {};
-  if (pid) {
-    const { data: rows, error } = await db
-      .from('cooking_competency')
-      .select('area, level')
-      .eq('person_id', pid);
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    for (const r of rows ?? []) areas[r.area] = r.level;
+  const { data: rows } = await db
+    .from('cooking_default_participants')
+    .select('person_id, created_at')
+    .eq('account_id', user.id)
+    .order('created_at', { ascending: true });
+
+  let personIds = (rows ?? []).map((r: any) => r.person_id);
+
+  // lazily seed the self-person as the first default
+  if (personIds.length === 0) {
+    const self = await selfPersonId(db, user.id);
+    if (self) {
+      await db.from('cooking_default_participants')
+        .insert({ account_id: user.id, person_id: self });
+      personIds = [self];
+    }
   }
 
-  const { data: prof } = await db
-    .from('user_profiles').select('skill_level').eq('id', user.id).maybeSingle();
-
-  return NextResponse.json({ overall: prof?.skill_level ?? 'medium', areas });
+  return NextResponse.json({ people: await hydrate(db, personIds) });
 }
 
 export async function PUT(req: NextRequest) {
@@ -48,32 +73,28 @@ export async function PUT(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const db = supabase as any;
 
-  const body = await req.json();
-  const pid = await selfPersonId(db, user.id);
-  if (!pid) return NextResponse.json({ error: 'No self-person found' }, { status: 404 });
+  let body: { personIds?: string[] } = {};
+  try { body = await req.json(); } catch { /* empty */ }
+  let personIds = Array.from(new Set((body.personIds ?? []).filter(Boolean)));
 
-  // Overall skill stays on user_profiles (used for quick filtering).
-  if (body.overall) {
-    await db.from('user_profiles').upsert(
-      { id: user.id, skill_level: body.overall, updated_at: new Date().toISOString() },
-      { onConflict: 'id' },
-    );
+  // access: only persons the caller can access may be defaults
+  if (personIds.length > 0) {
+    const { data: grants } = await db
+      .from('person_access')
+      .select('person_id')
+      .eq('account_id', user.id)
+      .is('revoked_at', null)
+      .in('person_id', personIds);
+    const allowed = new Set((grants ?? []).map((g: any) => g.person_id));
+    personIds = personIds.filter((pid) => allowed.has(pid));
   }
 
-  // Per-area levels: upsert each provided area.
-  const areas: Record<string, number> = body.areas ?? {};
-  const rows = Object.entries(areas).map(([area, level]) => ({
-    person_id: pid,
-    area,
-    level: Math.max(0, Math.min(3, Number(level) || 0)),
-    updated_at: new Date().toISOString(),
-  }));
-  if (rows.length) {
-    const { error } = await db
-      .from('cooking_competency')
-      .upsert(rows, { onConflict: 'person_id,area' });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // replace the set: clear, then insert
+  await db.from('cooking_default_participants').delete().eq('account_id', user.id);
+  if (personIds.length > 0) {
+    await db.from('cooking_default_participants')
+      .insert(personIds.map((pid) => ({ account_id: user.id, person_id: pid })));
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ people: await hydrate(db, personIds) });
 }
