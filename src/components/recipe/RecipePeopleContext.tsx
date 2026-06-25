@@ -40,6 +40,20 @@ type Ctx = {
 
 const RecipePeopleCtx = createContext<Ctx | null>(null);
 
+// The average-adult persona, shown when no real people are assigned (e.g. the
+// user removed everyone, or a logged-out visitor). It is a VISIBLE member of the
+// one people list — avatars and nutrition both reflect it — not a hidden
+// route-side fallback. Its id matches the recipe-match route's persona id so the
+// match resolves it to the adult_unspecified persona floor.
+// [LATER] size personas to the recipe's servings (N personas) — needs the
+// persona-people build; for now a single average adult.
+const PERSONA_ADULT: RPPerson = {
+  personId: '00000000-0000-0000-0000-0000000000a1',
+  name: 'A typical adult',
+  avatarColor: null,
+  avatarInitials: 'A',
+};
+
 export function RecipePeopleProvider({ versionId, slot = 'dinner', children }: { versionId?: string; slot?: string; children: React.ReactNode }) {
   const [people, setPeople] = useState<RPPerson[]>([]);
   const [addable, setAddable] = useState<RPAddable[]>([]);
@@ -56,7 +70,11 @@ export function RecipePeopleProvider({ versionId, slot = 'dinner', children }: {
     return () => { active = false; };
   }, []);
 
-  // recipe what-if match whenever the people list changes
+  // The effective list: real people if any, else the average-adult persona.
+  // Always ≥1 person; "empty" resolves to persona, visibly (avatars + nutrition).
+  const effectivePeople = people.length > 0 ? people : [PERSONA_ADULT];
+
+  // recipe what-if match whenever the effective people list changes
   const runMatch = useCallback(async (ids: string[]) => {
     if (!versionId) { setMatch(null); return; }
     try {
@@ -68,7 +86,8 @@ export function RecipePeopleProvider({ versionId, slot = 'dinner', children }: {
     } catch { /* enhancement — fail quiet */ }
   }, [versionId, slot]);
 
-  useEffect(() => { runMatch(people.map(p => p.personId)); }, [people, runMatch]);
+  const effectiveIdsKey = effectivePeople.map(p => p.personId).join(',');
+  useEffect(() => { runMatch(effectiveIdsKey ? effectiveIdsKey.split(',') : []); }, [effectiveIdsKey, runMatch]);
 
   // nutrition from the canonical route (single source of truth)
   useEffect(() => {
@@ -102,7 +121,7 @@ export function RecipePeopleProvider({ versionId, slot = 'dinner', children }: {
   }, [people]);
 
   const value: Ctx = {
-    versionId, people, addable, match, perServing, dirty, savedMsg,
+    versionId, people: effectivePeople, addable, match, perServing, dirty, savedMsg,
     addPerson, removePerson, saveDefault,
   };
 

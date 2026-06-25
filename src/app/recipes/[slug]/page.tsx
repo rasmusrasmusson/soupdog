@@ -463,28 +463,27 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
         </span>
       </div>
 
-      {/* Person selector — avatars (consistent with the Cook-for panel); one
-          active at a time, switching re-scales the section to their portion. */}
+      {/* Person selector — disc-only avatars (consistent with the Cook-for
+          panel); one active at a time, switching re-scales to their portion. */}
       {(match?.perParticipant?.length ?? 0) > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12, alignItems: 'center' }}>
           {match?.perParticipant?.map((p: any) => {
             const on = activePerson === p.personId;
-            const mono = (p.name ?? '?').trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
+            const parts = (p.name ?? '?').trim().split(/\s+/);
+            const mono = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase() || '?';
             return (
               <button key={p.personId} onClick={() => setActivePerson(p.personId)} title={p.name}
+                aria-label={p.name} aria-pressed={on}
                 style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer',
-                  padding: '3px 10px 3px 3px', borderRadius: 999,
-                  border: on ? '1px solid var(--accent)' : B,
-                  background: on ? 'var(--accent)' : 'transparent', transition: 'all 0.12s ease',
-                }}>
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto',
-                  background: on ? '#fff' : 'var(--accent)', color: on ? 'var(--accent)' : '#fff',
+                  width: 30, height: 30, borderRadius: '50%', cursor: 'pointer', padding: 0,
+                  background: 'var(--accent)', color: '#fff',
+                  fontFamily: MONO, fontSize: 11,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: MONO, fontSize: 10,
-                }}>{mono}</span>
-                <span style={{ fontFamily: MONO, fontSize: 10, color: on ? '#fff' : 'var(--muted)' }}>{p.name}</span>
+                  border: on ? '2px solid var(--fg)' : '2px solid transparent',
+                  outline: on ? '2px solid var(--bg)' : 'none', outlineOffset: on ? '-4px' : 0,
+                  opacity: on ? 1 : 0.55, transition: 'opacity 0.12s ease, border 0.12s ease',
+                }}>
+                {mono}
               </button>
             );
           })}

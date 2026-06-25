@@ -62,8 +62,23 @@ export async function POST(
     // average-adult persona so the page still has honest (grey) guidance.
     personIds = [PERSONA_ADULT_ID];
   } else {
-    if (personIds.length === 0) {
-      // logged-in, none supplied: fall back to the caller's self-person
+    // the persona id is always allowed through (it's not a real person row);
+    // separate it from real ids that need an access check.
+    const personaSupplied = personIds.includes(PERSONA_ADULT_ID);
+    const realSupplied = personIds.filter((id: string) => id !== PERSONA_ADULT_ID);
+
+    let resolved: string[] = [];
+    if (realSupplied.length > 0) {
+      const { data: grants } = await db
+        .from('person_access')
+        .select('person_id')
+        .eq('account_id', user.id)
+        .is('revoked_at', null)
+        .in('person_id', realSupplied);
+      const allowed = new Set((grants ?? []).map((g: any) => g.person_id));
+      resolved = realSupplied.filter((pid: string) => allowed.has(pid));
+    } else if (!personaSupplied) {
+      // nothing supplied at all → caller's self-person
       const { data: selfGrant } = await db
         .from('person_access')
         .select('person_id')
@@ -71,19 +86,11 @@ export async function POST(
         .eq('role', 'self')
         .is('revoked_at', null)
         .maybeSingle();
-      if (selfGrant?.person_id) personIds = [selfGrant.person_id];
-    } else {
-      // access: a caller may only what-if against persons they can access
-      const { data: grants } = await db
-        .from('person_access')
-        .select('person_id')
-        .eq('account_id', user.id)
-        .is('revoked_at', null)
-        .in('person_id', personIds);
-      const allowed = new Set((grants ?? []).map((g: any) => g.person_id));
-      personIds = personIds.filter((pid: string) => allowed.has(pid));
+      if (selfGrant?.person_id) resolved = [selfGrant.person_id];
     }
-    // logged-in but nothing resolved → average-adult persona, not an error
+
+    personIds = personaSupplied && resolved.length === 0 ? [PERSONA_ADULT_ID] : resolved;
+    // ultimate fallback: average-adult persona, never an error
     if (personIds.length === 0) personIds = [PERSONA_ADULT_ID];
   }
 
