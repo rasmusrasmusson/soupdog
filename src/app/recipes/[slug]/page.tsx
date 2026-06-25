@@ -667,7 +667,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : '—';
   };
   const metaItems: [string, string][] = [
-    ['YIELD',       `${servings.toLocaleString()} servings`],
     ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
     ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
     ['DIFFICULTY',  cap(recipe.difficulty)],
