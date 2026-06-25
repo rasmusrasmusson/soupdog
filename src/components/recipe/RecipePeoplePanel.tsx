@@ -15,23 +15,12 @@
 // the thin instance layer. This panel is the people + nutrition view only.
 
 import { useState } from 'react';
-import { Participants, type ParticipantPerson, type AddablePerson } from '@/components/people/Participants';
+import { Participants, type ParticipantPerson } from '@/components/people/Participants';
 import { useRecipePeople } from '@/components/recipe/RecipePeopleContext';
 
 const MONO: React.CSSProperties = { fontFamily: 'var(--font-mono, monospace)' };
 const SERIF: React.CSSProperties = { fontFamily: 'IBM Plex Serif, serif' };
 
-type DailyTargets = { calories: number | null; protein: number | null; carbohydrates: number | null; fat: number | null; fiber: number | null };
-type PerParticipant = { personId: string; name: string; confidence: number; share: number; dailyTargets: DailyTargets };
-type MatchData = {
-  plating: { personId: string; name: string; share: number; phrase: string }[];
-  score: { satietyOk: boolean };
-  table: { confidence: number };
-  perParticipant: PerParticipant[];
-  recommendedServings: number;
-};
-type PerServing = Record<string, number>;
-type Person = { personId: string; name: string; avatarColor: string | null; avatarInitials: string | null };
 
 function confidenceBand(c: number): { color: string; label: string; note: string } {
   if (c >= 0.7) return { color: '#5f7a4f', label: 'Good estimate', note: 'We have enough about who\u2019s eating and what\u2019s in this dish to suggest portions with reasonable confidence.' };
@@ -39,10 +28,6 @@ function confidenceBand(c: number): { color: string; label: string; note: string
   return { color: '#9a978f', label: 'Best guess', note: 'We don\u2019t know much about who\u2019s eating yet, so this is a gentle guess from population averages.' };
 }
 
-const MACRO_ORDER = ['calories', 'protein', 'fat', 'carbohydrates', 'fiber'] as const;
-const MACRO_LABEL: Record<string, string> = { calories: 'kcal', protein: 'protein', fat: 'fat', carbohydrates: 'carbs', fiber: 'fibre' };
-function fmtAmount(key: string, v: number): string { return key === 'calories' ? String(Math.round(v)) : `${Math.round(v)} g`; }
-const SHARE_COLORS = ['#5f7a4f', '#8a9a6b', '#b5a468', '#c08a3e', '#7a8b9a', '#9a7a6b'];
 
 // Plain-language summary of the plating — "what we're cooking for each person".
 // Reads off the plating split; degrades gracefully for one person.
@@ -62,10 +47,8 @@ export default function RecipePeoplePanel({ versionId }: { versionId?: string })
   const [expanded, setExpanded] = useState(true); // detail open when data exists
 
   if (!ctx) return null;
-  const { people, addable, match, perServing, dirty, savedMsg, addPerson, removePerson, saveDefault } = ctx;
+  const { people, addable, match, dirty, savedMsg, addPerson, removePerson, saveDefault } = ctx;
   const band = match ? confidenceBand(match.table.confidence) : null;
-  const multi = (match?.plating.length ?? 0) > 1;
-  const hasNutrition = !!perServing && Object.keys(perServing).length > 0;
   const hasDetail = !!match; // something to expand into
 
   const participants: ParticipantPerson[] = people.map(p => ({
@@ -89,6 +72,16 @@ export default function RecipePeoplePanel({ versionId }: { versionId?: string })
             emptyHint="Add who this is for"
           />
         </div>
+        {(dirty || savedMsg) && (
+          <button type="button" onClick={dirty ? saveDefault : undefined}
+            title={dirty ? 'Save as who I usually cook for' : 'Saved as your usual'}
+            aria-label={dirty ? 'Save as who I usually cook for' : 'Saved'}
+            style={{ background: 'none', border: 'none', cursor: dirty ? 'pointer' : 'default', padding: 2, lineHeight: 0, color: dirty ? 'var(--accent)' : '#9a978f' }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill={dirty ? 'none' : 'currentColor'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+        )}
         {band && (
           <button type="button" onClick={() => setShowConfNote(v => !v)} title={band.label}
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
@@ -106,19 +99,6 @@ export default function RecipePeoplePanel({ versionId }: { versionId?: string })
         )}
       </div>
 
-      {/* save-as-default affordance (compact, only when changed) */}
-      {(dirty || savedMsg) && (
-        <div style={{ marginTop: 8 }}>
-          {dirty ? (
-            <span onClick={saveDefault} style={{ ...MONO, fontSize: 11, color: 'var(--accent)', cursor: 'pointer' }}>
-              Save as who I usually cook for
-            </span>
-          ) : (
-            <span style={{ ...MONO, fontSize: 11, color: '#9a978f' }}>Saved</span>
-          )}
-        </div>
-      )}
-
       {showConfNote && band && (
         <div style={{ fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.5, margin: '12px 0 0', paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           {band.note}
@@ -133,64 +113,9 @@ export default function RecipePeoplePanel({ versionId }: { versionId?: string })
               {platingSummary(match.plating)}
             </div>
           )}
-          <div style={{ fontSize: 14, color: 'var(--fg)', marginBottom: multi ? 16 : 0 }}>
-            {match.score.satietyOk ? 'This should leave everyone comfortably full.' : 'This may be a little light \u2014 some at the table might still be peckish.'}
+          <div style={{ fontSize: 14, color: 'var(--fg)' }}>
+            {match.score.satietyOk ? 'This should leave everyone comfortably full.' : 'This may be a little light — some at the table might still be peckish.'}
           </div>
-
-          {multi && (
-            <>
-              <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 8 }}>How to share it</div>
-              <div style={{ display: 'flex', width: '100%', height: 10, borderRadius: 6, overflow: 'hidden', marginBottom: 12 }}>
-                {match.plating.map((p, i) => (
-                  <div key={p.personId} title={`${p.name}: ${Math.round(p.share * 100)}%`}
-                    style={{ width: `${p.share * 100}%`, background: SHARE_COLORS[i % SHARE_COLORS.length], height: '100%' }} />
-                ))}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {match.plating.slice().sort((a, b) => b.share - a.share).map((p) => (
-                  <div key={p.personId} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: SHARE_COLORS[match.plating.findIndex(x => x.personId === p.personId) % SHARE_COLORS.length], flex: '0 0 auto' }} />
-                    <span style={{ ...SERIF, fontSize: 15, color: 'var(--fg)' }}>{p.name}</span>
-                    <span style={{ fontSize: 13, color: 'var(--muted)' }}>{p.phrase}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-          {hasNutrition && (
-            <div style={{ marginTop: multi ? 22 : 16, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
-              <div style={{ ...MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#9a978f', marginBottom: 10 }}>What each portion gives</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {match.perParticipant.slice().sort((a, b) => b.share - a.share).map(p => {
-                  const factor = p.share * (match.recommendedServings || 0);
-                  return (
-                    <div key={p.personId}>
-                      <div style={{ ...SERIF, fontSize: 15, color: 'var(--fg)', marginBottom: 5 }}>{p.name}</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px' }}>
-                        {MACRO_ORDER.map(k => {
-                          const perSv = perServing![k];
-                          if (perSv == null) return null;
-                          const amount = perSv * factor;
-                          const target = p.dailyTargets[k as keyof DailyTargets];
-                          const pct = (target && target > 0) ? (amount / target) * 100 : null;
-                          return (
-                            <span key={k} style={{ fontSize: 12.5, color: 'var(--muted)' }}>
-                              <span style={{ color: 'var(--fg)' }}>{fmtAmount(k, amount)}</span>{' '}{MACRO_LABEL[k]}
-                              {pct != null && <span style={{ color: '#9a978f' }}> · {Math.round(pct)}% of day</span>}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{ fontSize: 11.5, color: '#9a978f', marginTop: 12, lineHeight: 1.5 }}>
-                Shown as a share of each person&rsquo;s estimated daily needs — one meal is only part of a day.
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

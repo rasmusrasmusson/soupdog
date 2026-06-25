@@ -1,12 +1,10 @@
 // src/app/recipes/[slug]/page.tsx
 'use client';
 import React, { useState, useEffect, use } from 'react';
-import { formatDuration } from '@/lib/utils';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { PrintButton } from '@/components/recipe/PrintRecipe';
 import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
 import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
-import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
@@ -652,27 +650,10 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
 
 
   // Presentation (ingredients/tools/steps) lives in the shared <RecipeDisplay>.
-  // The shell keeps only what it needs for the meta grid + sidebar.
-  const timing = calculateRecipeTiming(recipe.steps);
-  const displayTotalSeconds = recipe.totalTimeSeconds > 0
-    ? recipe.totalTimeSeconds
-    : timing.totalSeconds;
-
+  // The shell keeps only what it needs for the sidebar.
   const B    = '1px solid var(--border)';
   const MONO = 'var(--font-mono)';
   const MUT  = 'var(--muted)';
-
-  const cap = (s: string | null | undefined) => {
-    const t = (s ?? '').trim();
-    return t ? t.charAt(0).toUpperCase() + t.slice(1) : '—';
-  };
-  const metaItems: [string, string][] = [
-    ['TOTAL TIME',  displayTotalSeconds > 0 ? formatDuration(displayTotalSeconds) : '—'],
-    ['ACTIVE TIME', recipe.activeTimeSeconds ? formatDuration(recipe.activeTimeSeconds) : '—'],
-    ['DIFFICULTY',  cap(recipe.difficulty)],
-    ['RATING',      recipe.ratings ? `${(recipe.ratings as any).average.toFixed(1)} / 5` : '—'],
-    ['CUISINE',     cap(recipe.cuisine)],
-  ];
 
 
   return (
@@ -732,28 +713,6 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
                     objectPosition: 'center', display: 'block' }} />
               </div>
             )}
-          </div>
-
-          {/* Meta stats — below the intro */}
-          <div className="hidden md:grid border border-[var(--border)] text-[11px] mt-5"
-            style={{ gridTemplateColumns: `repeat(${metaItems.length}, minmax(0, 1fr))` }}>
-            {metaItems.map(([label, value], i) => (
-              <div key={label} className={i < metaItems.length - 1 ? 'border-r border-[var(--border)]' : ''}>
-                <div className="px-3 py-1.5 bg-[var(--surface-hover)] border-b border-[var(--border)]">
-                  <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[var(--muted)]">{label}</span>
-                </div>
-                <div className="px-3 py-2 font-mono text-[11px] text-[var(--fg)]">{value}</div>
-              </div>
-            ))}
-          </div>
-          <div className="md:hidden border border-[var(--border)] mt-5"
-            style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '1px', background: 'var(--border)' }}>
-            {metaItems.map(([label, value]) => (
-              <div key={label} style={{ background: 'var(--surface)', padding: '8px 12px' }}>
-                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: MUT, marginBottom: 3 }}>{label}</div>
-                <div style={{ fontFamily: MONO, fontSize: 12, color: 'var(--fg)', fontWeight: 500 }}>{value}</div>
-              </div>
-            ))}
           </div>
         </div>
 
