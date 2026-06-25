@@ -451,7 +451,7 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.22em', color: MUT }}>Nutrition</span>
         <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT }}>{perPersonMode ? `${match.perParticipant.find((p:any)=>p.personId===activePerson)?.name ?? 'per serving'}’s portion` : 'per serving'}</span>
+        <span style={{ fontFamily: MONO, fontSize: 9, color: MUT }}>{perPersonMode ? `${match?.perParticipant?.find((p:any)=>p.personId===activePerson)?.name ?? 'per serving'}’s portion` : 'per serving'}</span>
       </div>
       <div style={{
         marginBottom: 8, padding: '4px 10px',
@@ -465,9 +465,9 @@ function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrit
 
       {/* Person selector — avatars (consistent with the Cook-for panel); one
           active at a time, switching re-scales the section to their portion. */}
-      {match?.perParticipant?.length > 0 && (
+      {(match?.perParticipant?.length ?? 0) > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'center' }}>
-          {match.perParticipant.map((p: any) => {
+          {match?.perParticipant?.map((p: any) => {
             const on = activePerson === p.personId;
             const mono = (p.name ?? '?').trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join('').toUpperCase() || '?';
             return (
