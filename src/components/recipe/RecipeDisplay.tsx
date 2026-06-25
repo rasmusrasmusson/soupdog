@@ -267,23 +267,65 @@ function composeStepLine(
   return verb || instruction;
 }
 
+// Same as composeStepLine, but split into { verb, rest } so the display can
+// underline ONLY the leading verb as the "learn more" trigger (a short word that
+// never wraps), with the rest rendered as plain flowing text. The composed line
+// always begins with the action word, so splitting on the first token is safe.
+function composeStepParts(
+  taskName: string | undefined,
+  template: string | undefined,
+  singleTool: boolean,
+  ingredientName: string | undefined,
+  toolName: string | undefined,
+  instruction: string,
+  intermediates?: string[],
+): { verb: string; rest: string } {
+  const line = composeStepLine(taskName, template, singleTool, ingredientName, toolName, instruction, intermediates);
+  const trimmed = line.trim();
+  const sp = trimmed.indexOf(' ');
+  if (sp === -1) return { verb: trimmed, rest: '' };
+  return { verb: trimmed.slice(0, sp), rest: trimmed.slice(sp) }; // rest keeps its leading space
+}
+
 function StepLine({ taskName, template, singleTool, ingredientName, toolName, instruction, notes, taskId, onOpenTask, intermediates }: {
   taskName?: string; template?: string; singleTool?: boolean;
   ingredientName?: string; toolName?: string;
   instruction: string; notes?: string; taskId?: string; onOpenTask?: (id: string) => void;
   intermediates?: string[];
 }) {
+  const { verb, rest } = composeStepParts(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates);
+
+  // Suppress a "→ note" that just RESTATES the action instead of pointing at a
+  // real effect. The notes field is meant to carry a completion/effect ("until
+  // soft", "until browned"); decomposition sometimes echoes the instruction
+  // there ("Add the minced garlic to the pan → add minced garlic to the pan").
+  // Heuristic: drop the note if it starts with the same verb as the step (an
+  // action-echo), or is substantially the whole line again. Keep genuine effects.
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+  const fullLine = `${verb}${rest}`;
+  const noteIsEcho = (() => {
+    if (!notes) return false;
+    const n = norm(notes);
+    if (!n) return true;
+    // starts with the same verb → it's re-describing the action, not the effect
+    if (n.split(' ')[0] === norm(verb)) return true;
+    // near-duplicate of the whole composed line
+    if (norm(fullLine).includes(n) || n.includes(norm(fullLine))) return true;
+    return false;
+  })();
+
   return (
     <>
       {taskId && onOpenTask ? (
         <button type="button" onClick={() => onOpenTask(taskId)} title="How to do this"
           style={LEARN_MORE_BTN} className="hover:text-[var(--accent)] transition-colors">
-          {composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)}
+          {verb}
         </button>
       ) : (
-        composeStepLine(taskName, template, !!singleTool, ingredientName, toolName, instruction, intermediates)
+        verb
       )}
-      {notes && <span style={{ color: MUT }}> → {notes}</span>}
+      {rest}
+      {notes && !noteIsEcho && <span style={{ color: MUT }}> → {notes}</span>}
     </>
   );
 }

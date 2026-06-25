@@ -318,7 +318,18 @@ export function RecipePrintLayout({ recipe, url, peopleNames }: { recipe: Recipe
                     <div style={{ flex: 1 }}>
                       <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111' }}>
                         {composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction, (s as any).consumedIntermediates)}
-                        {(s as any).notes && <span style={{ color: '#666' }}> → {(s as any).notes}</span>}
+                        {(() => {
+                          // Mirror RecipeDisplay: hide a "→ note" that just echoes
+                          // the action instead of pointing at a real effect.
+                          const note = (s as any).notes as string | undefined;
+                          if (!note) return null;
+                          const line = composeStepLine((s as any).taskName, (s as any).taskTemplate, !!(s as any).taskSingleTool, stepIngs[0]?.name, stepToolNames(s)[0], s.instruction, (s as any).consumedIntermediates);
+                          const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+                          const n = norm(note); const l = norm(line);
+                          const verb = norm(line).split(' ')[0];
+                          const echo = !n || n.split(' ')[0] === verb || l.includes(n) || n.includes(l);
+                          return echo ? null : <span style={{ color: '#666' }}> → {note}</span>;
+                        })()}
                       </div>
                       {(meta.length > 0 || stepIngs.length > 0) && (
                         <div style={{ ...MONO, fontSize: 9, color: '#999', marginTop: 3, display: 'flex', flexWrap: 'wrap', gap: '2px 12px' }}>
