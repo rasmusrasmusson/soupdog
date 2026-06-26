@@ -203,6 +203,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
       taskName:    (Array.isArray(s.tasks) ? s.tasks[0]?.name : s.tasks?.name) ?? undefined,
       taskTemplate: (Array.isArray(s.tasks) ? s.tasks[0]?.display_template : s.tasks?.display_template) ?? undefined,
       taskSingleTool: (Array.isArray(s.tasks) ? s.tasks[0]?.single_tool : s.tasks?.single_tool) ?? false,
+      taskCategory: (Array.isArray(s.tasks) ? s.tasks[0]?.category : s.tasks?.category) ?? undefined,
     }));
 
   const equipment: any[] = (rv?.version_equipment ?? [])
@@ -907,7 +908,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version_steps (
                 id, order_index, step_type, group_label, instruction, notes,
                 duration_seconds, temperature_celsius, appliance_settings, task_id,
-                tasks ( name, display_template, single_tool )
+                tasks ( name, display_template, single_tool, category )
               ),
               version_equipment (
                 id, required,
@@ -990,7 +991,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version_steps (
                 id, order_index, step_type, group_label, instruction, notes,
                 duration_seconds, temperature_celsius, appliance_settings, task_id,
-                tasks ( name, display_template, single_tool )
+                tasks ( name, display_template, single_tool, category )
               ),
               version_equipment (
                 id, required,

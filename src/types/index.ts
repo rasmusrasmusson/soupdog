@@ -372,6 +372,7 @@ export interface RecipeStep {
   taskName?:        string;   // ← ADD: curated task name, for render-time step composition
   taskTemplate?:    string;    // ← ADD: task's display_template
   taskSingleTool?:  boolean;   // ← ADD: task takes exactly one tool
+  taskCategory?:    string;    // ← task's category (e.g. 'plating') for section grouping
   consumedIntermediates?: string[]; // ← ADD (Layer 2): names of upstream intermediates this
                                     // step consumes (from version_step_dependencies
                                     // .consumes_intermediate_label, producer-order), used to
