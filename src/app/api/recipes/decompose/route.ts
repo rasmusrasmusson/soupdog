@@ -44,6 +44,7 @@ Core rules:
 5. Intermediates & convergence. A node that consumes TWO OR MORE prior outputs is a convergence point (a combine, a plating). The chain of nodes feeding one input of a convergence is a sub-graph that produces an intermediate — give it a short "produces" name on the LAST node of that chain. If the source explicitly names a section ("For the marinade:", "Masala sauce:"), use that exact name and set "group" on those nodes. Explicit names always win over your own derivation.
 6. Fan-out. One prep can feed several consumers. Emit ONE node; multiple later nodes list it in consumes. Put per-consumer quantities on the consuming node's notes if the source specifies a split.
 6b. MULTI-DISH MEALS — MERGE SHARED PREP ACROSS DISHES. When the input contains MULTIPLE dishes (more than one group with a non-empty outputName, i.e. a meal of several dishes/drinks), you are decomposing them into ONE unified graph, NOT one silo per dish. If two or more dishes need the SAME raw ingredient given the SAME transformation with the SAME parameters (e.g. both need "finely chopped red onion"), emit that prep ONCE as a single node and FAN IT OUT — every consuming step across every dish lists that one node in its consumes. Do NOT chop the onion twice because two dishes use it. This shared-prep merging is the whole point of treating a meal as one graph (it enables "chop once, use in three dishes" and division of labour). SAFETY — only merge when ingredient AND transformation AND parameters all match: "diced onion" for dish A and "sliced onion" for dish B are DIFFERENT prep → two nodes. Generic cooking media (water, oil, salt) are NOT shared intermediates — introduce them separately where each dish uses them (do NOT merge the pasta's boiling water with the tea's water). When a merged prep node feeds multiple dishes and the source gives per-dish amounts, put the split in the consuming nodes' notes. Each dish still gets its OWN named terminal (its outputName) — merging shared PREP does not merge the dishes' end-products.
+6c. PRE-RESOLVED DISHES — LINK, DO NOT DECOMPOSE. The user message may include a RESOLVED DISHES list: dishes already matched to existing recipes by an upstream search the user confirmed. For each dish in that list, you MUST NOT decompose it into nodes — do NOT introduce its ingredients or emit any steps for it. Instead, record it in the output "linkedDishes" array as { "dishName": "<name>", "canonicalSlug": "<slug>" } exactly as given. Only dishes NOT in the resolved list are decomposed into nodes as normal. A resolved dish contributes NO nodes and NO terminal node of its own — its presence in linkedDishes IS the dish. (You never decide reuse yourself; you only honour the resolved list you are given.)
 7. Tools & timing. Suggest a "tool" per node. CAPTURE COMPLETION CRITERIA: if the source gives ANY duration or end-condition for a step — "about 8-10 minutes", "until crispy", "until al dente", "until golden", "until combined", "until thickened", "until the sauce coats the back of a spoon" — you MUST put it in that node's "completion". This applies to ACTIVE steps (fry, boil, whisk, simmer, saute, reduce), not only passive waits. Do NOT drop it. Rules for the value:
    - A clear fixed time -> ISO-8601 duration: "10 minutes" -> "PT10M", "1.5 hours" -> "PT1H30M".
    - A RANGE ("8-10 minutes") -> take the midpoint as the duration AND keep the human phrasing in "notes": completion "PT9M", notes "about 8-10 minutes".
@@ -85,7 +86,8 @@ Output JSON contract:
       "completion": "PT7M",
       "notes": "about 6-8 minutes, until soft and translucent"
     }
-  ]
+  ],
+  "linkedDishes": []
 }
 
 Hard constraints:
@@ -108,6 +110,15 @@ export async function POST(req: NextRequest) {
   if (!extraction || typeof extraction !== 'object') {
     return NextResponse.json({ error: 'extraction required' }, { status: 400 });
   }
+
+  // Dishes already resolved to existing recipes by an UPSTREAM search + user
+  // disambiguation step (the AI does NOT decide reuse). Shape:
+  // [{ dishName: string, canonicalSlug: string }]. decompose must LINK these
+  // (emit them in linkedDishes) and NOT decompose them inline.
+  const resolvedDishes: { dishName: string; canonicalSlug: string }[] =
+    Array.isArray(body?.resolvedDishes)
+      ? body.resolvedDishes.filter((d: any) => d && typeof d.dishName === 'string' && typeof d.canonicalSlug === 'string')
+      : [];
 
   // ── GUIDE LAYER ──────────────────────────────────────────────────────────
   // Fetch the VERIFIED task library and build a compact "known techniques" block
@@ -168,11 +179,17 @@ export async function POST(req: NextRequest) {
     console.error('[decompose] guide fetch failed (continuing without guide):', e);
   }
 
+  const resolvedBlock = resolvedDishes.length
+    ? '\n\nRESOLVED DISHES (already matched to existing recipes — LINK these per rule 6c, do NOT decompose them):\n' +
+      resolvedDishes.map(d => `- ${d.dishName} → ${d.canonicalSlug}`).join('\n')
+    : '';
+
   const userMsg =
     'Here is the bundled extraction of a recipe. Convert it to the atomic executable ' +
     'dependency graph per your instructions. Return ONLY the JSON object.\n\nEXTRACTION:\n<<<\n' +
     JSON.stringify(extraction, null, 2) +
-    '\n>>>';
+    '\n>>>' +
+    resolvedBlock;
 
   try {
     const result = await aiMessage({
@@ -221,6 +238,9 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Ensure linkedDishes is always an array (model may omit it for single-dish).
+    if (!Array.isArray(dag.linkedDishes)) dag.linkedDishes = [];
 
     return NextResponse.json({ dag });
 

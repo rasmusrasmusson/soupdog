@@ -312,23 +312,24 @@ export const case2_threeIndependent: { name: string; extraction: Extraction; ass
 };
 
 // ───────────────────────────────────────────────────────────────────────────────
-// CASE 3 — REUSE: a requested dish that already exists is LINKED, not re-decomposed.
-// The meal = an existing "Spaghetti carbonara" recipe + a fresh side salad.
-// Harness precondition: an existing published canonical with slug matching
-// `existingDishSlug` must be present (seed it or point at a real one). The prompt is
-// given the available-recipes context (like the guide layer, but for whole recipes).
+// CASE 3 — REUSE: decompose HONOURS a pre-resolved dish link (it does NOT decide
+// reuse itself). Reuse is decided UPSTREAM by search + user disambiguation; the
+// resolved dish is passed into decompose as `resolvedDishes`. decompose must LINK
+// it (emit in linkedDishes) and NOT decompose it inline. The fresh side salad (not
+// resolved) IS decomposed. Harness forwards case.resolvedDishes to the endpoint.
 // ───────────────────────────────────────────────────────────────────────────────
 
 export const case3_reuseExisting: {
   name: string;
   extraction: Extraction;
-  existingDishSlug: string;
-  existingDishName: string;
+  resolvedDishes: { dishName: string; canonicalSlug: string }[];
   assertions: Assertion[];
 } = {
-  name: 'an existing dish is linked (version_sub_recipes), not decomposed inline',
-  existingDishSlug: 'spaghetti-aglio-e-olio-mpw6yxsz', // a REAL published canonical (from the live list)
-  existingDishName: 'Spaghetti aglio e olio',
+  name: 'decompose honours a pre-resolved dish link (links, does not decompose inline)',
+  resolvedDishes: [
+    // decided upstream by search + user pick; decompose must honour this:
+    { dishName: 'Spaghetti aglio e olio', canonicalSlug: 'spaghetti-aglio-e-olio-mpw6yxsz' },
+  ],
   extraction: {
     title: 'Aglio e olio with a side salad',
     servings: 4,
@@ -336,15 +337,14 @@ export const case3_reuseExisting: {
     ingredients: [
       { name: 'salad leaves', quantityValue: 100, quantityUnit: 'g', prepNote: null },
       { name: 'olive oil', quantityValue: 2, quantityUnit: 'tbsp', prepNote: null },
-      // NOTE: the aglio e olio ingredients are deliberately NOT listed — the dish is
-      // meant to be REUSED from the existing recipe, not re-specified here.
+      // aglio e olio ingredients deliberately absent — it is a RESOLVED dish (linked).
     ],
     equipment: ['salad bowl'],
     groups: [
       {
-        // a dish named to match an existing recipe → must be LINKED, not decomposed
+        // a resolved dish → must be LINKED, not decomposed
         outputName: 'Spaghetti aglio e olio',
-        steps: [], // empty: the author referenced it by name, expecting reuse
+        steps: [],
       },
       {
         outputName: 'Side salad',
@@ -356,20 +356,19 @@ export const case3_reuseExisting: {
   },
   assertions: [
     {
-      name: 'the existing dish is LINKED (appears in linkedDishes / a terminal carries its slug), not decomposed',
+      name: 'the resolved dish is LINKED (in linkedDishes with its slug), not decomposed',
       behaviour: 'R',
       check: (dag) => {
-        const linked = (dag.linkedDishes ?? []).some(l => norm(l.canonicalSlug) === norm('spaghetti-aglio-e-olio-mpw6yxsz'))
-          || dag.nodes.some(n => norm(n.linkedCanonicalSlug) === norm('spaghetti-aglio-e-olio-mpw6yxsz'));
-        return linked ? true : 'existing aglio e olio was not linked (expected version_sub_recipes link)';
+        const linked = (dag.linkedDishes ?? []).some(l => norm(l.canonicalSlug) === norm('spaghetti-aglio-e-olio-mpw6yxsz'));
+        return linked ? true : 'resolved aglio e olio was not in linkedDishes (decompose did not honour the pre-resolved link)';
       },
     },
     {
-      name: 'aglio e olio was NOT re-decomposed inline (no garlic/spaghetti nodes minted for it)',
+      name: 'the resolved dish was NOT decomposed inline (no garlic/spaghetti nodes minted for it)',
       behaviour: 'R',
       check: (dag) => {
         const inlined = dag.nodes.some(n => (n.ingredients ?? []).some(i => /spaghetti|garlic|chilli|chili/.test(norm(i.name))));
-        return inlined ? 'aglio e olio appears decomposed inline — should have been linked, not re-specified' : true;
+        return inlined ? 'aglio e olio appears decomposed inline — it should have been linked, not re-specified' : true;
       },
     },
     {
@@ -377,15 +376,15 @@ export const case3_reuseExisting: {
       behaviour: 'R',
       check: (dag) => {
         const salad = dag.nodes.some(n => (n.ingredients ?? []).some(i => norm(i.name).includes('salad leaves')));
-        return salad ? true : 'side salad was not decomposed (it should be — it is new, not existing)';
+        return salad ? true : 'side salad was not decomposed (it should be — it is new, not resolved)';
       },
     },
     {
-      name: 'two dishes total: one linked + one inline terminal',
+      name: 'one inline terminal (the salad) + one linked dish = two dishes total',
       behaviour: 'T',
       check: (dag) => {
         const t = terminals(dag).length + (dag.linkedDishes?.length ?? 0);
-        return t === 2 ? true : `expected 2 dishes (1 linked + 1 inline), found ${t}`;
+        return t === 2 ? true : `expected 2 dishes (1 linked + 1 inline terminal), found ${t}`;
       },
     },
   ],

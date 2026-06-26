@@ -43,9 +43,9 @@ export async function GET(req: NextRequest) {
   for (const c of MULTI_DISH_EVAL_CASES) {
     const caseResult: any = { case: c.name, decomposeOk: false, assertions: [] };
 
-    // (case3) note its precondition for the reader — the harness does not seed.
-    if ((c as any).existingDishSlug) {
-      caseResult.precondition = `requires existing recipe slug '${(c as any).existingDishSlug}' present`;
+    // (case3) note its model for the reader.
+    if ((c as any).resolvedDishes?.length) {
+      caseResult.note = `passes ${(c as any).resolvedDishes.length} pre-resolved dish link(s); decompose must honour them`;
     }
 
     let dag: Dag | null = null;
@@ -53,7 +53,10 @@ export async function GET(req: NextRequest) {
       const r = await fetch(`${origin}/api/recipes/decompose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', cookie },
-        body: JSON.stringify({ extraction: c.extraction }),
+        body: JSON.stringify({
+          extraction: c.extraction,
+          ...((c as any).resolvedDishes ? { resolvedDishes: (c as any).resolvedDishes } : {}),
+        }),
       });
       const text = await r.text();
       if (!r.ok) {
