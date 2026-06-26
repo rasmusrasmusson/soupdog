@@ -326,6 +326,41 @@ function PrintLayoutWithPeople({ recipe, url }: { recipe: Recipe; url?: string }
   return <RecipePrintLayout recipe={recipe} url={url} peopleNames={names} />;
 }
 
+// ── End-of-recipe serving instruction ────────────────────────────────────────
+// The EXECUTION moment: after the steps, before nutrition (cooking flow is
+// primary; nutrition is reference). The people section up top is the PLANNING
+// moment ("who am I cooking for"); this is "now serve it this way". Reads the
+// shared people match (plating split) — shown only when ≥2 eaters with DIFFERING
+// shares, so there's an actual division to instruct. One dish for now (the
+// dish×eater matrix arrives with composition).
+function ServingBlock() {
+  const rp = useRecipePeople();
+  const plating = rp?.match?.plating ?? [];
+  if (plating.length < 2) return null;                          // 0–1 eaters: nothing to divide
+  const shares = plating.map(p => p.share);
+  const allEqual = shares.every(s => Math.abs(s - shares[0]) < 0.001);
+  if (allEqual) return null;                                    // equal portions: no instruction needed
+  const sorted = plating.slice().sort((a, b) => b.share - a.share);
+
+  return (
+    <div className="px-4 md:px-8 pt-2 pb-6">
+      <div style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px', background: 'var(--surface)' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--muted)', marginBottom: 10 }}>
+          Serving
+        </div>
+        <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {sorted.map(p => (
+            <li key={p.personId} style={{ fontFamily: 'var(--font-serif, var(--font-display))', fontSize: 14, color: 'var(--fg)', lineHeight: 1.5 }}>
+              <span style={{ fontWeight: 500 }}>{p.name}</span>
+              <span style={{ color: 'var(--muted)' }}> — {p.phrase}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
 function RecipeNutritionSection({ versionId, ingredients, servings, storedNutrition, onComputed }: {
   versionId?: string;
   ingredients: RecipeIngredientRef[];
@@ -828,6 +863,10 @@ function RecipeView({ recipe, canonicalId, concepts, isAuthor }: { recipe: Recip
           showHero={false}
           interactive={{ ingChecks, stepChecks, servings }}
         />
+
+        {/* Serving instruction — the execution moment, after the steps and
+            before nutrition (cooking flow primary; nutrition is reference). */}
+        <ServingBlock />
 
         <div className="px-4 md:px-8 pb-6">
 
