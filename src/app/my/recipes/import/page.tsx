@@ -601,15 +601,15 @@ export default function ImportRecipePage() {
         Add recipe
       </h1>
       <p style={{ fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 24 }}>
-        Ask the AI to create one, upload a photo or PDF, or paste the recipe text.
+        Describe what you'd like to make, upload a photo or PDF, or paste the recipe text.
       </p>
 
       {status !== 'done' && (
         <>
-          {/* ── Create with AI (the butler) — first entry point ── */}
+          {/* ── Describe-what-you-want (the butler) — first entry point ── */}
           <div style={{ border: B, padding: '16px 18px', marginBottom: 20, background: 'var(--accent-subtle)' }}>
             <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.18em', color: 'var(--accent)', marginBottom: 8 }}>
-              Create with AI
+              Describe what you'd like
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <textarea
@@ -1081,7 +1081,7 @@ export default function ImportRecipePage() {
       {status === 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            Review the steps, then save
+            Review and save
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { setStatus('idle'); setPreview(null); setSourceExtraction(null); setChatHistory([]); setPending(null); setUploadFile(null); }}
