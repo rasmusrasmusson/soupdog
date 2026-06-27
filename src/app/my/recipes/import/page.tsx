@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw, X } from 'lucide-react';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { dagToRecipe } from '@/lib/dag-to-recipe';
 import Link from 'next/link';
@@ -194,6 +194,22 @@ export default function ImportRecipePage() {
   const [genClarify,  setGenClarify]  = useState<{ question: string; suggestions: string[] }|null>(null);
   const [genExisting, setGenExisting] = useState<{ id: string; slug: string|null; title: string; isPublished: boolean }[]|null>(null);
 
+  // ── Dish-list spine (the create flow's core model) ──
+  // A meal is a LIST of dishes; each resolves to LINK (existing) or MAKE (new). The list
+  // composes into one meal. Single dish = list of one. Populated by a `meal` response (and
+  // later by Add-another-dish / single + upload paths). See Dish_List_Create_Model doc.
+  type DishEntry = {
+    id: string;
+    name: string;
+    status: 'linked' | 'make';
+    canonicalSlug?: string | null;
+    canonicalId?: string;
+    title?: string;
+    otherMatchCount?: number;
+  };
+  const [dishes, setDishes] = useState<DishEntry[]>([]);
+  const [composing, setComposing] = useState(false);
+
   const chatEndRef   = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -350,10 +366,18 @@ export default function ImportRecipePage() {
         return;
       }
       if (data.meal && Array.isArray(data.meal.dishes) && data.meal.dishes.length) {
-        // Multi-dish request → assemble a meal: generate the to-make dishes, link the
-        // resolved ones, decompose as ONE unified DAG. (Single-dish requests never reach
-        // here — generate only returns `meal` for >1 dish.)
-        await handleCreateMeal(data.meal.dishes);
+        // Multi-dish request → populate the DISH LIST (the spine). The user reviews the
+        // list (each dish linked/make), can remove dishes, then Composes. (Composing runs
+        // the proven assembly.) Single-dish requests never reach here.
+        setDishes(data.meal.dishes.map((d: any, i: number) => ({
+          id: `d${Date.now().toString(36)}${i}`,
+          name: d.name,
+          status: d.status === 'linked' ? 'linked' : 'make',
+          canonicalSlug: d.canonicalSlug ?? null,
+          canonicalId: d.canonicalId,
+          title: d.title,
+          otherMatchCount: d.otherMatchCount,
+        })));
         return;
       }
       if (typeof data.recipeText === 'string' && data.recipeText.trim()) {
@@ -482,6 +506,19 @@ export default function ImportRecipePage() {
       setStatus('error');
     }
   };
+
+  // Compose the current dish list into a meal (runs the proven assembly).
+  const composeMeal = async () => {
+    if (!dishes.length || composing) return;
+    setComposing(true);
+    try {
+      await handleCreateMeal(dishes);
+    } finally {
+      setComposing(false);
+    }
+  };
+
+  const removeDish = (id: string) => setDishes(prev => prev.filter(d => d.id !== id));
 
   const handleGenKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(); }
@@ -688,6 +725,41 @@ export default function ImportRecipePage() {
                     background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                   Make a new one anyway
                 </button>
+              </div>
+            )}
+
+            {/* Dish-list spine — the meal as a list of dishes (link/make), review then compose */}
+            {dishes.length > 0 && (
+              <div style={{ marginTop: 12, padding: '12px 14px', border: B, background: 'var(--bg)' }}>
+                <div style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.15em', color: 'var(--muted)', marginBottom: 10 }}>
+                  Dishes in this meal
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {dishes.map(d => (
+                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '7px 10px', border: B, background: 'var(--surface)' }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, color: 'var(--fg)' }}>{d.title || d.name}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontFamily: MONO, fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.1em', color: d.status === 'linked' ? 'var(--accent)' : 'var(--muted)' }}>
+                          {d.status === 'linked' ? 'from your recipes' : 'will be made'}
+                        </span>
+                        <button onClick={() => removeDish(d.id)} title="Remove this dish"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', padding: 2, display: 'flex', alignItems: 'center' }}>
+                          <X size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
+                  <button onClick={composeMeal} disabled={composing}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none', background: 'var(--accent)', color: 'var(--bg)', fontFamily: MONO, fontSize: 11, cursor: composing ? 'default' : 'pointer', opacity: composing ? 0.7 : 1 }}>
+                    {composing ? <><Loader2 size={13} className="animate-spin" /> Composing</> : <>Compose meal</>}
+                  </button>
+                  <button onClick={() => setDishes([])} disabled={composing}
+                    style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                    Start over
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1084,7 +1156,7 @@ export default function ImportRecipePage() {
             Review and save
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => { setStatus('idle'); setPreview(null); setSourceExtraction(null); setChatHistory([]); setPending(null); setUploadFile(null); }}
+            <button onClick={() => { setStatus('idle'); setPreview(null); setSourceExtraction(null); setChatHistory([]); setPending(null); setUploadFile(null); setDishes([]); }}
               style={{ padding: '8px 16px', border: '1px solid var(--border)', background: 'none',
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
               ← Start over
