@@ -326,6 +326,13 @@ export default function ImportRecipePage() {
         setGenExisting(data.existing);
         return;
       }
+      if (data.meal && Array.isArray(data.meal.dishes) && data.meal.dishes.length) {
+        // Multi-dish request → assemble a meal: generate the to-make dishes, link the
+        // resolved ones, decompose as ONE unified DAG. (Single-dish requests never reach
+        // here — generate only returns `meal` for >1 dish.)
+        await handleCreateMeal(data.meal.dishes);
+        return;
+      }
       if (typeof data.recipeText === 'string' && data.recipeText.trim()) {
         // Seed the detected title (so the parser/preview keeps it) and run the
         // generated text through the exact same path as pasted text.
@@ -338,6 +345,96 @@ export default function ImportRecipePage() {
       setGenError(err.message ?? 'Generation failed');
     } finally {
       setGenLoading(false);
+    }
+  };
+
+  // Assemble a MULTI-DISH meal from the resolved dish list (Slice 1).
+  // - `linked` dishes → resolvedDishes (the decompose engine links them, doesn't re-make).
+  // - `make` dishes → generate each one's recipe text, combine into ONE blob, parse once
+  //   into a multi-group extraction, then decompose with resolvedDishes → one meal DAG.
+  // The resulting preview + handleSave path are unchanged (already meal-aware & proven).
+  const handleCreateMeal = async (
+    dishes: { name: string; status: 'linked' | 'make'; canonicalSlug?: string | null; title?: string }[],
+  ) => {
+    setGenError(null);
+    setError(null);
+    setPreview(null);
+    setChatHistory([]);
+    setPending(null);
+    setStatus('loading');
+
+    try {
+      const linked = dishes.filter(d => d.status === 'linked' && d.canonicalSlug);
+      const toMake = dishes.filter(d => d.status === 'make');
+
+      const resolvedDishes = linked.map(d => ({
+        dishName: d.title || d.name,
+        canonicalSlug: d.canonicalSlug as string,
+      }));
+
+      // If every dish is already in the catalogue there is nothing to decompose freshly.
+      // (Pure-link meals aren't supported by decompose-save yet — it needs ≥1 node.)
+      if (toMake.length === 0) {
+        setStatus('idle');
+        setGenError('All of those are already in your recipes — open them from My Recipes, or add a new dish to combine them.');
+        return;
+      }
+
+      // 1. Generate each to-make dish's recipe text (single-dish generate).
+      const madeTexts: string[] = [];
+      for (const d of toMake) {
+        const gr = await fetch('/api/recipes/generate', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: d.name }),
+        });
+        const gd = await gr.json();
+        if (gr.ok && typeof gd.recipeText === 'string' && gd.recipeText.trim()) {
+          madeTexts.push(gd.recipeText.trim());
+        } else {
+          // couldn't write this dish — surface it but keep going with the rest
+          madeTexts.push(`${d.name}\n(could not generate details)`);
+        }
+      }
+
+      // 2. Combine into one text blob, each dish a clear section (so the parser emits
+      //    one group per dish via outputName).
+      const combined = madeTexts.join('\n\n---\n\n');
+
+      // 3. Parse the combined text into a (multi-group) extraction.
+      setStatus('decomposing');
+      const ires = await fetch('/api/recipes/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: combined }),
+      });
+      const idata = await ires.json();
+      if (!ires.ok || !idata.recipe) throw new Error(idata.error ?? 'Could not structure the meal.');
+      const parse = idata.recipe;
+      setSourceExtraction(parse);
+
+      // 4. Decompose with resolvedDishes — linked dishes get linked, made dishes get
+      //    decomposed inline, all in one unified meal DAG.
+      const dres = await fetch('/api/recipes/decompose', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extraction: parse, resolvedDishes }),
+      });
+      const ddata = await dres.json();
+      if (!dres.ok || !ddata.dag) throw new Error(ddata.error ?? 'We had trouble structuring that meal. Please try again.');
+
+      const mealTitle = parse.title ?? dishes.map(d => d.title || d.name).join(', ');
+      setPreview({
+        title:       mealTitle,
+        description: parse.description ?? '',
+        cuisine:     parse.cuisine ?? '',
+        tags:        Array.isArray(parse.tags) ? parse.tags : [],
+        servings:    ddata.dag.servings ?? parse.servings ?? 4,
+        difficulty:  parse.difficulty ?? 'medium',
+        totalTimeMinutes: parse.totalTimeMinutes ?? 0,
+        dag:         ddata.dag,
+      });
+      setStatus('done');
+    } catch (err: any) {
+      setError(err.message ?? 'Could not create the meal.');
+      setStatus('error');
     }
   };
 
