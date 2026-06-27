@@ -256,3 +256,33 @@ input gathers intent + who's-eating (generic-persona default); preview reviews a
 result with system-populated fields. Build deliberately as its own session. Deep
 generation-shaping by who's-eating = named seam, downstream of wiring the demand model into
 creation.
+
+---
+
+## 11. #3 DONE (preview shows the made recipe) + new findings from live testing
+
+### #3 shipped & proven (all three meal shapes)
+`dagToRecipe` now maps `dag.linkedDishes → recipe.subRecipes`, so the preview renders
+the made recipe INCLUDING linked dishes (was empty for pure-link). Verified live:
+- pure-link (two existing dishes) → preview + saved page show both under "Dishes in this
+  meal"; saved page expands them fully.
+- mixed, one new dish made inline + existing dishes linked (beer; lemon water) → new dish
+  decomposed inline (ingredients/tools/steps), existing dishes linked. Menu titles correct
+  ("… with Green Salad, and beer" / "… and lemon water").
+
+### NEW FINDING — "served, not made" dishes (→ recipe.kind seam)
+Test (c) added "beer". The flow tried to GENERATE A RECIPE for it → "No recipe details
+could be generated" + a stub step "Add beer → Serve beer as desired". Beer isn't a recipe —
+it's poured/served. Some meal components are SERVED, not MADE (beer, wine, a bought bottle,
+store bread). They should NOT be force-fit through recipe generation.
+→ This is the `recipe.kind` distinction from the earlier design docs
+(composed / simple / acquire / **none**). A "none"/"acquire" component = no method, just
+served. CREATE FLOW must detect these (the meal-resolution step, or generate) and represent
+them as served-components, not generate an awkward stub. NAMED SEAM — downstream of wiring
+recipe.kind; do not patch the stub now. (Folds into 1a's per-dish handling.)
+
+### Confirmed interim (all 1a, as already banked §10)
+The arbitrary "Serves 4/1", empty form fields, "Review the steps" + "Create with AI" copy,
+and the beer stub are all the interim create-flow scaffolding. 1a rebuild fixes: review-not-
+form, system-populated fields, who's-eating up front (generic-persona default), relabel,
+and served-not-made components.
