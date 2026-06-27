@@ -184,3 +184,83 @@ A user still cannot make a multi-dish recipe end to end. Remaining, in natural o
 Recommended next session opening: trace how `decompose-save` writes a single-dish DAG
 today, then add `linkedDishes` + multi-terminal handling (#1). Then display (#2),
 then the two front doors (#3 search-UI, #4 AI-create).
+
+---
+
+## 10. BUILD STATUS UPDATE (2026-06-26, later) — SAVE proven
+
+### DONE — save side (#1), proven via harness
+`decompose-save` now persists multi-dish: sets `composition_level='meal'` when the
+recipe links dishes or has >1 terminal, and writes `version_sub_recipes` rows from
+`dag.linkedDishes` (resolving slug → canonical id + current version). Multi-terminal
+needed no change (node loop was already terminal-agnostic).
+Verified by `POST /api/admin/eval/save-multi-dish` (creates → checks
+composition_level + version_sub_recipes → self-cleans, FK-safe; reports orphan id if
+cleanup fails). Result: **pass:true** (compositionLevel meal, 1 sub-recipe row at the
+right canonical, cleanup ok).
+
+### FIX applied — version_sub_recipes write policies
+The table had grants (INSERT/UPDATE/DELETE for authenticated) but ONLY a SELECT
+policy → RLS denied all writes SILENTLY (the classic "grant present, policy missing"
+trap; the save route logs-and-skips a bad link so it didn't surface as an error — the
+harness caught it). Added public-scoped `vsr_insert_own / vsr_update_own /
+vsr_delete_own`, each gating on ownership of the PARENT meal's canonical
+(`author_id = auth.uid()`). NOTE: gating on the parent (not the child) is correct —
+it lets a user link OTHER people's published dishes into their own meal later.
+
+### Pipeline now: engine ✓ → save ✓ → [display, search-UI, AI-create remaining]
+
+### NEXT — #2 display, but settle a design question FIRST
+A meal's version has BOTH its own `version_steps` (inline dishes' unified DAG) AND
+`version_sub_recipes` links (reused dishes). Open question before building display:
+- How do LINKED dishes render on the recipe page? As sections like inline dishes
+  (expanded, reading the child recipe's steps — honouring `expand_by_default`)? As a
+  named link to the child recipe? A hybrid (expanded but attributed)?
+- How are INLINE dishes sectioned — by terminal/group (the dish name on the terminal
+  node / group_label)?
+- Shared tasks (merged across dishes) shown once — where, when they belong to 2+
+  dishes? (A "shared prep" section, or under the first dish, or floating?)
+Display touches the read path (`mapNewSchemaRecipe`), the `Recipe` shape, and
+`RecipeDisplay` — bigger than save. Do a short display-design pass, THEN build.
+
+---
+
+## 11. BUILD STATUS UPDATE (2026-06-26, later still) — DISPLAY proven
+
+### DONE — display side (#2), proven on a rendered page
+A persisted multi-dish meal renders correctly end to end:
+- **Inline dishes** section via the existing `group`-sectioning (dish name = group) —
+  no new work needed.
+- **Linked dishes** via new `attachLinkedDishes(supabase, recipe)` (mirrors
+  attachIntermediates): reads `version_sub_recipes`, resolves each child's title, and
+  when `expand_by_default` fetches the child's `version_steps` AND `version_ingredients`
+  → renders a "Dishes in this meal" section: attributed block + "View recipe →" link +
+  steps expanded inline.
+- **Step composition fix:** linked-dish steps first rendered as BARE VERBS ("Add",
+  "Slice") because the host display composes a line as verb+ingredient via `stepIngMap`,
+  which the linked dish has no access to. Fix: fetch the child's version_ingredients,
+  map step→first-ingredient, carry on new `RecipeStep.firstIngredientName`, pass to
+  `StepLine`. Now reads "Add water", "Slice garlic", "Chop parsley", etc.
+- Linked dishes are SEALED blocks (a reused recipe slotted in) — not merged into the
+  meal's unified DAG. Correct and honest.
+Verified on `/recipes/save-test-...` (created via the save harness `?keep=1`): inline
+Side salad + linked aglio e olio (expanded, full instructions) + serving block all
+render. Test recipe then deleted.
+
+### Pipeline now: engine ✓ → save ✓ → display ✓ → [search-UI, AI-create remaining]
+
+### REMAINING
+3. **Search + disambiguation UI (reuse Part 2)** — the front door that PRODUCES
+   `resolvedDishes`: user asks for a meal, system searches existing recipes per named
+   dish, auto-links singles, asks the user to pick on multiples, zero → decompose
+   fresh. Lives in the import/AI editor. The engine already honours what it produces.
+4. **AI-create-multi-dish path** — "create a recipe with carbonara, salad and iced
+   tea" → produce the multi-dish extraction (groups w/ outputNames) feeding decompose.
+
+These two are the user-facing front doors; everything behind them (engine/save/display)
+is built and proven. #3 is the bigger/more central one (it makes reuse real for users).
+
+### Harness note
+`/api/admin/eval/save-multi-dish` now supports `?keep=1` (skip cleanup, return slug)
+for viewing a persisted multi-dish recipe. Without keep it self-cleans. Both harnesses
+(`eval/multi-dish` read-only, `save-multi-dish` write) remain as regression checks.
