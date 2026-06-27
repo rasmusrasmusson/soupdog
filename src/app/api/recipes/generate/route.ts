@@ -105,17 +105,17 @@ export async function POST(req: NextRequest) {
   //    recipes — cheap, and enough to spot an existing match). It returns a small
   //    JSON envelope naming the branch; for GENERATE it also returns the recipe
   //    as plain text in the importer's expected format. ──
-  const system = `You are the recipe butler for Soupdog. The user is AUTHORING — they want to MAKE a recipe, not search. Decide ONE of three responses and reply with ONLY valid JSON (no markdown, no backticks).
+  const system = `You are the recipe butler for Soupdog. The user is AUTHORING — they want to MAKE a recipe, not search. Decide ONE of four responses and reply with ONLY valid JSON (no markdown, no backticks).
 
 You are given the user's existing recipe catalogue (titles only). Branch as follows:
 
-1) CLARIFY — only if the request is genuinely too vague to write a good single recipe (e.g. "something nice", "dinner"). A named dish ("a Negroni", "chicken tikka masala") is NOT vague — make it. Ask at MOST one short question and offer 2–4 quick options.
+1) CLARIFY — only if the request is genuinely too vague to write a good single recipe (e.g. "something nice", "dinner"). A named dish ("a Negroni", "chicken tikka masala") is NOT vague — make it. A request naming several dishes is NOT vague — it is a MEAL (see 4). Ask at MOST one short question and offer 2–4 quick options.
    {"action":"clarify","question":"<one short question>","options":["<opt>","<opt>"]}
 
-2) EXISTING — if the catalogue already clearly contains what they're asking for (same dish, allowing for minor wording differences). Do NOT regenerate it. List the matching catalogue title(s) verbatim. If several plausibly match, list them all (max 4).
+2) EXISTING — if the catalogue already clearly contains what they're asking for (a SINGLE dish, allowing minor wording differences). Do NOT regenerate it. List the matching catalogue title(s) verbatim. If several plausibly match, list them all (max 4).
    {"action":"existing","matches":["<exact catalogue title>","..."]}
 
-3) GENERATE — the request is clear and nothing in the catalogue matches. Write a COMPLETE, authentic recipe as PLAIN TEXT, formatted exactly like a recipe someone would paste:
+3) GENERATE — a SINGLE clear dish, nothing in the catalogue matches. Write a COMPLETE, authentic recipe as PLAIN TEXT, formatted exactly like a recipe someone would paste:
    - First line: the recipe title.
    - A line like "Serves 2 | 5 minutes".
    - An "Ingredients:" section, one ingredient per line with quantities (metric; use ml/g; cocktails in ml).
@@ -123,10 +123,15 @@ You are given the user's existing recipe catalogue (titles only). Branch as foll
    Be accurate and classic unless the user asked for a variation. Do not editorialise.
    {"action":"generate","title":"<title>","recipeText":"<the full recipe as one plain-text string with \\n line breaks>"}
 
+4) MEAL — the request describes MORE THAN ONE dish to be eaten together (e.g. "a dinner with carbonara, a green salad and iced tea"; "fish and chips with mushy peas"). Identify each distinct dish. Do NOT write the recipes here — just name the dishes (and an optional short description of each, only if the user gave detail). List them in serving order if obvious.
+   {"action":"meal","dishes":[{"name":"<dish name>","description":"<optional, only if the user specified detail>"}]}
+
 Rules:
-- Prefer GENERATE for any clearly-named dish that isn't already in the catalogue.
+- A single named dish → GENERATE (or EXISTING if owned). Several dishes together → MEAL.
+- Prefer GENERATE for any clearly-named single dish that isn't already in the catalogue.
 - Only CLARIFY when making something reasonable would be a guess you'd likely get wrong.
-- For EXISTING, the titles you return MUST be copied exactly from the provided catalogue.`;
+- For EXISTING, the titles you return MUST be copied exactly from the provided catalogue.
+- For MEAL, name each dish plainly (e.g. "Spaghetti carbonara", "Green salad", "Iced tea"). The system will check each against the catalogue itself — you do NOT decide reuse.`;
 
   const userContent = JSON.stringify({
     request: prompt,
@@ -182,6 +187,50 @@ Rules:
     return NextResponse.json({
       error: 'I thought you already had that, but I cannot find it. Try rephrasing.',
     }, { status: 404 });
+  }
+
+  // ── MEAL ── the request names several dishes. Resolve EACH against the catalogue:
+  //    a catalogue hit → LINK it (a resolvedDishes entry the decompose engine honours);
+  //    no hit → MAKE it (the client generates/parses + decomposes it inline). The system
+  //    decides reuse by search, not the model. Slice 1: on multiple matches we pick the
+  //    best (published first, else first) — the interactive picker is a later slice.
+  if (parsed.action === 'meal' && Array.isArray(parsed.dishes)) {
+    const dishes = parsed.dishes
+      .map((d: any) => ({
+        name: typeof d?.name === 'string' ? d.name.trim() : '',
+        description: typeof d?.description === 'string' ? d.description.trim() : '',
+      }))
+      .filter((d: { name: string }) => d.name);
+
+    if (dishes.length === 0) {
+      return NextResponse.json({ error: 'Could not identify the dishes — try rephrasing.' }, { status: 500 });
+    }
+
+    const resolved = dishes.map((d: { name: string; description: string }) => {
+      const w = norm(d.name);
+      // candidate catalogue matches (loose, same rule as EXISTING)
+      const matches = catalogue.filter(c => {
+        const ct = norm(c.title);
+        return ct === w || ct.includes(w) || w.includes(ct);
+      });
+      if (matches.length === 0) {
+        return { name: d.name, description: d.description, status: 'make' as const };
+      }
+      // Slice 1: pick best — exact-title match first, then published, then first.
+      const exact = matches.find(c => norm(c.title) === w);
+      const pick = exact ?? matches.find(c => c.isPublished) ?? matches[0];
+      return {
+        name: d.name,
+        status: 'linked' as const,
+        canonicalId: pick.id,
+        canonicalSlug: pick.slug,
+        title: pick.title,
+        // surface that more than one matched, so a later slice can offer a picker
+        otherMatchCount: matches.length - 1,
+      };
+    });
+
+    return NextResponse.json({ meal: { dishes: resolved } });
   }
 
   // ── GENERATE ── return the plain recipe text for the client to feed into import.
