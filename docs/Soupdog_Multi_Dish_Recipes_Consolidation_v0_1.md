@@ -143,3 +143,44 @@ unified DAG with shared-task merging). The three paths are thin front doors to t
   dish-terminals + shared tasks? (Lean: only what decomposition emits.)
 - Embedded-dish boundary vs `group_label`: is a tier-2 dish just a labelled convergence
   sub-graph, or does it need an explicit marker?
+
+---
+
+## 9. BUILD STATUS (updated 2026-06-26)
+
+### DONE — the decomposition engine (proven against the eval, all green)
+The hard AI core works. `eval/multi_dish_decomposition.eval.ts` + the admin harness
+`/api/admin/eval/multi-dish` report **M 3/3 · T 5/5 · R 3/3 · G 2/2**:
+- **M (merge):** shared prep collapses to ONE node fanning out across dishes
+  (decompose prompt **rule 6b**). Chop-onion-once works.
+- **T (terminals):** one named terminal per dish.
+- **R (reuse — honour):** pre-resolved dishes are LINKED, not decomposed
+  (**rule 6c** + `resolvedDishes` input + `linkedDishes` output). The AI does NOT
+  decide reuse; it honours the resolved list it is given.
+- **G (guards):** no false cross-dish merges; generic media (water/oil/salt) kept
+  separate. Held green throughout — merging did not cause over-merging.
+
+Method note: built behaviour-by-behaviour against the harness (merge first → M
+flipped; reuse second → R+T flipped, G held). Grounded, not guessed. The harness
+makes 3 live AI calls per run (~cents); leave it, it's the regression check.
+
+### NOT DONE — the surrounding pipeline (eval-green ≠ feature-done)
+A user still cannot make a multi-dish recipe end to end. Remaining, in natural order:
+1. **`decompose-save` must persist the new shapes** — it does not yet handle
+   `linkedDishes` (→ write `version_sub_recipes` rows) or multiple terminals. THE
+   NEXT BUILD: the engine now emits shapes the saver can't store. Testable: create a
+   multi-dish recipe → assert `version_sub_recipes` rows + multi-terminal stored.
+   Unblocks display.
+2. **Multi-dish display** — recipe `[slug]` page renders a multi-terminal meal DAG
+   (sections per dish, shared tasks shown once). Read/display side.
+3. **Search + disambiguation UI (reuse Part 2)** — the flow that PRODUCES
+   `resolvedDishes`: search existing recipes per named dish; auto-link singles; ask
+   the user to pick on multiples; zero matches → decompose fresh. Lives in the
+   import/AI editor. This is what feeds the engine the links it now honours.
+4. **AI-create-multi-dish path** — "create a recipe with carbonara, salad and iced
+   tea" → produce the multi-dish extraction (multiple groups w/ outputNames) that
+   feeds decompose. Distinct from today's paste-parse.
+
+Recommended next session opening: trace how `decompose-save` writes a single-dish DAG
+today, then add `linkedDishes` + multi-terminal handling (#1). Then display (#2),
+then the two front doors (#3 search-UI, #4 AI-create).
