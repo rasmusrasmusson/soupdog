@@ -10,7 +10,7 @@
 //   - the node's single ingredient → a RecipeIngredientRef linked to that step (stepId)
 //   - the node's tool → appliance_settings.stepTools[] (so ToolCell renders it)
 
-import type { Recipe, RecipeStep, RecipeIngredientRef, DifficultyLevel } from '@/types';
+import type { Recipe, RecipeStep, RecipeIngredientRef, DifficultyLevel, SubRecipeRef } from '@/types';
 
 interface DagIngredient { name: string; qty?: number; unit?: string; prep?: string | null; }
 interface DagNode {
@@ -26,7 +26,8 @@ interface DagNode {
   completion?: string | null;
   notes?: string | null;
 }
-export interface Dag { title?: string; servings?: number; nodes: DagNode[]; }
+interface DagLinkedDish { dishName: string; canonicalSlug: string; }
+export interface Dag { title?: string; servings?: number; nodes: DagNode[]; linkedDishes?: DagLinkedDish[]; }
 
 export interface DagRecipeMeta {
   title?: string;
@@ -120,6 +121,21 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
   });
 
   const now = new Date().toISOString();
+
+  // Linked dishes (multi-dish meals): show them in the preview as attributed, linked
+  // sections — name + "View recipe" — so the user confirms which dishes are in the meal.
+  // Preview-time we only have name+slug (no child steps), so expandByDefault=false (no
+  // inline steps); the saved page fetches and expands them. This is what makes a PURE-LINK
+  // meal (zero nodes) show its dishes in the preview instead of an empty recipe.
+  const subRecipes: SubRecipeRef[] = (dag.linkedDishes ?? []).map(ld => ({
+    recipeId:        ld.canonicalSlug,   // no DB id at preview time; slug is the stable ref
+    recipeSlug:      ld.canonicalSlug,
+    title:           ld.dishName,
+    usedAsIngredient: ld.dishName,
+    optional:        false,
+    expandByDefault: false,
+  }));
+
   return {
     id:               'preview',
     slug:             'preview',
@@ -134,6 +150,7 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
     totalTimeSeconds: (meta.totalTimeMinutes ?? 0) * 60,
     ingredients,
     steps,
+    subRecipes:       subRecipes.length ? subRecipes : undefined,
     equipment:        [],
     createdAt:        now,
     updatedAt:        now,

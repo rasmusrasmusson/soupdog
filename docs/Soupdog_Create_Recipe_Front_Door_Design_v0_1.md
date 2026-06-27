@@ -205,3 +205,54 @@ risky new logic and the real proof the front door works; the IA is lower-risk, h
 layout. Splitting verifies the hard part before investing in layout — matches the
 session's prove-the-mechanism-then-build-the-surface pattern. Best started FRESH (heaviest,
 most iterative build of the feature).
+
+---
+
+## 10. (1a) CREATE-FLOW REBUILD — design captured (NOT built; next deliberate build)
+
+Surfaced by testing Slice-1 (1b) live: the current preview is interim scaffolding. It
+behaves like an empty FORM the user fills (title/cuisine/difficulty/tags/servings), which
+is BACKWARDS when the system built the recipe — the user shouldn't teach the system the
+difficulty of its own output. The real create flow is two screens with clear ownership:
+
+### Screen 1 — INPUT (gather intent, including WHO'S EATING)
+- (1) Describe what you want + (2) Upload (image/text/file) + [+ Add another dish] — §2.
+- **NEW: a "who's eating" control here, BEFORE generation**, because who it's for should
+  SHAPE what's made (quantities, portions) — not be tweaked afterward on the preview.
+- **DEFAULT = generic personas, not real people.** Critical: the COMMON case (esp. for
+  Soupdog content creators) is authoring a GENERIC recipe FIRST — a standard-serving,
+  serving-size-agnostic canonical. Specific serving sizes / real people come LATER as
+  VARIATIONS (ties to existing `execution_variants` + the demand/plating model). So:
+  - The generic path is the frictionless DEFAULT (e.g. "serves 2/4", generic eaters).
+  - Personas must be EASILY ACCESSIBLE (quick to pick) but NEVER mandatory.
+  - Picking real people/specific sizes is available but is the *variation* layer, not the
+    base-authoring default.
+
+### Screen 2 — PREVIEW = REVIEW THE MADE RECIPE (not a form to fill)
+- **Show the CREATED recipe in full** (reuse `RecipeDisplay`) — including linked dishes.
+  Today the pure-link preview shows only meta + a components line, not the dishes; the
+  preview must render the actual composed meal so the user confirms real content.
+- Fields arrive **POPULATED by the system** (cuisine, difficulty, tags, description
+  inferred from the dishes) — user may edit, but it's REVIEW not data-entry.
+- Title = menu-style default (done, §9/§ title work), editable.
+- Footer copy: "review and save" — NOT "review the steps" (wrong for pure-link meals).
+
+### Servings / who's-eating — depth
+- **Shallow (build with 1a):** the who's-eating control sets the meal's servings (a generic
+  persona count by default; resolves to a number).
+- **Deep (NAMED SEAM, not now):** that choice actually SHAPES generation — quantities
+  scaled, per-person portions via the already-built demand/plating model. Connects creation
+  to the demand model; its own feature. Generic-first authoring means the base recipe is
+  made generically and the deep per-person shaping is a VARIATION, not the base.
+
+### Also folded into 1a (from §1)
+- Relabel all copy: no "AI", no "butler" ("Create with AI" / "Ask the AI" → outcome verbs).
+- Two-section IA + [+ Add another dish] (§2) — still pending; current page is interim.
+
+### Status
+Slice-1 (1b) PROVED the pipeline end to end (describe → meal → link/make → save → display),
+incl. pure-link meals (§ pure-link work). The (1a) rebuild above is the proper create UX:
+input gathers intent + who's-eating (generic-persona default); preview reviews a fully-shown
+result with system-populated fields. Build deliberately as its own session. Deep
+generation-shaping by who's-eating = named seam, downstream of wiring the demand model into
+creation.
