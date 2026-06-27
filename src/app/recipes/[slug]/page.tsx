@@ -6,7 +6,7 @@ import { calculateRecipeTiming } from '@/lib/recipe-timing';
 import { Bookmark, BookmarkCheck } from 'lucide-react';
 import { PrintButton } from '@/components/recipe/PrintRecipe';
 import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
-import type { RecipeStep, RecipeIngredientRef, Recipe } from '@/types';
+import type { RecipeStep, RecipeIngredientRef, Recipe, SubRecipeRef } from '@/types';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
