@@ -168,3 +168,40 @@ outcomes — the `meal` action only fires when >1 dish is identified. n=1 is unc
    threads into the existing `handleImportFile` → decompose → save path.
 
 Settle 1–4 inline during the Slice-1 build; none are spine-level.
+
+---
+
+## 9. BUILD STATUS (2026-06-26) — Slice 1 backend proven
+
+### DONE — the `meal` action in /api/recipes/generate (proven live)
+`generate` now has a fourth action **meal**: the model identifies multiple dishes from
+one request; the route resolves EACH against the user's catalogue (reusing the
+existing `norm` title-match) → returns `{ meal: { dishes: [{ name, status:'linked'|'make',
+canonicalId?, canonicalSlug?, title?, otherMatchCount? }] } }`. Single-dish requests
+still go to clarify/existing/generate unchanged; `meal` only fires for >1 dish.
+Slice-1 "pick best" on multiple matches = exact-title > published > first;
+`otherMatchCount` surfaced as the hook for Slice 2's picker.
+VERIFIED live: "a dinner with spaghetti aglio e olio and a green salad" →
+aglio e olio `linked` (correct canonical), green salad `make`. Per-dish link-vs-make works.
+
+### REMAINING in Slice 1 — the page (the bigger, iterative half)
+The import page (`src/app/my/recipes/import/page.tsx`, ~983 lines) must:
+1. two sections (Describe / Upload unified box) + [+ Add another dish], relabeled (§1).
+2. a dish-list state (each dish: how it arrived + linked/make status).
+3. Describe → generate → branch (clarify/existing/generate single, OR meal → populate list).
+4. ASSEMBLY (the risky new part): for `make` dishes generate/parse text; combine with
+   `linked` dishes as `resolvedDishes`; ONE decompose → save through the proven pipeline.
+
+### DECISION for the page build — two ways to do Slice 1:
+- **(1a) full IA rebuild** — two-section redesign + dish list + add-dish, all at once.
+  Faithful but a big single change to a long file, high click-through to verify.
+- **(1b) minimal meal path first** — keep the page mostly as-is; when generate returns
+  `meal`, run the ASSEMBLY (generate make-dishes → build resolvedDishes → decompose →
+  save) and show the multi-dish preview. Proves the end-to-end meal pipeline THROUGH the
+  UI (the riskiest, most valuable thing) without the layout churn. IA polish = follow-up.
+
+**Lean: (1b) — prove meal assembly first, redesign IA second.** The assembly is the
+risky new logic and the real proof the front door works; the IA is lower-risk, high-churn
+layout. Splitting verifies the hard part before investing in layout — matches the
+session's prove-the-mechanism-then-build-the-surface pattern. Best started FRESH (heaviest,
+most iterative build of the feature).
