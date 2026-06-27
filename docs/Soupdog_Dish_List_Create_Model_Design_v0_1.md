@@ -183,3 +183,49 @@ The proven backend: `/api/recipes/generate` (meal action), `/api/recipes/import`
 (meal-aware, pure-link), `RecipeDisplay` + `dagToRecipe` (shows linked dishes). The
 dish-list model is a CLIENT-SIDE restructure of the create page that drives these
 unchanged endpoints. No schema, no API changes for the spine.
+
+---
+
+## 11. SPINE INCREMENT 1 — the concrete first build (next session opens here)
+
+Banked pre-build (design ready; the spine is the highest-stakes client refactor, so it
+gets fresh focus). Grounded in a trace of the current page state (`src/app/my/recipes/
+import/page.tsx`):
+
+Current state today (the things the refactor touches):
+- `text` / `manualTitle` / `uploadFile` — single-input fields.
+- `status` ('idle'|'loading'|'decomposing'|'done'|'error'), `error`, `preview` (the
+  single composed output), `sourceExtraction`.
+- `genPrompt` / `genLoading` / `genClarify` / `genExisting` — the describe/butler flow.
+- Handlers: `handleImportFile` (text/file → parse → decompose → preview),
+  `handleGenerate` (prompt → generate → clarify/existing/generate/meal), `handleCreateMeal`
+  (meal assembly → preview), `handleSave`.
+
+### Increment 1 = minimal VIABLE dish-list (the spine made visible). Build ADDITIVELY —
+preserve the proven single-dish/upload/meal paths underneath; route through the list.
+1. Add `dishes: DishEntry[]` state (the §2 model).
+2. Dish-list UI: render entries with status (empty entry = a Describe box; resolved =
+   "linked ✓ / making…" + remove button).
+3. `[+ Add another dish]` appends an empty entry.
+4. Refactor `handleGenerate`/`handleCreateMeal` so a multi-dish describe POPULATES the
+   list (each dish → an entry) instead of going straight to compose.
+5. A "Compose meal" action: resolved list → existing assembly (decompose → preview).
+   Preview stays as-is (RecipeDisplay) for now.
+6. Keep single-dish/upload working: n=1 flows through the list as a list-of-one (settle
+   §9 #5 — lean: one flow, no separate path).
+
+### Verification (how to know increment 1 works)
+- Describe "carbonara, green salad, iced tea" → THREE entries appear in the list, each
+  showing linked/make status. Add-another-dish appends a 4th empty entry. Compose →
+  the same proven meal preview. Existing single-dish describe + upload still produce a
+  correct preview. No regression to save.
+
+### Then (later increments, attach to the spine in final form)
+2 = two-section IA (Describe / unified Upload) as entry surfaces · 3 = who's-eating (#4,
+generic-persona default, meal-level) · 4 = meta-review (#2, system-populated, review-not-
+form) · 5 = served-not-made (#7, when recipe.kind lands; `served` status already reserved).
+
+### Risk note
+Largest client refactor of the feature; everything attaches to it. Build additively,
+verify each proven path still works (describe-single, upload, describe-meal, pure-link,
+save) BEFORE adding list-only behaviour. Trace the current handlers first.
