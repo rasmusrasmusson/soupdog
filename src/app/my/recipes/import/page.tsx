@@ -192,7 +192,7 @@ export default function ImportRecipePage() {
   // The butler's non-generate responses (clarify / existing). When it generates,
   // we feed the text straight into the import pipeline and clear these.
   const [genClarify,  setGenClarify]  = useState<{ question: string; suggestions: string[] }|null>(null);
-  const [genExisting, setGenExisting] = useState<{ id: string; slug: string|null; title: string; isPublished: boolean }[]|null>(null);
+  const [genExisting, setGenExisting] = useState<{ id: string; slug: string|null; title: string; isPublished: boolean; description?: string|null; isMeal?: boolean }[]|null>(null);
 
   // ── Dish-list spine (the create flow's core model) ──
   // A meal is a LIST of dishes; each resolves to LINK (existing) or MAKE (new). The list
@@ -703,18 +703,30 @@ export default function ImportRecipePage() {
                 <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--fg)', lineHeight: 1.5, marginBottom: 8 }}>
                   You already have {genExisting.length === 1 ? 'this recipe' : 'recipes like this'}:
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {genExisting.map(rec => (
-                    <div key={rec.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <Link href={`/my/recipes/${rec.id}`}
-                        style={{ fontFamily: MONO, fontSize: 12, color: 'var(--accent)', textDecoration: 'underline' }}>
-                        {rec.title}
-                      </Link>
-                      {rec.isPublished && rec.slug && (
-                        <Link href={`/recipes/${rec.slug}`}
-                          style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
-                          view live →
+                    <div key={rec.id} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <Link href={`/my/recipes/${rec.id}`}
+                          style={{ fontFamily: MONO, fontSize: 12, color: 'var(--accent)', textDecoration: 'underline' }}>
+                          {rec.title}
                         </Link>
+                        {rec.isMeal && (
+                          <span style={{ fontFamily: MONO, fontSize: 8, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--muted)', border: B, padding: '1px 5px' }}>
+                            meal
+                          </span>
+                        )}
+                        {rec.isPublished && rec.slug && (
+                          <Link href={`/recipes/${rec.slug}`}
+                            style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', textDecoration: 'none' }}>
+                            view live →
+                          </Link>
+                        )}
+                      </div>
+                      {rec.description && (
+                        <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', lineHeight: 1.5 }}>
+                          {rec.description}
+                        </div>
                       )}
                     </div>
                   ))}
