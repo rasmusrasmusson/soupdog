@@ -234,6 +234,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'dag with nodes required' }, { status: 400 });
   }
 
+  // Multi-dish: dishes the decompose step LINKED to existing recipes (rule 6c).
+  // Shape: [{ dishName, canonicalSlug }]. These become version_sub_recipes rows.
+  const linkedDishes: { dishName: string; canonicalSlug: string }[] =
+    Array.isArray(dag.linkedDishes)
+      ? dag.linkedDishes.filter((d: any) => d && typeof d.canonicalSlug === 'string')
+      : [];
+
+  // A recipe is a "meal" (composed) if it links existing dishes OR has more than one
+  // terminal node (more than one end-product). Terminals = nodes nothing consumes.
+  const consumedIds = new Set<string>(dag.nodes.flatMap((n: any) => n.consumes ?? []));
+  const terminalCount = dag.nodes.filter((n: any) => !consumedIds.has(n.id)).length;
+  const isMeal = linkedDishes.length > 0 || terminalCount > 1;
+
   // ── Validate the DAG before touching the DB (cheap guard against bad input) ──
   const ids = new Set<string>(dag.nodes.map((n: any) => n.id));
   for (const n of dag.nodes) {
@@ -260,7 +273,7 @@ export async function POST(req: NextRequest) {
     // ── canonical + version (mirrors /api/my/recipes POST) ──
     const { data: canonical, error: ce } = await db
       .from('recipe_canonicals')
-      .insert({ slug, author_id: user.id, is_published: false, source: 'ai_generated' })
+      .insert({ slug, author_id: user.id, is_published: false, source: 'ai_generated', composition_level: isMeal ? 'meal' : 'dish' })
       .select().single();
     if (ce) throw ce;
 
@@ -373,6 +386,32 @@ export async function POST(req: NextRequest) {
           consumes_intermediate_label: producerLabel(dag, c),
         });
       }
+    }
+
+    // ── Linked dishes (multi-dish reuse): version_sub_recipes rows ──
+    // Each linked dish references an EXISTING recipe by slug (resolved upstream by
+    // search + user disambiguation; rule 6c). Resolve slug → canonical id +
+    // current version, then link this meal's version to it.
+    for (const ld of linkedDishes) {
+      const { data: child, error: cle } = await db
+        .from('recipe_canonicals')
+        .select('id, current_version_id')
+        .eq('slug', ld.canonicalSlug)
+        .maybeSingle();
+      if (cle || !child) {
+        // Don't fail the whole save for one bad link — log and skip.
+        console.error('[decompose-save] linked dish slug not found: %s', ld.canonicalSlug);
+        continue;
+      }
+      const { error: sre } = await db.from('version_sub_recipes').insert({
+        parent_version_id:        version.id,
+        child_canonical_id:       child.id,
+        child_version_id:         child.current_version_id ?? null,
+        used_as_ingredient_label: ld.dishName ?? null,
+        expand_by_default:        true,
+        optional:                 false,
+      });
+      if (sre) console.error('[decompose-save] version_sub_recipes insert failed for %s: %s', ld.canonicalSlug, sre.message);
     }
 
     // ── canonical execution variant + legacy mirror (match existing POST) ──
