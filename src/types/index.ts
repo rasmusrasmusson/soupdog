@@ -386,6 +386,8 @@ export interface SubRecipeRef {
   title:             string;
   usedAsIngredient?: string;
   optional?:         boolean;
+  expandByDefault?:  boolean;       // honour version_sub_recipes.expand_by_default
+  steps?:            RecipeStep[];  // child's steps, fetched for inline (hybrid) display
 }
 
 export interface EquipmentRef {

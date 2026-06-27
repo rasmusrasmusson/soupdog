@@ -289,6 +289,78 @@ async function attachIntermediates(supabase: any, recipe: Recipe): Promise<Recip
   return { ...recipe, steps };
 }
 
+// Multi-dish meals: load the LINKED sub-recipes (version_sub_recipes) and, for those
+// flagged expand_by_default, their child steps — so the meal page can render each
+// reused dish as an attributed, expandable section (hybrid display). Mirrors
+// attachIntermediates: a flat post-map augmentation that leaves the main query alone.
+// Linked dishes are SEALED blocks (a reused recipe slotted in) — their tasks are NOT
+// merged into the meal's unified DAG (only inline dishes are merged, by the engine).
+async function attachLinkedDishes(supabase: any, recipe: Recipe): Promise<Recipe> {
+  const versionId = recipe.recipeVersionId;
+  if (!versionId) return recipe;
+
+  const { data: links, error } = await supabase
+    .from('version_sub_recipes')
+    .select('child_canonical_id, child_version_id, used_as_ingredient_label, expand_by_default, optional')
+    .eq('parent_version_id', versionId);
+
+  if (error || !Array.isArray(links) || links.length === 0) return recipe;
+
+  const subRecipes: SubRecipeRef[] = [];
+  for (const ln of links) {
+    // resolve the child canonical (slug + title) — title comes from its current version
+    const { data: canon } = await supabase
+      .from('recipe_canonicals')
+      .select('id, slug, current_version_id')
+      .eq('id', ln.child_canonical_id)
+      .maybeSingle();
+    if (!canon) continue;
+
+    const childVersionId = ln.child_version_id ?? canon.current_version_id;
+    let title = ln.used_as_ingredient_label ?? canon.slug;
+    let childSteps: RecipeStep[] | undefined;
+
+    if (childVersionId) {
+      // title from the child version
+      const { data: cv } = await supabase
+        .from('recipe_versions')
+        .select('title, version_steps ( id, order_index, step_type, group_label, instruction, notes, duration_seconds, temperature_celsius, appliance_settings, task_id, tasks ( name, display_template, single_tool, category ) )')
+        .eq('id', childVersionId)
+        .maybeSingle();
+      if (cv?.title) title = ln.used_as_ingredient_label ?? cv.title;
+
+      // expand the child's steps inline only when flagged
+      if (ln.expand_by_default && Array.isArray(cv?.version_steps)) {
+        childSteps = cv.version_steps
+          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
+          .map((s: any) => ({
+            id: s.id, order: s.order_index, type: s.step_type,
+            group: s.group_label ?? undefined, instruction: s.instruction,
+            notes: s.notes ?? undefined,
+            durationSeconds: s.duration_seconds ?? undefined,
+            temperature: s.temperature_celsius ? { value: s.temperature_celsius, unit: 'celsius' as const } : undefined,
+            taskName: (Array.isArray(s.tasks) ? s.tasks[0]?.name : s.tasks?.name) ?? undefined,
+            taskTemplate: (Array.isArray(s.tasks) ? s.tasks[0]?.display_template : s.tasks?.display_template) ?? undefined,
+            taskSingleTool: (Array.isArray(s.tasks) ? s.tasks[0]?.single_tool : s.tasks?.single_tool) ?? false,
+            taskCategory: (Array.isArray(s.tasks) ? s.tasks[0]?.category : s.tasks?.category) ?? undefined,
+          }));
+      }
+    }
+
+    subRecipes.push({
+      recipeId:        canon.id,
+      recipeSlug:      canon.slug,
+      title,
+      usedAsIngredient: ln.used_as_ingredient_label ?? undefined,
+      optional:        ln.optional ?? false,
+      expandByDefault: ln.expand_by_default ?? false,
+      steps:           childSteps,
+    });
+  }
+
+  return subRecipes.length ? { ...recipe, subRecipes } : recipe;
+}
+
 // ── Recipe nutrition section ──────────────────────────────────
 // Same palette + monogram as the <Participants> component, so the nutrition
 // selector discs match the "Who's eating" avatars exactly.
@@ -982,7 +1054,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               .single();
             setCanonicalId(can?.id ?? data.id);
           }
-          setRecipe(await attachIntermediates(supabase, mapNewSchemaRecipe(data)));
+          setRecipe(await attachLinkedDishes(supabase, await attachIntermediates(supabase, mapNewSchemaRecipe(data))));
           setLoading(false);
           return;
         }
@@ -1046,7 +1118,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
               version: 1,
               recipe_versions: version,
             };
-            setRecipe(await attachIntermediates(supabase, mapNewSchemaRecipe(shaped)));
+            setRecipe(await attachLinkedDishes(supabase, await attachIntermediates(supabase, mapNewSchemaRecipe(shaped))));
             setLoading(false);
             return;
           }
