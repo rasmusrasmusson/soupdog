@@ -229,3 +229,34 @@ form) · 5 = served-not-made (#7, when recipe.kind lands; `served` status alread
 Largest client refactor of the feature; everything attaches to it. Build additively,
 verify each proven path still works (describe-single, upload, describe-meal, pure-link,
 save) BEFORE adding list-only behaviour. Trace the current handlers first.
+
+---
+
+## 12. Findings from spine 1a + existing-match testing (BANKED, settle later)
+
+### 12.1 Existing-match summary — SHIPPED
+`generate` now returns `description` + `isMeal` per existing match; the import page shows
+a MEAL tag + description summary + view-live link under each match (the "you already made
+it, here's what it is" moment). Proven live. Done.
+
+### 12.2 [OPEN] Existing-match ordering / coexist — now concretely motivated
+Describing a meal you ALREADY SAVED ("aglio e olio + green salad") returns FOUR matches:
+the exact combined meal, its two components, AND a variant. Two problems:
+- **Noise:** showing the components alongside the actual whole-meal match is confusing —
+  the combined meal is the real match; its parts are not what the user asked to "already
+  have". Filter: when a whole-meal match exists, prefer it; suppress its component dishes
+  from the "you already have" list (or rank the meal first and de-emphasise parts).
+- **Coexist/ordering:** when the whole meal exists, should it BLOCK the dish-list path, or
+  OFFER BOTH ("view existing — or build a new version")? Currently `existing` wins and
+  short-circuits before meal-detection, so the dish-list flow is unreachable for already-
+  saved combos. For the dish-list to be the primary create path, decide: meal-detection
+  before whole-meal-existing? or an explicit "build new version" that enters the dish list?
+→ This is a `generate`-flow refinement (NOT spine work). Settle deliberately; don't patch
+reactively. The dish-list spine doesn't depend on it.
+
+### 12.3 Test-data hygiene — Green Salad mislabeled as MEAL
+A single-dish "Green Salad" shows `composition_level='meal'` (the MEAL tag rendered for it).
+Display is faithful; the DATA is wrong — likely a stale test artifact from pure-link save
+testing (save sets composition_level='meal' when linkedDishes>0 || terminalCount>1). Plus
+accumulated test meals/drafts generally. Cleanup pass (data, not code): audit
+composition_level on single dishes; prune test drafts. Not a code fault in 1a.
