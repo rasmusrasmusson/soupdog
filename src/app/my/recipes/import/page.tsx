@@ -3,7 +3,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw, X } from 'lucide-react';
+import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw, X, Plus } from 'lucide-react';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { dagToRecipe } from '@/lib/dag-to-recipe';
 import Link from 'next/link';
@@ -520,6 +520,45 @@ export default function ImportRecipePage() {
 
   const removeDish = (id: string) => setDishes(prev => prev.filter(d => d.id !== id));
 
+  // ── Add another dish: resolve a typed dish name against the catalogue (link on match,
+  //    make otherwise). Reuses the meal-plan options endpoint (?level=dish so only dishes,
+  //    never meals, are matched as components). No AI needed — make-dishes are generated
+  //    later at compose time. ──
+  const [addDishInput, setAddDishInput] = useState('');
+  const [addingDish, setAddingDish]     = useState(false);
+  const [showAddDish, setShowAddDish]   = useState(false);
+
+  const addDish = async () => {
+    const name = addDishInput.trim();
+    if (!name || addingDish) return;
+    setAddingDish(true);
+    try {
+      let entry: DishEntry;
+      try {
+        const res = await fetch(`/api/my/meal-plan/options?q=${encodeURIComponent(name)}&level=dish`);
+        const data = await res.json();
+        const opts: any[] = Array.isArray(data.options) ? data.options : [];
+        // Prefer an exact (case-insensitive) title match; else the first contains-match.
+        const exact = opts.find(o => (o.title || '').trim().toLowerCase() === name.toLowerCase());
+        const match = exact ?? opts[0];
+        if (match && match.slug) {
+          entry = { id: `d${Date.now().toString(36)}`, name, status: 'linked',
+            canonicalSlug: match.slug, canonicalId: match.id, title: match.title,
+            otherMatchCount: opts.length > 1 ? opts.length - 1 : 0 };
+        } else {
+          entry = { id: `d${Date.now().toString(36)}`, name, status: 'make' };
+        }
+      } catch {
+        entry = { id: `d${Date.now().toString(36)}`, name, status: 'make' };
+      }
+      setDishes(prev => [...prev, entry]);
+      setAddDishInput('');
+      setShowAddDish(false);
+    } finally {
+      setAddingDish(false);
+    }
+  };
+
   const handleGenKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleGenerate(); }
   };
@@ -762,12 +801,35 @@ export default function ImportRecipePage() {
                     </div>
                   ))}
                 </div>
+
+                {/* Add another dish — type a name; links if you have it, else it's made */}
+                {showAddDish ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <input
+                      value={addDishInput}
+                      onChange={e => setAddDishInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addDish(); } if (e.key === 'Escape') { setShowAddDish(false); setAddDishInput(''); } }}
+                      autoFocus
+                      placeholder="e.g. garlic bread"
+                      style={{ flex: 1, padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, outline: 'none', boxSizing: 'border-box' as const }}
+                    />
+                    <button onClick={addDish} disabled={addingDish || !addDishInput.trim()}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', border: B, background: 'var(--surface)', color: 'var(--fg)', fontFamily: MONO, fontSize: 11, cursor: addingDish ? 'default' : 'pointer', opacity: addingDish || !addDishInput.trim() ? 0.6 : 1 }}>
+                      {addingDish ? <Loader2 size={12} className="animate-spin" /> : 'Add'}
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setShowAddDish(true)}
+                    style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, fontFamily: MONO, fontSize: 10, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <Plus size={12} /> Add another dish
+                  </button>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
                   <button onClick={composeMeal} disabled={composing}
                     style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: 'none', background: 'var(--accent)', color: 'var(--bg)', fontFamily: MONO, fontSize: 11, cursor: composing ? 'default' : 'pointer', opacity: composing ? 0.7 : 1 }}>
                     {composing ? <><Loader2 size={13} className="animate-spin" /> Composing</> : <>Compose meal</>}
                   </button>
-                  <button onClick={() => setDishes([])} disabled={composing}
+                  <button onClick={() => { setDishes([]); setShowAddDish(false); setAddDishInput(''); }} disabled={composing}
                     style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                     Start over
                   </button>

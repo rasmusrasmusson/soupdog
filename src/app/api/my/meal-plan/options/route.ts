@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   let query = db
     .from('recipe_canonicals')
     .select(`
-      id, composition_level,
+      id, slug, composition_level,
       recipe_versions!current_version_id ( title, cuisine, total_time_seconds )
     `)
     .limit(200);
@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
     const v = Array.isArray(r.recipe_versions) ? r.recipe_versions[0] : r.recipe_versions;
     return {
       id: r.id,
+      slug: r.slug ?? null,
       title: v?.title ?? '(untitled)',
       cuisine: v?.cuisine ?? null,
       totalTimeMinutes: v?.total_time_seconds ? Math.round(v.total_time_seconds / 60) : null,
