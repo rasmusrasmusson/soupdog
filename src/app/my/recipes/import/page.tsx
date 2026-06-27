@@ -58,6 +58,29 @@ const FAMILY_MAP = new Map<string, any>([
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
+// Compose a restaurant-menu-style title from a meal's dish names, joined naturally:
+// 1 dish → "Spaghetti aglio e olio"; 2 → "A with B"; 3+ → "A, B, and C".
+// The first dish keeps its capitalisation; later dishes are lower-cased at their start
+// (a menu reads "Spaghetti aglio e olio with green salad", not "...with Green Salad")
+// unless they look like a proper noun (already mixed/upper case beyond the first letter).
+function lowerFirstUnlessProper(s: string): string {
+  if (!s) return s;
+  // if the word after the first has uppercase (proper noun-ish), leave it
+  const rest = s.slice(1);
+  if (/[A-Z]/.test(rest)) return s;
+  return s.charAt(0).toLowerCase() + rest;
+}
+function composeMenuTitle(names: string[]): string {
+  const parts = names.map(n => n.trim()).filter(Boolean);
+  if (parts.length === 0) return 'Meal';
+  if (parts.length === 1) return parts[0];
+  const [first, ...rest] = parts;
+  const tail = rest.map(lowerFirstUnlessProper);
+  if (tail.length === 1) return `${first} with ${tail[0]}`;
+  const last = tail.pop() as string;
+  return `${first} with ${tail.join(', ')}, and ${last}`;
+}
+
 const SHORT_LABELS: Record<string, string> = {
   'stock pot': 'Pot', 'large pot': 'Pot', 'saucepan': 'Pan', 'frying pan': 'Pan',
   'saute pan': 'Pan', 'pan': 'Pan', 'pot': 'Pot', "chef's knife": 'Knife', 'knife': 'Knife',
@@ -420,9 +443,13 @@ export default function ImportRecipePage() {
       const ddata = await dres.json();
       if (!dres.ok || !ddata.dag) throw new Error(ddata.error ?? 'We had trouble structuring that meal. Please try again.');
 
-      const mealTitle = parse.title ?? dishes.map(d => d.title || d.name).join(', ');
+      // Menu-style title from the DISH NAMES (not the parser's single-dish title — which
+      // would name the meal after whichever dish was decomposed inline). Editable below.
+      const componentNames = dishes.map(d => d.title || d.name).filter(Boolean);
+      const mealTitle = composeMenuTitle(componentNames);
       setPreview({
         title:       mealTitle,
+        components:  componentNames,   // the "what's for dinner" manifest, shown near the title
         description: parse.description ?? '',
         cuisine:     parse.cuisine ?? '',
         tags:        Array.isArray(parse.tags) ? parse.tags : [],
@@ -815,6 +842,11 @@ export default function ImportRecipePage() {
                     onChange={e => setPreview((p: any) => ({ ...p, title: e.target.value }))}
                     style={{ width: '100%', padding: '7px 10px', border: B, background: 'var(--bg)', color: 'var(--fg)', fontFamily: 'var(--font-display)', fontSize: 18, outline: 'none', boxSizing: 'border-box' as const }}
                   />
+                  {Array.isArray(preview.components) && preview.components.length > 1 && (
+                    <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
+                      This meal: {preview.components.join(' · ')}
+                    </div>
+                  )}
                 </div>
 
                 {/* Description */}
