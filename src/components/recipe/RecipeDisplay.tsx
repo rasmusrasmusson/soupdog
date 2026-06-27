@@ -413,7 +413,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
         </div>
       )}
 
-      {/* ── Ingredients ── */}
+      {/* ── Ingredients ── (hidden for pure-link meals with no own ingredients) */}
+      {displayIngredients.length > 0 && (
       <section>
         <SectionHeader title="Ingredients" meta={`${displayIngredients.length} items · ${servings} servings`} />
 
@@ -462,6 +463,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           </table>
         </div>
       </section>
+      )}
 
       {/* ── Tools ── */}
       {derivedTools.length > 0 && (
@@ -479,7 +481,8 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
         </section>
       )}
 
-      {/* ── Procedure ── */}
+      {/* ── Procedure ── (hidden for pure-link meals that have no own steps) */}
+      {recipe.steps.length > 0 && (
       <section>
         <SectionHeader title="Procedure" meta={`${recipe.steps.length} steps`} />
 
@@ -611,6 +614,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           </table>
         </div>
       </section>
+      )}
 
       {/* Linked dishes (multi-dish meals): reused recipes slotted into this meal.
           Hybrid display — each is an attributed section linking to the standalone

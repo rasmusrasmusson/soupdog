@@ -230,8 +230,8 @@ export async function POST(req: NextRequest) {
   // direct API callers may omit it; the import flow always sends it.
   const sourceExtraction = body?.sourceExtraction ?? null;
 
-  if (!dag || !Array.isArray(dag.nodes) || dag.nodes.length === 0) {
-    return NextResponse.json({ error: 'dag with nodes required' }, { status: 400 });
+  if (!dag || !Array.isArray(dag.nodes)) {
+    return NextResponse.json({ error: 'dag required' }, { status: 400 });
   }
 
   // Multi-dish: dishes the decompose step LINKED to existing recipes (rule 6c).
@@ -240,6 +240,13 @@ export async function POST(req: NextRequest) {
     Array.isArray(dag.linkedDishes)
       ? dag.linkedDishes.filter((d: any) => d && typeof d.canonicalSlug === 'string')
       : [];
+
+  // A "pure-link meal" has no own steps — it is JUST a composition of existing dishes
+  // (e.g. "tonight: my carbonara + my green salad"). Valid as long as it links ≥1 dish.
+  // Reject only a truly empty dag (no nodes AND no links).
+  if (dag.nodes.length === 0 && linkedDishes.length === 0) {
+    return NextResponse.json({ error: 'dag with nodes or linked dishes required' }, { status: 400 });
+  }
 
   // A recipe is a "meal" (composed) if it links existing dishes OR has more than one
   // terminal node (more than one end-product). Terminals = nodes nothing consumes.

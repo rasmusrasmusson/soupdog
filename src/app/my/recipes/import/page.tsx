@@ -395,11 +395,30 @@ export default function ImportRecipePage() {
         canonicalSlug: d.canonicalSlug as string,
       }));
 
-      // If every dish is already in the catalogue there is nothing to decompose freshly.
-      // (Pure-link meals aren't supported by decompose-save yet — it needs ≥1 node.)
+      const componentNames = dishes.map(d => d.title || d.name).filter(Boolean);
+
+      // PURE-LINK MEAL: every dish already exists in the catalogue → nothing to make or
+      // decompose. Build a minimal meal DAG (no own steps, just the links) and preview it.
       if (toMake.length === 0) {
-        setStatus('idle');
-        setGenError('All of those are already in your recipes — open them from My Recipes, or add a new dish to combine them.');
+        setStatus('decomposing');
+        const linkedDishesForDag = linked.map(d => ({
+          dishName: d.title || d.name,
+          canonicalSlug: d.canonicalSlug as string,
+        }));
+        const pureDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: linkedDishesForDag };
+        setSourceExtraction(null);
+        setPreview({
+          title:       composeMenuTitle(componentNames),
+          components:  componentNames,
+          description: '',
+          cuisine:     '',
+          tags:        [],
+          servings:    4,
+          difficulty:  'medium',
+          totalTimeMinutes: 0,
+          dag:         pureDag,
+        });
+        setStatus('done');
         return;
       }
 
@@ -445,7 +464,6 @@ export default function ImportRecipePage() {
 
       // Menu-style title from the DISH NAMES (not the parser's single-dish title — which
       // would name the meal after whichever dish was decomposed inline). Editable below.
-      const componentNames = dishes.map(d => d.title || d.name).filter(Boolean);
       const mealTitle = composeMenuTitle(componentNames);
       setPreview({
         title:       mealTitle,
