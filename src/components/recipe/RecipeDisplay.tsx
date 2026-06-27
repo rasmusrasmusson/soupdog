@@ -633,7 +633,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                   <ol style={{ margin: 0, padding: '8px 14px 12px 30px', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {sr.steps.map((st) => (
                       <li key={st.id} style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)' }}>
-                        <StepLine taskName={st.taskName} template={st.taskTemplate} singleTool={st.taskSingleTool} toolName={(st.applianceSettings as any)?.stepTools?.[0]?.name} instruction={st.instruction} notes={st.notes} taskId={st.taskId} onOpenTask={setOpenTaskId} intermediates={st.consumedIntermediates} />
+                        <StepLine taskName={st.taskName} template={st.taskTemplate} singleTool={st.taskSingleTool} ingredientName={st.firstIngredientName} toolName={(st.applianceSettings as any)?.stepTools?.[0]?.name} instruction={st.instruction} notes={st.notes} taskId={st.taskId} onOpenTask={setOpenTaskId} intermediates={st.consumedIntermediates} />
                       </li>
                     ))}
                   </ol>

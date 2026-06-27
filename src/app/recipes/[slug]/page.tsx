@@ -321,16 +321,24 @@ async function attachLinkedDishes(supabase: any, recipe: Recipe): Promise<Recipe
     let childSteps: RecipeStep[] | undefined;
 
     if (childVersionId) {
-      // title from the child version
+      // title + steps + ingredients from the child version
       const { data: cv } = await supabase
         .from('recipe_versions')
-        .select('title, version_steps ( id, order_index, step_type, group_label, instruction, notes, duration_seconds, temperature_celsius, appliance_settings, task_id, tasks ( name, display_template, single_tool, category ) )')
+        .select('title, version_ingredients ( quantity_value, quantity_unit, step_id, ingredients!ingredient_id ( name ) ), version_steps ( id, order_index, step_type, group_label, instruction, notes, duration_seconds, temperature_celsius, appliance_settings, task_id, tasks ( name, display_template, single_tool, category ) )')
         .eq('id', childVersionId)
         .maybeSingle();
       if (cv?.title) title = ln.used_as_ingredient_label ?? cv.title;
 
       // expand the child's steps inline only when flagged
       if (ln.expand_by_default && Array.isArray(cv?.version_steps)) {
+        // map child step_id → first introduced ingredient name (mirrors the host
+        // display's stepIngMap, which the linked dish doesn't have access to)
+        const ingByStep = new Map<string, string>();
+        for (const vi of (cv.version_ingredients ?? [])) {
+          const sid = vi.step_id; if (!sid || ingByStep.has(sid)) continue;
+          const nm = Array.isArray(vi.ingredients) ? vi.ingredients[0]?.name : vi.ingredients?.name;
+          if (nm) ingByStep.set(sid, nm);
+        }
         childSteps = cv.version_steps
           .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
           .map((s: any) => ({
@@ -343,6 +351,7 @@ async function attachLinkedDishes(supabase: any, recipe: Recipe): Promise<Recipe
             taskTemplate: (Array.isArray(s.tasks) ? s.tasks[0]?.display_template : s.tasks?.display_template) ?? undefined,
             taskSingleTool: (Array.isArray(s.tasks) ? s.tasks[0]?.single_tool : s.tasks?.single_tool) ?? false,
             taskCategory: (Array.isArray(s.tasks) ? s.tasks[0]?.category : s.tasks?.category) ?? undefined,
+            firstIngredientName: ingByStep.get(s.id) ?? undefined,
           }));
       }
     }
