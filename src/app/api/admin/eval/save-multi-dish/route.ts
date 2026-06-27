@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
   const db = supabase as any;
 
   const origin = new URL(req.url).origin;
+  const keep = new URL(req.url).searchParams.get('keep') === '1';
   const cookie = req.headers.get('cookie') ?? '';
 
   // A multi-dish DAG: one INLINE dish (Side salad, one dress node = its terminal)
@@ -72,7 +73,8 @@ export async function POST(req: NextRequest) {
     }
     let saved: any; try { saved = JSON.parse(saveText); } catch { saved = null; }
     canonicalId = saved?.canonicalId ?? saved?.id ?? saved?.canonical?.id ?? null;
-    result.steps.push({ save: 'ok', canonicalId, raw: canonicalId ? undefined : saveText.slice(0, 300) });
+    result.slug = saved?.slug ?? null;
+    result.steps.push({ save: 'ok', canonicalId, slug: result.slug, raw: canonicalId ? undefined : saveText.slice(0, 300) });
 
     if (!canonicalId) {
       result.note = 'save ok but no canonicalId in response — cannot verify/cleanup; check decompose-save response shape';
@@ -104,8 +106,12 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     result.error = e?.message ?? String(e);
   } finally {
-    // 4. CLEANUP — FK-safe teardown of the test recipe.
-    if (canonicalId) {
+    // 4. CLEANUP — FK-safe teardown of the test recipe. UNLESS ?keep=1.
+    if (canonicalId && keep) {
+      result.cleanup = 'SKIPPED (keep=1)';
+      result.viewUrl = result.slug ? `/recipes/${result.slug}` : null;
+      result.deleteHint = `leftover — delete canonicalId=${canonicalId} when done`;
+    } else if (canonicalId) {
       try {
         // fetch all version ids for this canonical
         const { data: versions } = await db.from('recipe_versions').select('id').eq('canonical_id', canonicalId);
