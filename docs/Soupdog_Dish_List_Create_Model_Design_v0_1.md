@@ -260,3 +260,45 @@ Display is faithful; the DATA is wrong — likely a stale test artifact from pur
 testing (save sets composition_level='meal' when linkedDishes>0 || terminalCount>1). Plus
 accumulated test meals/drafts generally. Cleanup pass (data, not code): audit
 composition_level on single dishes; prune test drafts. Not a code fault in 1a.
+
+---
+
+## 13. ROOT-CAUSE FIX — the MEAL action was never wired (+ data hygiene)
+
+### 13.1 The bug: multi-dish was unreachable
+Investigation (triggered by "where do I add another dish?" → a single-katsu preview kept
+appearing) found that `generate`'s system prompt defined only THREE actions
+(clarify/existing/generate) and the route had NO `meal` branch. The create page consumes
+`data.meal.dishes`, but `generate` never produced it — so the dish-list path was
+UNREACHABLE. Multi-dish "worked" earlier only by luck (the model occasionally volunteering
+meal-shaped output the route ignored), which is why it was non-deterministic.
+
+### 13.2 Fix (one file: generate/route.ts)
+- **Prompt:** added a 4th action **MEAL** with explicit multi-dish detection ("a dinner
+  with X and a Y" = two dishes; "chicken katsu and a green salad" = two dishes; a single
+  dish merely listing ingredients = one dish). Rule: if >1 dish, use MEAL, never collapse
+  into one GENERATE.
+- **Route:** added a `meal` branch that resolves each named dish against the catalogue
+  (dishes only, never meals): exact title > published > first → LINK (with canonicalId/
+  slug/title + otherMatchCount); no match → MAKE. Returns `{ meal: { dishes } }` — the
+  shape the dish-list UI already consumes. Verified live: the dish list now appears with
+  link/make status + Add-another-dish + Compose.
+
+### 13.3 Data hygiene done (was breaking resolution)
+The §12.3 Green Salad mislabel turned out to be LOAD-BEARING: the meal-resolution filter
+excludes `composition_level='meal'`, so a single dish wrongly tagged 'meal' would never
+LINK (showed "will be made" even though the user had it). Fixed:
+- **Green Salad** (`fa9b38d1-...`) → composition_level 'dish' (+ removed 1 stale
+  version_sub_recipes row). Now links correctly.
+- **"Carbonara Sunday dinner"** (`7eebd68c-...`) — empty test shell (0 steps/ingredients/
+  linked) → DELETED via FK-safe teardown.
+- Only genuine meal left tagged 'meal': "Spaghetti Aglio e Olio with Green Salad". Clean.
+
+### 13.4 Teardown template correction (recurring trap)
+`execution_variants` does NOT have a `canonical_id` column — it references the recipe by a
+DIFFERENT column (likely `recipe_canonical_id` or `recipe_id`; confirm before use). The
+standard teardown's `delete from execution_variants where canonical_id = ...` FAILS with
+42703. For empty shells it's skippable (no variants). Fix the column name in the teardown
+template before relying on it for a recipe that HAS variants.
+Also: the Supabase SQL editor errors (42601 "syntax error at end of input") on some
+multi-statement blocks — run teardown statements ONE AT A TIME.
