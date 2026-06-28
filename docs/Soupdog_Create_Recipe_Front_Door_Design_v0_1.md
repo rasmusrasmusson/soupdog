@@ -331,3 +331,44 @@ detect-vs-ask-vs-serve before building. Downstream of / defines `recipe.kind`.
 - **#5 error visibility:** compose errors now surface in the FIXED bottom bar (red +
   warning icon), not buried below the fold at line 961. (status==='error' → bar shows the
   error text.) Small UX fix; done.
+
+---
+
+## 13. Served-not-made — two concrete mechanisms (Rasmus, captured for the build)
+
+Two complementary mechanisms that together cover the served-not-made space and fix the
+compose failures (§12). Both produce the same outcome: a dish becomes a SERVED / ready-made
+component (no recipe generated) instead of being pushed through generate+parse.
+
+### 13.1 The TIME guardrail — threshold + ask, threshold is a USER SETTING
+- Define a reasonable maximum time a meal "should" take. If a from-scratch version of a
+  dish would EXCEED that, ASK the user: use a ready one, or make from scratch?
+- The threshold is a SETTING on the create screen, adjustable by the user BEFORE creating a
+  meal (sensible default, e.g. ~60 min; user can raise it if they like long cooks).
+- Effect: croissant (12–24h) > threshold → ask → user picks ready (served) or scratch
+  (generate). A 2h stew is fine if the user set a high threshold. The USER owns the line —
+  the system doesn't guess what's "too long."
+- BUILD NOTE: needs a CHEAP time ESTIMATE at the RESOLUTION stage (before fully generating
+  the dish), so the guardrail can fire before committing to a full recipe. The model can
+  estimate "croissant from scratch ≈ many hours" cheaply. The estimate-then-maybe-ask step
+  lives in the meal-resolution flow, not post-generation.
+
+### 13.2 The COKE problem — curated "don't-make" list + user override
+- No clean heuristic for "Coke isn't a recipe," so: a CURATED LIST of products normally
+  BOUGHT not made (sodas, commercial beer/spirits, branded snacks, etc.).
+- When a requested dish matches the list → mark it READY-MADE (served component), do NOT
+  generate a recipe.
+- ALLOW OVERRIDE: the user can still choose to make it (homemade cola, ginger beer) — the
+  list is a smart default, not a lock.
+- Claude can DRAFT the initial list as a build deliverable (sodas, commercial alcohol,
+  confectionery/branded snacks, etc.), curatable later. Pairs with the catalogue/ingredient
+  model (is_product items are natural candidates).
+
+### 13.3 How they fit together
+- Curated served-list → obvious off-the-shelf (Coke, beer) → default SERVED, allow override.
+- Time-threshold-with-ask → "makeable but usually too long here" (croissant, stock, bread)
+  → ASK, threshold is a user setting.
+- Both → dish becomes a SERVED/ready-made component → not pushed through generation →
+  fixes the §12 compose failures AND gives the right product behaviour.
+- Still downstream of / defines `recipe.kind` (composed/simple/acquire/none): served =
+  acquire/none. The dish-list model already reserves a `served` status for exactly this.
