@@ -286,3 +286,48 @@ The arbitrary "Serves 4/1", empty form fields, "Review the steps" + "Create with
 and the beer stub are all the interim create-flow scaffolding. 1a rebuild fixes: review-not-
 form, system-populated fields, who's-eating up front (generic-persona default), relabel,
 and served-not-made components.
+
+---
+
+## 12. SERVED-NOT-MADE is now causing COMPOSE FAILURES (was UX, now a bug) — next design piece
+
+Live testing (hamburger+fries+**coke**; cobb salad + **homemade lemonade**) surfaced that
+the served-not-made / from-scratch problem is no longer just awkward — it BREAKS compose.
+
+### Symptoms
+- **Coke dropped:** "hamburger, fries, coke" → coke listed WILL BE MADE, but the composed
+  recipe (saved + PDF) has burger + fries, NO coke. The generate/parse couldn't make a
+  Coca-Cola recipe → it vanished.
+- **Incomplete structure error:** "cobb salad with homemade lemonade" → compose → parse
+  returned a structure missing title/ingredients/groups → `import/route.ts:223`
+  "Incomplete recipe structure returned" → whole compose failed.
+
+### Diagnosis — same root cause as the served-not-made seam
+The system has NO concept of "served, not made," so it pushes un-makeable / trivially-
+served items (Coke) and degenerate-to-make items through recipe GENERATION + PARSE. That
+output is either dropped (coke) or breaks the parser's structure validation (lemonade).
+Real cookable dishes (burger, fries, katsu, salad) work fine. So the bug correlates with
+dish KIND — it IS the recipe.kind gap manifesting as compose failure.
+
+### The design (the proper fix — recipe.kind: composed/simple/acquire/none)
+1. **Detect served-not-made** at the meal-resolution step (or generate): Coke, beer, wine,
+   bought bread = `acquire`/`none`. Represent as a SERVED component (no method), do NOT
+   generate a recipe. (The dish-list model already reserves a `served` status — § ref.)
+2. **From-scratch guardrail (#3, Rasmus):** some dishes CAN be made but a reasonable person
+   wouldn't here — croissant (12–24h proof), bread, stock. When ambiguous, ASK the user
+   ("Use a ready croissant, or bake from scratch?") rather than silently generating a
+   12-hour recipe. Needs an ambiguity signal + a clarify prompt in the meal flow.
+3. **Compose robustness:** even once detection is in, parse/decompose should DEGRADE
+   gracefully if one component is thin (skip/serve it) rather than failing the whole meal.
+   The parser's strict title/ingredients/groups validation (import/route.ts:223) is the
+   choke point.
+
+### Priority
+This is now the SHARPEST next design+build piece for the create flow — it's both the
+served-not-made feature AND the fix for real compose failures (#1/#4). Design-led; settle
+detect-vs-ask-vs-serve before building. Downstream of / defines `recipe.kind`.
+
+### Also shipped this pass
+- **#5 error visibility:** compose errors now surface in the FIXED bottom bar (red +
+  warning icon), not buried below the fold at line 961. (status==='error' → bar shows the
+  error text.) Small UX fix; done.

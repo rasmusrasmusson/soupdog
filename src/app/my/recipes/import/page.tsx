@@ -1247,8 +1247,10 @@ export default function ImportRecipePage() {
 
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
-          <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {composing ? 'Composing your meal…'
+          <span style={{ fontFamily: MONO, fontSize: 10, color: status === 'error' && error ? '#b91c1c' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {status === 'error' && error
+              ? <><AlertTriangle size={12} /> {error}</>
+              : composing ? 'Composing your meal…'
               : status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…')
               : status === 'decomposing' ? 'Breaking into steps…'
               : 'Upload a file or paste a recipe'}
