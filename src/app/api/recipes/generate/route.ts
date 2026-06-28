@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
   //    recipes — cheap, and enough to spot an existing match). It returns a small
   //    JSON envelope naming the branch; for GENERATE it also returns the recipe
   //    as plain text in the importer's expected format. ──
-  const system = `You are the recipe butler for Soupdog. The user is AUTHORING — they want to MAKE a recipe, not search. Decide ONE of three responses and reply with ONLY valid JSON (no markdown, no backticks).
+  const system = `You are the recipe butler for Soupdog. The user is AUTHORING — they want to MAKE a recipe, not search. Decide ONE of four responses and reply with ONLY valid JSON (no markdown, no backticks).
 
 You are given the user's existing recipe catalogue (titles only). Branch as follows:
 
@@ -119,7 +119,11 @@ You are given the user's existing recipe catalogue (titles only). Branch as foll
 2) EXISTING — if the catalogue already clearly contains what they're asking for (same dish, allowing for minor wording differences). Do NOT regenerate it. List the matching catalogue title(s) verbatim. If several plausibly match, list them all (max 4).
    {"action":"existing","matches":["<exact catalogue title>","..."]}
 
-3) GENERATE — the request is clear and nothing in the catalogue matches. Write a COMPLETE, authentic recipe as PLAIN TEXT, formatted exactly like a recipe someone would paste:
+3) MEAL — if the request names MULTIPLE DISTINCT DISHES to be served together (a meal/dinner made of several dishes). Detect this whenever the user lists more than one dish — e.g. "a dinner with X and a Y", "X, Y and Z", "X with a side of Y", "X and a Y". Each named dish is a SEPARATE dish, even when joined by "with" or "and a side of". Return each distinct dish as its own short canonical name. Do NOT write the recipes here — just name the dishes.
+   {"action":"meal","dishes":["<dish name>","<dish name>","..."]}
+   IMPORTANT: "chicken katsu and a green salad" = TWO dishes ["Chicken katsu","Green salad"]. "Spaghetti with garlic bread" = TWO dishes. A single dish that merely lists ingredients ("pasta with garlic and chilli") is ONE dish — only split when the parts are themselves DISHES.
+
+4) GENERATE — a SINGLE clear dish, nothing in the catalogue matches. Write a COMPLETE, authentic recipe as PLAIN TEXT, formatted exactly like a recipe someone would paste:
    - First line: the recipe title.
    - A line like "Serves 2 | 5 minutes".
    - An "Ingredients:" section, one ingredient per line with quantities (metric; use ml/g; cocktails in ml).
@@ -128,7 +132,8 @@ You are given the user's existing recipe catalogue (titles only). Branch as foll
    {"action":"generate","title":"<title>","recipeText":"<the full recipe as one plain-text string with \\n line breaks>"}
 
 Rules:
-- Prefer GENERATE for any clearly-named dish that isn't already in the catalogue.
+- If the request names MORE THAN ONE dish, use MEAL — never collapse multiple dishes into one GENERATE.
+- Prefer GENERATE for any single clearly-named dish that isn't already in the catalogue.
 - Only CLARIFY when making something reasonable would be a guess you'd likely get wrong.
 - For EXISTING, the titles you return MUST be copied exactly from the provided catalogue.`;
 
@@ -186,6 +191,46 @@ Rules:
     return NextResponse.json({
       error: 'I thought you already had that, but I cannot find it. Try rephrasing.',
     }, { status: 404 });
+  }
+
+  // ── MEAL ── the request named multiple dishes. Resolve each against the catalogue:
+  // a match → LINK (reuse the existing dish), no match → MAKE (generate at compose time).
+  // Returns { meal: { dishes: [...] } } — the shape the create page's dish-list consumes.
+  if (parsed.action === 'meal' && Array.isArray(parsed.dishes) && parsed.dishes.length > 1) {
+    const dishes = parsed.dishes
+      .map((d: any) => String(d ?? '').trim())
+      .filter(Boolean)
+      .map((name: string) => {
+        const w = norm(name);
+        // Only DISHES are linkable as components (not whole meals).
+        const matches = catalogue
+          .filter(c => c.compositionLevel !== 'meal')
+          .filter(c => {
+            const t = norm(c.title);
+            return t === w || t.includes(w) || w.includes(t);
+          });
+        // Prefer exact title, then published, then first.
+        const best =
+          matches.find(c => norm(c.title) === w) ??
+          matches.find(c => c.isPublished) ??
+          matches[0];
+        if (best) {
+          return {
+            name,
+            status: 'linked' as const,
+            canonicalId: best.id,
+            canonicalSlug: best.slug,
+            title: best.title,
+            otherMatchCount: matches.length > 1 ? matches.length - 1 : 0,
+          };
+        }
+        return { name, status: 'make' as const };
+      });
+
+    if (dishes.length > 1) {
+      return NextResponse.json({ meal: { dishes } });
+    }
+    // Fell back to a single dish → let it flow to generate-less safety below.
   }
 
   // ── GENERATE ── return the plain recipe text for the client to feed into import.
