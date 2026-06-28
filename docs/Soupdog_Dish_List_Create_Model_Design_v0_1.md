@@ -302,3 +302,30 @@ standard teardown's `delete from execution_variants where canonical_id = ...` FA
 template before relying on it for a recipe that HAS variants.
 Also: the Supabase SQL editor errors (42601 "syntax error at end of input") on some
 multi-statement blocks — run teardown statements ONE AT A TIME.
+
+---
+
+## 14. END-TO-END PROVEN + polish items (from live test)
+
+### 14.1 Full flow proven
+"a dinner with chicken katsu and a green salad" → dish list (Chicken katsu WILL BE MADE,
+Green Salad FROM YOUR RECIPES — linking correct after the §13.3 data fix) → Add-another-
+dish available → Compose → full meal preview (43 steps, grouped Chicken/Katsu Sauce/
+Plating) → saved + PDF export clean (FOR Rasmus and Natasha line, QR, grouped method).
+The dish-list create flow works end-to-end with correct link/make resolution. Milestone.
+
+### 14.2 [POLISH] Two-step submit (Make it → Compose meal)
+The user submits twice: "Make it" (populate the dish list) then "Compose meal" (build it).
+The second feels redundant when the list is obviously right. BUT the split is intentional:
+"Make it" resolves the request into a REVIEWABLE/EDITABLE list (add/remove dishes) before
+the slower, AI-cost compose; "Compose meal" is the "I've reviewed, now build" gate. So the
+fix is to make the two-step feel natural (esp. once Add-another-dish means frequent list
+editing), NOT to remove the review gate. Designy — settle deliberately, don't snap-merge.
+Options to consider: auto-compose when nothing's been edited; relabel; make Compose the
+clear primary and the list visibly a review step.
+
+### 14.3 [POLISH] Double progress text while composing
+During compose, TWO differently-worded progress indicators show at once: the Compose
+button reads "Composing" while the bottom bar shows the import/decompose pipeline stage
+("Breaking into steps…" / "Structuring…"). Two voices for one operation. Clear, contained
+fix: unify to ONE indicator, or consistent wording. Low-risk.
