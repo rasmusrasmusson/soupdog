@@ -1248,7 +1248,8 @@ export default function ImportRecipePage() {
       {status !== 'done' && (
         <div className="fixed bottom-0 left-0 right-0 bg-[var(--surface)] border-t border-[var(--border)] px-6 py-3 flex items-center justify-between z-50">
           <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--muted)' }}>
-            {status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…')
+            {composing ? 'Composing your meal…'
+              : status === 'loading' ? (uploadFile ? 'Reading file…' : 'Reading recipe…')
               : status === 'decomposing' ? 'Breaking into steps…'
               : 'Upload a file or paste a recipe'}
           </span>
@@ -1258,13 +1259,15 @@ export default function ImportRecipePage() {
                 fontFamily: MONO, fontSize: 11, cursor: 'pointer', color: 'var(--muted)' }}>
               Cancel
             </button>
-            <button onClick={handleImport} disabled={status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile)}
+            <button onClick={handleImport} disabled={composing || status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile)}
               style={{ padding: '8px 20px', border: 'none', background: 'var(--accent)', color: '#fff',
                 fontFamily: MONO, fontSize: 11,
-                cursor: status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
+                cursor: composing || status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: 7,
-                opacity: status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
-              {status === 'loading' || status === 'decomposing'
+                opacity: composing || status === 'loading' || status === 'decomposing' || (!text.trim() && !uploadFile) ? 0.6 : 1 }}>
+              {composing
+                ? <><Loader2 size={12} className="animate-spin" /> Composing…</>
+                : status === 'loading' || status === 'decomposing'
                 ? <><Loader2 size={12} className="animate-spin" /> {status === 'decomposing' ? 'Structuring…' : 'Reading…'}</>
                 : 'Add recipe'}
             </button>
