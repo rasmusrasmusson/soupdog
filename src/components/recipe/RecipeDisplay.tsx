@@ -648,6 +648,22 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
         </section>
       )}
 
+      {/* Served alongside: ready-made / off-the-shelf items that are part of the meal but
+          not cooked (e.g. a soft drink, a commercial spirit). No recipe — just served. */}
+      {Array.isArray(recipe.servedItems) && recipe.servedItems.length > 0 && (
+        <section style={{ marginTop: 8 }}>
+          <SectionHeader title="Served alongside" meta={`${recipe.servedItems.length} ready-made`} />
+          <div className="flex flex-col gap-2">
+            {recipe.servedItems.map((si, i) => (
+              <div key={`served-${i}`} style={{ border: B, borderRadius: 6, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontFamily: 'var(--font-serif, var(--font-display))', fontSize: 15, color: 'var(--fg)' }}>{capitalizeLabel(si.name)}</span>
+                <span style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT }}>Ready-made</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {openTaskId && (
         <TaskDetailModal taskId={openTaskId} locale={locale} onClose={() => setOpenTaskId(null)} />
       )}

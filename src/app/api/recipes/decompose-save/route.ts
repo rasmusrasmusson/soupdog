@@ -241,18 +241,29 @@ export async function POST(req: NextRequest) {
       ? dag.linkedDishes.filter((d: any) => d && typeof d.canonicalSlug === 'string')
       : [];
 
+  // Served items: ready-made/off-the-shelf components with no recipe (e.g. a soft drink).
+  // Carried on dag.servedComponents as plain names; persisted as recipe_versions.served_items
+  // ([{ name }]). They belong to the meal but are not cooked.
+  const servedItems: { name: string }[] =
+    Array.isArray(dag.servedComponents)
+      ? dag.servedComponents
+          .map((s: any) => (typeof s === 'string' ? s.trim() : ''))
+          .filter(Boolean)
+          .map((name: string) => ({ name }))
+      : [];
+
   // A "pure-link meal" has no own steps — it is JUST a composition of existing dishes
-  // (e.g. "tonight: my carbonara + my green salad"). Valid as long as it links ≥1 dish.
-  // Reject only a truly empty dag (no nodes AND no links).
-  if (dag.nodes.length === 0 && linkedDishes.length === 0) {
-    return NextResponse.json({ error: 'dag with nodes or linked dishes required' }, { status: 400 });
+  // (e.g. "tonight: my carbonara + my green salad"). Valid as long as it links ≥1 dish OR
+  // has ≥1 served item. Reject only a truly empty dag (no nodes AND no links AND no served).
+  if (dag.nodes.length === 0 && linkedDishes.length === 0 && servedItems.length === 0) {
+    return NextResponse.json({ error: 'dag with nodes, linked dishes, or served items required' }, { status: 400 });
   }
 
-  // A recipe is a "meal" (composed) if it links existing dishes OR has more than one
-  // terminal node (more than one end-product). Terminals = nodes nothing consumes.
+  // A recipe is a "meal" (composed) if it links existing dishes, has served items, OR has
+  // more than one terminal node (more than one end-product). Terminals = nodes nothing consumes.
   const consumedIds = new Set<string>(dag.nodes.flatMap((n: any) => n.consumes ?? []));
   const terminalCount = dag.nodes.filter((n: any) => !consumedIds.has(n.id)).length;
-  const isMeal = linkedDishes.length > 0 || terminalCount > 1;
+  const isMeal = linkedDishes.length > 0 || servedItems.length > 0 || terminalCount > 1;
 
   // ── Validate the DAG before touching the DB (cheap guard against bad input) ──
   const ids = new Set<string>(dag.nodes.map((n: any) => n.id));
@@ -298,6 +309,7 @@ export async function POST(req: NextRequest) {
         total_time_seconds:  meta.totalTimeSeconds ?? 0,
         is_canonical_version: true,
         source_extraction:   sourceExtraction,
+        served_items:        servedItems,
       })
       .select().single();
     if (ve) throw ve;

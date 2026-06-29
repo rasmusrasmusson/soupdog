@@ -27,7 +27,7 @@ interface DagNode {
   notes?: string | null;
 }
 interface DagLinkedDish { dishName: string; canonicalSlug: string; }
-export interface Dag { title?: string; servings?: number; nodes: DagNode[]; linkedDishes?: DagLinkedDish[]; }
+export interface Dag { title?: string; servings?: number; nodes: DagNode[]; linkedDishes?: DagLinkedDish[]; servedComponents?: string[]; }
 
 export interface DagRecipeMeta {
   title?: string;
@@ -136,6 +136,11 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
     expandByDefault: false,
   }));
 
+  const servedItems = (dag.servedComponents ?? [])
+    .map(s => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+    .map(name => ({ name }));
+
   return {
     id:               'preview',
     slug:             'preview',
@@ -151,6 +156,7 @@ export function dagToRecipe(dag: Dag, meta: DagRecipeMeta = {}): Recipe {
     ingredients,
     steps,
     subRecipes:       subRecipes.length ? subRecipes : undefined,
+    servedItems:      servedItems.length ? servedItems : undefined,
     equipment:        [],
     createdAt:        now,
     updatedAt:        now,

@@ -335,6 +335,7 @@ export interface Recipe {
   ingredients:         RecipeIngredientRef[];
   steps:               RecipeStep[];
   subRecipes?:         SubRecipeRef[];
+  servedItems?:        ServedItem[];
   equipment?:          EquipmentRef[];
   nutrition?:          NutritionData;
   requiredFoodState?:  FoodState;
@@ -373,15 +374,15 @@ export interface RecipeStep {
   taskTemplate?:    string;    // ← ADD: task's display_template
   taskSingleTool?:  boolean;   // ← ADD: task takes exactly one tool
   taskCategory?:    string;    // ← task's category (e.g. 'plating') for section grouping
-  firstIngredientName?: string; // ← for linked sub-recipe steps: the step's introduced
-                                // ingredient name, resolved at fetch time (the linked dish
-                                // has no stepIngMap in the host display), so StepLine can
-                                // compose "Add <ingredient>" instead of a bare "Add".
   consumedIntermediates?: string[]; // ← ADD (Layer 2): names of upstream intermediates this
                                     // step consumes (from version_step_dependencies
                                     // .consumes_intermediate_label, producer-order), used to
                                     // fill [ingredient] on combine/transform steps that have
                                     // no own ingredient (e.g. "Add the diced onion and hot oil").
+}
+
+export interface ServedItem {
+  name: string;
 }
 
 export interface SubRecipeRef {
@@ -390,8 +391,6 @@ export interface SubRecipeRef {
   title:             string;
   usedAsIngredient?: string;
   optional?:         boolean;
-  expandByDefault?:  boolean;       // honour version_sub_recipes.expand_by_default
-  steps?:            RecipeStep[];  // child's steps, fetched for inline (hybrid) display
 }
 
 export interface EquipmentRef {

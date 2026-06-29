@@ -233,6 +233,7 @@ function mapNewSchemaRecipe(row: any): Recipe {
     steps,
     equipment,
     nutrition:          rv?.nutrition ?? row.nutrition ?? undefined,
+    servedItems:        Array.isArray(rv?.served_items) ? rv.served_items : undefined,
     ratings:            undefined,
     createdAt:          row.created_at,
     updatedAt:          row.updated_at,
@@ -1017,6 +1018,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
             *,
             recipe_versions (
               id, title, description, cuisine, tags, base_servings,
+              served_items,
               difficulty, total_time_seconds, active_time_seconds, hero_image_url,
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,
@@ -1100,6 +1102,7 @@ function RecipePageClient({ params }: { params: Promise<{ slug: string }> }) {
             .from('recipe_versions')
             .select(`
               id, title, description, cuisine, tags, base_servings,
+              served_items,
               difficulty, total_time_seconds, active_time_seconds, hero_image_url,
               version_ingredients (
                 id, order_index, quantity_value, quantity_unit,

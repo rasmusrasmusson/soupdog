@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Loader2, AlertTriangle, ArrowLeft, Send, RotateCcw, X, Plus } from 'lucide-react';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
 import { dagToRecipe } from '@/lib/dag-to-recipe';
+import { isServedItem } from '@/lib/served-items';
 import Link from 'next/link';
 
 const MONO = 'var(--font-mono)';
@@ -454,6 +455,9 @@ export default function ImportRecipePage() {
 
       for (const d of toMake) {
         const dishName = d.title || d.name;
+        // Curated don't-make list: obviously off-the-shelf items (a soft drink, bottled
+        // water, etc.) are SERVED as-is — skip the wasted generation call entirely.
+        if (isServedItem(d.name)) { servedComponents.push(dishName); continue; }
         try {
           // generate the dish's recipe text (forceGenerate: this is a chosen dish to make —
           // we want a recipe written, not classification into existing/clarify/meal).
