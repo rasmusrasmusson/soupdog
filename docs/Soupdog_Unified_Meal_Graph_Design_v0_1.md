@@ -91,3 +91,58 @@ keeps all (coke served); cobb salad+lemonade still keeps both (salad linked).
   marker). Defer.
 - Printed-order interleaving (§6) — whether the PDF should show time-interleaved steps vs
   dish sections. Separate display decision. Defer.
+
+---
+
+## 10. ATTEMPTED & REVERTED — collision in the single-decompose approach
+
+Built §3 (per-dish parse → ONE decompose over combined multi-group extraction). Result on
+"roast chicken with mashed potatoes and steamed green beans": **chicken group came out
+MALFORMED** — its cooking steps lost ingredient/tool bindings and rendered as a BARE LIST
+("Add", "Season", "Season", "Add", no qty/tool columns), while mash + beans rendered as proper
+tables. All three dishes WERE present (no drop), but the chicken was broken.
+
+### Leading hypothesis (UNCONFIRMED — needs decompose output to verify)
+Cross-dish INGREDIENT COLLISION. Concatenating each dish's fully-parsed `ingredients[]` into
+one list produces duplicates across dishes — and this meal has genuine overlap: the roast
+chicken contains potatoes/carrots/onions, AND there's a separate mashed-potato dish; plus
+salt/oil/pepper everywhere. The decompose engine (rule 6b, told to merge shared prep) likely
+merged/reassigned the duplicated ingredients in a way that DETACHED the chicken's cooking
+steps from their ingredient instances → unresolved references → empty columns → bare list.
+The engine expects ONE coherent ingredient list, not N complete recipes' lists stapled
+together.
+
+### Could NOT confirm live
+DevTools Network filtered by "decompose" showed nothing (capture was on the wrong page /
+fiddly). Did not get the decompose response. So the hypothesis is unverified.
+
+### DECISION: reverted to the SILOED Option A (per-dish decompose + namespaced concat)
+Option A renders CORRECTLY (all dishes proper table format), just no cross-merge/parallelism.
+A correct-but-siloed meal ships; a unified-but-broken one does not. Reverted the compose loop;
+kept all other session wins (served-not-made web+PDF+persist, Bug 2a meta blanking, PDF
+linked+served sections).
+
+### NEXT SESSION — design unified collision-free, WITH DATA
+1. FIRST capture the `/api/recipes/decompose` response for the chicken meal (Network tab open
+   ON the import page, filter "decompose", click Compose) — confirm whether chicken nodes lost
+   ingredient links / how the merge handled duplicate potatoes/salt/oil. Theory must be
+   verified before building.
+2. Candidate fixes to evaluate once cause known:
+   - (a) DEDUPE the combined ingredient list before decompose (collapse exact dup names,
+     sum/keep amounts) so the engine gets one coherent list — may fix the detachment without
+     losing 6b merging.
+   - (b) Generate ONE meal recipe TEXT and parse once (let the PARSER build a single coherent
+     multi-group extraction) — closer to the engine's expected input, but this was the path
+     that originally COLLAPSED dishes; would need the parser taught to keep dishes as groups.
+   - (c) Per-dish decompose (Option A) but add a SECOND cross-dish merge pass that dedupes
+     shared prep nodes after the fact — keeps per-dish correctness, adds merging as a separate
+     step.
+3. The decompose engine IS designed for multi-group meals (prompt rules 4/5/6b); the problem
+   is the SHAPE of the combined extraction we feed it (duplicate-heavy ingredient list), not
+   the engine's capability. Fix the input shape, not the engine.
+
+### Process note
+I (Claude) went back and forth on this within one turn (rejected Option C, built it, it broke,
+considered tiny-fix vs revert). That oscillation = the signal I was guessing without data.
+Right call was to STOP and revert, not fire a third blind attempt. Get the decompose output
+first next time.
