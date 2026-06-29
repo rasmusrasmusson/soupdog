@@ -348,6 +348,19 @@ export function RecipePrintLayout({ recipe, url, peopleNames }: { recipe: Recipe
         </div>
       </div>
 
+      {/* ── Served alongside (ready-made / off-the-shelf items) ──── */}
+      {Array.isArray(recipe.servedItems) && recipe.servedItems.length > 0 ? (
+        <section style={{ marginTop: 16, paddingTop: 10, borderTop: '1px solid #ddd', breakInside: 'avoid' }}>
+          <h2 style={{ ...MONO, fontSize: 10, letterSpacing: '0.16em', textTransform: 'uppercase', color: '#7a8a7f', marginBottom: 6 }}>
+            Served alongside
+          </h2>
+          <div style={{ ...SANS, fontSize: 11.5, color: '#222', lineHeight: 1.7 }}>
+            {recipe.servedItems.map((si) => capitalizeLabel(si.name)).join('  ·  ')}
+            <span style={{ ...MONO, fontSize: 9, color: '#999' }}>  (ready-made)</span>
+          </div>
+        </section>
+      ) : null}
+
       {/* ── Nutrition (compact) ────────────────────────────────── */}
       {recipe.nutrition && (recipe.nutrition.calories ?? 0) > 0 ? (
         <section style={{ marginTop: 16, paddingTop: 10, borderTop: '1px solid #ddd', breakInside: 'avoid' }}>
