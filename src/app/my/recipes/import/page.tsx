@@ -529,14 +529,25 @@ export default function ImportRecipePage() {
         linkedDishes: resolvedLinkedDishes,
       };
       if (servedComponents.length > 0) mealDag.servedComponents = servedComponents;
+
+      // A meal of MULTIPLE dishes must NOT wear one dish's identity (e.g. a burger+fries+coke
+      // meal showing as "American · a classic beef burger"). Only inherit a single dish's
+      // description/cuisine/tags when the meal is effectively ONE dish. Count = made dishes +
+      // linked dishes + served items.
+      const totalDishCount = dishIdx + resolvedLinkedDishes.length + servedComponents.length;
+      const isMultiDish = totalDishCount > 1;
+      const mealDescription = isMultiDish ? '' : (metaFromParse?.description ?? '');
+      const mealCuisine     = isMultiDish ? '' : (metaFromParse?.cuisine ?? '');
+      const mealTags        = isMultiDish ? [] : (Array.isArray(metaFromParse?.tags) ? metaFromParse.tags : []);
+
       setSourceExtraction(metaFromParse);
 
       setPreview({
         title:       composeMenuTitle(componentNames),
         components:  componentNames,
-        description: metaFromParse?.description ?? '',
-        cuisine:     metaFromParse?.cuisine ?? '',
-        tags:        Array.isArray(metaFromParse?.tags) ? metaFromParse.tags : [],
+        description: mealDescription,
+        cuisine:     mealCuisine,
+        tags:        mealTags,
         servings:    mealDag.servings,
         difficulty:  metaFromParse?.difficulty ?? 'medium',
         totalTimeMinutes: 0,
