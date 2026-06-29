@@ -146,3 +146,63 @@ I (Claude) went back and forth on this within one turn (rejected Option C, built
 considered tiny-fix vs revert). That oscillation = the signal I was guessing without data.
 Right call was to STOP and revert, not fire a third blind attempt. Get the decompose output
 first next time.
+
+---
+
+## 11. DIAGNOSTIC RESULT (2026-06-30) — hypothesis CONFIRMED, but the cause is the CLIENT COMBINE, not decompose
+
+Ran the §10.2 collision check WITHOUT the live engine: the import-page combine logic
+(import/page.tsx ~L95-138) is pure client-side JS, so it was replicated verbatim against a
+chicken-meal-shaped combined extraction (3 dishes parsed alone, then §3-combined). No AI calls.
+
+### What the harness proved
+The bare-list dishes are the LATER ones (mash, beans), NOT the chicken. The chicken renders
+fine because it is FIRST in concat order. Output:
+- Roast chicken: all introduce-steps bound correctly.
+- Mashed potatoes: "Add butter" EMPTY, "Season" EMPTY (only "potato"/"milk" survived).
+- Steamed green beans: "Toss butter" EMPTY, "Season" EMPTY.
+
+So §10's report ("chicken came out malformed, decompose detached it") was WRONG about which dish
+and wrong about the layer. The chicken is the one dish that survives; decompose never got a fair
+input.
+
+### The actual mechanism (two lines, both pre-decompose, both client-side)
+1. **L97 `assignedToStep` is a GLOBAL Set spanning all groups.** L116 filters out any
+   stepIngredient whose lowercased name was already claimed by an earlier step IN ANY DISH.
+   So once chicken claims `butter`/`salt`, mash's and beans' "add butter"/"season" steps are
+   stripped to empty stepIngredients → bare list. This is the bug.
+2. **L119 `allIngredients.find(name)` returns the FIRST name match.** With a concatenated
+   ingredient list holding duplicate `salt`/`butter`/`oil` across dishes, even an un-stripped
+   step binds the WRONG dish's quantity (chicken's 50g butter onto mash's step).
+
+The decompose engine was never the cause. The combine had already emptied half the introduce-
+steps before the extraction was sent. (This same global dedup lives in the live Option A path
+too — it just never bites there because each dish is parsed AND decomposed in its own isolated
+call, so the global sets reset per dish.)
+
+### Corrected fix menu (supersedes §10.2's candidates)
+- §10.2(a) "DEDUPE the combined ingredient list" is the WRONG DIRECTION — it removes the
+  duplicate butter/salt entries, leaving L119 even fewer to bind. Do NOT do this.
+- **The fix is per-dish SCOPING, not deduping:**
+  - Make `assignedToStep`/`usedInSteps` **per-dish** (reset at each group boundary), so
+    `salt` in chicken and `salt` in mash are independently bindable instances.
+  - Scope L119's ingredient lookup to the **current dish's** ingredient list, not the global
+    concat — so each step binds its own dish's quantity. (Carry the per-dish ingredient list
+    alongside each group when combining, e.g. tag each group with a `dishIngredients[]`, or
+    namespace ingredient names per dish: `d{i}::salt`.)
+- This keeps rule 6b INTACT: the engine still merges genuinely-shared prep by MEANING. We are
+  not pre-merging or pre-deduping; we are just not letting the client silently null out one
+  dish's bindings before the engine sees them.
+
+### Build note
+The fix is in the COMBINE step (client), not the decompose route and not decompose-save. It is
+small and testable offline (the harness at /tmp/diag.mjs reproduces it deterministically). Once
+the combine scopes per dish, re-attempt the §3 single-decompose unified path — the engine should
+now receive a coherent multi-group extraction where each dish's ingredients are introduced once
+WITHIN that dish.
+
+### Process note (correction)
+This time the data came FIRST (offline harness, zero cost), before any code or live call. That
+is the discipline §10's process note was reaching for. The "get the decompose output first"
+instinct was right; the cheaper move was to realise the suspect layer (the client combine) is
+inspectable without the engine at all.
