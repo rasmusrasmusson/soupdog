@@ -444,14 +444,17 @@ export default function ImportRecipePage() {
 
       // OPTION A — parse + decompose EACH made dish on its own (the single-recipe path the
       // pipeline is proven on), then MERGE the per-dish DAGs into one meal DAG. This keeps
-      // every made dish intact (the old combine-into-one-blob approach collapsed 2+ made
-      // dishes to one). A dish that can't generate OR can't be structured becomes a SERVED
-      // component instead of breaking the meal.
+      // UNIFIED MEAL GRAPH — parse each made dish ALONE (the single-recipe parser is reliable
+      // per dish, so no dishes collapse), then DECOMPOSE ONCE over a combined multi-group
+      // extraction. The decompose engine merges shared prep across dishes and keeps independent
+      // chains parallel (rule 6b) — one unified meal graph, not N silos. A dish that can't
+      // generate/parse becomes a SERVED component instead of sinking the meal.
       setStatus('decomposing');
       const servedComponents: string[] = [];
-      const mergedNodes: any[] = [];
-      let metaFromParse: any = null;   // borrow description/cuisine/tags from the first dish
-      let dishIdx = 0;
+      const dishGroups: { outputName: string; steps: any[] }[] = [];
+      const combinedIngredients: any[] = [];
+      let metaFromParse: any = null;   // description/cuisine/tags (only used if single dish)
+      let madeDishCount = 0;
 
       for (const d of toMake) {
         const dishName = d.title || d.name;
@@ -469,34 +472,24 @@ export default function ImportRecipePage() {
           const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
           if (recipeText.length <= 40) { servedComponents.push(dishName); continue; }
 
-          // parse this ONE dish (single-recipe parser — what it's good at)
+          // parse this ONE dish alone (single-recipe parser — what it's good at; no collapse)
           const ires = await fetch('/api/recipes/import', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text: recipeText }),
           });
           const idata = await ires.json();
-          if (!ires.ok || !idata.recipe) { servedComponents.push(dishName); continue; }
-          if (!metaFromParse) metaFromParse = idata.recipe;
+          const parse = idata?.recipe;
+          if (!ires.ok || !parse || !Array.isArray(parse.groups)) { servedComponents.push(dishName); continue; }
+          if (!metaFromParse) metaFromParse = parse;
 
-          // decompose this ONE dish → its own mini-DAG
-          const dres = await fetch('/api/recipes/decompose', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ extraction: idata.recipe }),
-          });
-          const ddata = await dres.json();
-          const nodes = (dres.ok && ddata.dag && Array.isArray(ddata.dag.nodes)) ? ddata.dag.nodes : null;
-          if (!nodes || nodes.length === 0) { servedComponents.push(dishName); continue; }
-
-          // namespace ids per dish + tag every node with group = dish name, so the meal DAG
-          // keeps dishes distinct and the preview sections by dish.
-          const prefix = `d${dishIdx}_`;
-          for (const n of nodes) {
-            n.id = prefix + n.id;
-            if (Array.isArray(n.consumes)) n.consumes = n.consumes.map((c: string) => prefix + c);
-            n.group = dishName;
-            mergedNodes.push(n);
-          }
-          dishIdx++;
+          // Combine into ONE multi-group extraction: this dish becomes a single group named by
+          // the dish (steps reference ingredients BY NAME, so concatenating ingredients is
+          // safe — no id remap). Flatten any intra-dish sub-groups into the dish group.
+          const dishSteps = (parse.groups as any[]).flatMap(g => Array.isArray(g.steps) ? g.steps : []);
+          if (dishSteps.length === 0) { servedComponents.push(dishName); continue; }
+          dishGroups.push({ outputName: dishName, steps: dishSteps });
+          if (Array.isArray(parse.ingredients)) combinedIngredients.push(...parse.ingredients);
+          madeDishCount++;
         } catch {
           servedComponents.push(dishName);   // any failure → serve it, don't sink the meal
         }
@@ -507,8 +500,8 @@ export default function ImportRecipePage() {
         canonicalSlug: d.canonicalSlug as string,
       }));
 
-      // If NOTHING could be made/structured, build a minimal meal of served + linked dishes.
-      if (mergedNodes.length === 0) {
+      // If NOTHING could be made/parsed, build a minimal meal of served + linked dishes.
+      if (dishGroups.length === 0) {
         const servedDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: resolvedLinkedDishes, servedComponents };
         setSourceExtraction(null);
         setPreview({
@@ -520,12 +513,32 @@ export default function ImportRecipePage() {
         return;
       }
 
-      // Merge into one meal DAG: all made-dish nodes (grouped by dish) + linked dishes +
-      // served components.
+      // ONE decompose over the combined multi-group extraction → unified meal graph
+      // (shared prep merged, parallel chains preserved, one terminal per dish).
+      const combinedExtraction = {
+        title:       composeMenuTitle(componentNames),
+        description: metaFromParse?.description ?? '',
+        cuisine:     metaFromParse?.cuisine ?? null,
+        difficulty:  metaFromParse?.difficulty ?? 'medium',
+        servings:    metaFromParse?.servings ?? 4,
+        totalTimeMinutes: metaFromParse?.totalTimeMinutes ?? 0,
+        tags:        Array.isArray(metaFromParse?.tags) ? metaFromParse.tags : [],
+        ingredients: combinedIngredients,
+        groups:      dishGroups,
+      };
+      const dres = await fetch('/api/recipes/decompose', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ extraction: combinedExtraction }),
+      });
+      const ddata = await dres.json();
+      if (!dres.ok || !ddata.dag || !Array.isArray(ddata.dag.nodes) || ddata.dag.nodes.length === 0) {
+        throw new Error(ddata.error ?? 'We had trouble structuring that meal. Please try again.');
+      }
+
       const mealDag: any = {
         title: composeMenuTitle(componentNames),
-        servings: metaFromParse?.servings ?? 4,
-        nodes: mergedNodes,
+        servings: ddata.dag.servings ?? metaFromParse?.servings ?? 4,
+        nodes: ddata.dag.nodes,
         linkedDishes: resolvedLinkedDishes,
       };
       if (servedComponents.length > 0) mealDag.servedComponents = servedComponents;
@@ -534,7 +547,7 @@ export default function ImportRecipePage() {
       // meal showing as "American · a classic beef burger"). Only inherit a single dish's
       // description/cuisine/tags when the meal is effectively ONE dish. Count = made dishes +
       // linked dishes + served items.
-      const totalDishCount = dishIdx + resolvedLinkedDishes.length + servedComponents.length;
+      const totalDishCount = madeDishCount + resolvedLinkedDishes.length + servedComponents.length;
       const isMultiDish = totalDishCount > 1;
       const mealDescription = isMultiDish ? '' : (metaFromParse?.description ?? '');
       const mealCuisine     = isMultiDish ? '' : (metaFromParse?.cuisine ?? '');
