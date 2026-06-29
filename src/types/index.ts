@@ -391,6 +391,8 @@ export interface SubRecipeRef {
   title:             string;
   usedAsIngredient?: string;
   optional?:         boolean;
+  expandByDefault?:  boolean;
+  steps?:            RecipeStep[];
 }
 
 export interface EquipmentRef {
