@@ -414,11 +414,6 @@ export default function ImportRecipePage() {
       const linked = dishes.filter(d => d.status === 'linked' && d.canonicalSlug);
       const toMake = dishes.filter(d => d.status === 'make');
 
-      const resolvedDishes = linked.map(d => ({
-        dishName: d.title || d.name,
-        canonicalSlug: d.canonicalSlug as string,
-      }));
-
       const componentNames = dishes.map(d => d.title || d.name).filter(Boolean);
 
       // PURE-LINK MEAL: every dish already exists in the catalogue → nothing to make or
@@ -446,112 +441,101 @@ export default function ImportRecipePage() {
         return;
       }
 
-      // 1. Generate each to-make dish's recipe text (single-dish generate). If a dish
-      //    can't be written as a recipe (e.g. an off-the-shelf item like a soft drink, or
-      //    a thin/empty generation), DON'T inject junk text into the parser — carry it as a
-      //    SERVED component instead (shown as a ready-made item, not cooked). This keeps one
-      //    un-makeable dish from breaking the whole meal's structure.
-      const madeTexts: string[] = [];
+      // OPTION A — parse + decompose EACH made dish on its own (the single-recipe path the
+      // pipeline is proven on), then MERGE the per-dish DAGs into one meal DAG. This keeps
+      // every made dish intact (the old combine-into-one-blob approach collapsed 2+ made
+      // dishes to one). A dish that can't generate OR can't be structured becomes a SERVED
+      // component instead of breaking the meal.
+      setStatus('decomposing');
       const servedComponents: string[] = [];
+      const mergedNodes: any[] = [];
+      let metaFromParse: any = null;   // borrow description/cuisine/tags from the first dish
+      let dishIdx = 0;
+
       for (const d of toMake) {
-        let madeOk = false;
+        const dishName = d.title || d.name;
         try {
+          // generate the dish's recipe text
           const gr = await fetch('/api/recipes/generate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ prompt: d.name }),
           });
           const gd = await gr.json();
-          if (gr.ok && typeof gd.recipeText === 'string' && gd.recipeText.trim().length > 40) {
-            madeTexts.push(gd.recipeText.trim());
-            madeOk = true;
+          const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
+          if (recipeText.length <= 40) { servedComponents.push(dishName); continue; }
+
+          // parse this ONE dish (single-recipe parser — what it's good at)
+          const ires = await fetch('/api/recipes/import', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: recipeText }),
+          });
+          const idata = await ires.json();
+          if (!ires.ok || !idata.recipe) { servedComponents.push(dishName); continue; }
+          if (!metaFromParse) metaFromParse = idata.recipe;
+
+          // decompose this ONE dish → its own mini-DAG
+          const dres = await fetch('/api/recipes/decompose', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extraction: idata.recipe }),
+          });
+          const ddata = await dres.json();
+          const nodes = (dres.ok && ddata.dag && Array.isArray(ddata.dag.nodes)) ? ddata.dag.nodes : null;
+          if (!nodes || nodes.length === 0) { servedComponents.push(dishName); continue; }
+
+          // namespace ids per dish + tag every node with group = dish name, so the meal DAG
+          // keeps dishes distinct and the preview sections by dish.
+          const prefix = `d${dishIdx}_`;
+          for (const n of nodes) {
+            n.id = prefix + n.id;
+            if (Array.isArray(n.consumes)) n.consumes = n.consumes.map((c: string) => prefix + c);
+            n.group = dishName;
+            mergedNodes.push(n);
           }
-        } catch { /* fall through to served */ }
-        if (!madeOk) servedComponents.push(d.title || d.name);
+          dishIdx++;
+        } catch {
+          servedComponents.push(dishName);   // any failure → serve it, don't sink the meal
+        }
       }
 
-      // If NOTHING could be made (every to-make dish was served/un-makeable), there's no
-      // recipe to structure — build a minimal meal of served components + any linked dishes.
-      if (madeTexts.length === 0) {
-        setStatus('decomposing');
-        const linkedDishesForDag = linked.map(d => ({
-          dishName: d.title || d.name,
-          canonicalSlug: d.canonicalSlug as string,
-        }));
-        const servedDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: linkedDishesForDag, servedComponents };
+      const resolvedLinkedDishes = linked.map(d => ({
+        dishName: d.title || d.name,
+        canonicalSlug: d.canonicalSlug as string,
+      }));
+
+      // If NOTHING could be made/structured, build a minimal meal of served + linked dishes.
+      if (mergedNodes.length === 0) {
+        const servedDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: resolvedLinkedDishes, servedComponents };
         setSourceExtraction(null);
         setPreview({
-          title:       composeMenuTitle(componentNames),
-          components:  componentNames,
-          description: '',
-          cuisine:     '',
-          tags:        [],
-          servings:    4,
-          difficulty:  'medium',
-          totalTimeMinutes: 0,
-          dag:         servedDag,
+          title: composeMenuTitle(componentNames), components: componentNames,
+          description: '', cuisine: '', tags: [], servings: 4, difficulty: 'medium',
+          totalTimeMinutes: 0, dag: servedDag,
         });
         setStatus('done');
         return;
       }
 
-      // 2. Combine into one text blob, each dish a clear section (so the parser emits
-      //    one group per dish via outputName).
-      const combined = madeTexts.join('\n\n---\n\n');
+      // Merge into one meal DAG: all made-dish nodes (grouped by dish) + linked dishes +
+      // served components.
+      const mealDag: any = {
+        title: composeMenuTitle(componentNames),
+        servings: metaFromParse?.servings ?? 4,
+        nodes: mergedNodes,
+        linkedDishes: resolvedLinkedDishes,
+      };
+      if (servedComponents.length > 0) mealDag.servedComponents = servedComponents;
+      setSourceExtraction(metaFromParse);
 
-      // 3. Parse the combined text into a (multi-group) extraction.
-      setStatus('decomposing');
-      const ires = await fetch('/api/recipes/import', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: combined }),
-      });
-      const idata = await ires.json();
-      if (!ires.ok || !idata.recipe) {
-        // The made dishes couldn't be structured. Rather than fail the whole meal, fall
-        // back to a minimal meal of the linked dishes + served components (the made dishes
-        // become served too, since we couldn't structure them).
-        if (linked.length > 0 || servedComponents.length > 0) {
-          setStatus('decomposing');
-          const linkedDishesForDag = linked.map(d => ({ dishName: d.title || d.name, canonicalSlug: d.canonicalSlug as string }));
-          const fallbackServed = [...servedComponents, ...toMake.map(d => d.title || d.name).filter(n => !servedComponents.includes(n))];
-          const fbDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: linkedDishesForDag, servedComponents: fallbackServed };
-          setSourceExtraction(null);
-          setPreview({ title: composeMenuTitle(componentNames), components: componentNames, description: '', cuisine: '', tags: [], servings: 4, difficulty: 'medium', totalTimeMinutes: 0, dag: fbDag });
-          setStatus('done');
-          return;
-        }
-        throw new Error(idata.error ?? 'Could not structure the meal.');
-      }
-      const parse = idata.recipe;
-      setSourceExtraction(parse);
-
-      // 4. Decompose with resolvedDishes — linked dishes get linked, made dishes get
-      //    decomposed inline, all in one unified meal DAG.
-      const dres = await fetch('/api/recipes/decompose', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ extraction: parse, resolvedDishes }),
-      });
-      const ddata = await dres.json();
-      if (!dres.ok || !ddata.dag) throw new Error(ddata.error ?? 'We had trouble structuring that meal. Please try again.');
-
-      // Carry any served components (off-the-shelf / un-makeable dishes) onto the DAG so the
-      // preview shows them as ready-made items alongside the cooked dishes.
-      if (servedComponents.length > 0) {
-        ddata.dag.servedComponents = servedComponents;
-      }
-
-      // Menu-style title from the DISH NAMES (not the parser's single-dish title — which
-      // would name the meal after whichever dish was decomposed inline). Editable below.
-      const mealTitle = composeMenuTitle(componentNames);
       setPreview({
-        title:       mealTitle,
-        components:  componentNames,   // the "what's for dinner" manifest, shown near the title
-        description: parse.description ?? '',
-        cuisine:     parse.cuisine ?? '',
-        tags:        Array.isArray(parse.tags) ? parse.tags : [],
-        servings:    ddata.dag.servings ?? parse.servings ?? 4,
-        difficulty:  parse.difficulty ?? 'medium',
-        totalTimeMinutes: parse.totalTimeMinutes ?? 0,
-        dag:         ddata.dag,
+        title:       composeMenuTitle(componentNames),
+        components:  componentNames,
+        description: metaFromParse?.description ?? '',
+        cuisine:     metaFromParse?.cuisine ?? '',
+        tags:        Array.isArray(metaFromParse?.tags) ? metaFromParse.tags : [],
+        servings:    mealDag.servings,
+        difficulty:  metaFromParse?.difficulty ?? 'medium',
+        totalTimeMinutes: 0,
+        dag:         mealDag,
       });
       setStatus('done');
     } catch (err: any) {
