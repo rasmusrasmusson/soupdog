@@ -216,3 +216,52 @@ skip the wasted generation call.
 2. Render served components in RecipeDisplay ("served / ready-made" section).
 3. Curated don't-make list → proactive served marking (skip generation for known products).
 4. Then the fuller visibility model (hidden_product value, stubs, ownership) per §1–10.
+
+---
+
+## 13. CRITICAL FINDING — multi-MADE-dish compose collapses to one dish
+
+Testing "hamburger with fries and coke" (Make-new-anyway → dish list → compose) revealed a
+bug BIGGER than served-not-made:
+- Compose did NOT crash (robustness fix worked) — title "Hamburger with fries, and coke",
+  manifest "Hamburger · Fries · Coke".
+- BUT the composed recipe contained ONLY THE FRIES (16 steps, 3 ingredients, French,
+  "twice-fried French fries"). **Hamburger GONE. Coke GONE.**
+- Hamburger is fully makeable (made perfectly in earlier tests) — so this is NOT served-not-
+  made. It's that MULTIPLE MADE DISHES collapse to one.
+
+### Root cause
+`handleCreateMeal` combines made-dish recipe texts with `\n\n---\n\n` and feeds the blob to
+`/api/recipes/import` (the SINGLE-recipe parser). That parser produces ONE recipe with
+internal `groups` (designed for "Pasta + Sauce" within one dish), NOT N independent dishes.
+Given two separate recipes joined by `---`, it keeps ONE (the fries) and drops the rest.
+
+### Why it was hidden until now
+Every prior "working" meal had AT MOST ONE made dish:
+- katsu + green salad → salad was LINKED, only katsu made (1 made) ✓
+- pure-link meals → 0 made ✓
+- single new dish + linked → 1 made ✓
+"hamburger + fries + coke" is the first TWO-MADE-DISH meal → exposes the collapse.
+
+### So multi-made-dish compose has NEVER actually worked end to end.
+The dish-list flow is proven for: pure-link, single-made+linked. It is NOT proven for
+2+ made dishes. This is the real next priority — bigger than render/persist served items.
+
+### Fix options (design-led — settle before building)
+1. **Parse each made dish SEPARATELY** (one import call per dish → one recipe each), then
+   MERGE into a multi-group/multi-dish DAG at decompose time (decompose already takes
+   resolvedDishes + can emit linkedDishes; needs a "these made dishes are separate dishes"
+   path). Cleanest; more calls.
+2. **Tell the parser explicitly** "this text is N SEPARATE DISHES, emit one group per dish
+   keyed by the `---` sections" — a parser-prompt change + ensure groups survive as distinct
+   dishes through decompose. Fewer calls, relies on parser obedience.
+3. Hybrid: parse-per-dish for made, keep linked as resolvedDishes, merge all in decompose.
+
+### Revised next-slice priority
+1. **Multi-made-dish compose** (this §13) — the real blocker; without it any meal with 2+
+   made dishes loses dishes. DESIGN the merge approach first.
+2. Then served-not-made render + persist (§12 boundary).
+3. Then curated don't-make list; then fuller visibility model.
+
+### Don't save the test
+The composed "Hamburger with fries, and coke" is fries-only — broken. Not saved.
