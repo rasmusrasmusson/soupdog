@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { aiMessage } from '@/lib/ai/anthropic';
+import { resolveIngredientIds, normalizeIngredientName } from '@/lib/ingredients/resolve';
 
 // Allow time for the (possibly slow) Anthropic call — without this the
 // serverless function can be killed mid-request and return a 502 intermittently.
@@ -43,7 +44,7 @@ Core rules:
 4. Edges = real dependencies, NOT sequence. "consumes" lists the node ids whose OUTPUT this node needs before it can start. A node depends on another ONLY if it uses that node's product or the same vessel's accumulated contents. Two prep chains that never meet until a later combine MUST NOT depend on each other — that independence is the parallelism the graph exists to capture. Do not chain every node to the previous one. The first node(s) touching only raw ingredients have empty consumes.
 5. Intermediates & convergence. A node that consumes TWO OR MORE prior outputs is a convergence point (a combine, a plating). The chain of nodes feeding one input of a convergence is a sub-graph that produces an intermediate — give it a short "produces" name on the LAST node of that chain. If the source explicitly names a section ("For the marinade:", "Masala sauce:"), use that exact name and set "group" on those nodes. Explicit names always win over your own derivation.
 6. Fan-out. One prep can feed several consumers. Emit ONE node; multiple later nodes list it in consumes. Put per-consumer quantities on the consuming node's notes if the source specifies a split.
-6b. MULTI-DISH MEALS — MERGE SHARED PREP ACROSS DISHES. When the input contains MULTIPLE dishes (more than one group with a non-empty outputName, i.e. a meal of several dishes/drinks), you are decomposing them into ONE unified graph, NOT one silo per dish. If two or more dishes need the SAME raw ingredient given the SAME transformation with the SAME parameters (e.g. both need "finely chopped red onion"), emit that prep ONCE as a single node and FAN IT OUT — every consuming step across every dish lists that one node in its consumes. Do NOT chop the onion twice because two dishes use it. This shared-prep merging is the whole point of treating a meal as one graph (it enables "chop once, use in three dishes" and division of labour). SAFETY — only merge when ingredient AND transformation AND parameters all match: "diced onion" for dish A and "sliced onion" for dish B are DIFFERENT prep → two nodes. Generic cooking media (water, oil, salt) are NOT shared intermediates — introduce them separately where each dish uses them (do NOT merge the pasta's boiling water with the tea's water). When a merged prep node feeds multiple dishes and the source gives per-dish amounts, put the split in the consuming nodes' notes. Each dish still gets its OWN named terminal (its outputName) — merging shared PREP does not merge the dishes' end-products.
+6b. MULTI-DISH MEALS — MERGE SHARED PREP ACROSS DISHES. When the input contains MULTIPLE dishes (more than one group with a non-empty outputName, i.e. a meal of several dishes/drinks), you are decomposing them into ONE unified graph, NOT one silo per dish. If two or more dishes need the SAME raw ingredient given the SAME transformation with the SAME parameters (e.g. both need "finely chopped red onion"), emit that prep ONCE as a single node and FAN IT OUT — every consuming step across every dish lists that one node in its consumes. Do NOT chop the onion twice because two dishes use it. This shared-prep merging is the whole point of treating a meal as one graph (it enables "chop once, use in three dishes" and division of labour). SAFETY — only merge when ingredient AND transformation AND parameters all match: "diced onion" for dish A and "sliced onion" for dish B are DIFFERENT prep → two nodes. Generic cooking media (water, oil, salt) are NOT shared intermediates — introduce them separately where each dish uses them (do NOT merge the pasta's boiling water with the tea's water). When a merged prep node feeds multiple dishes and the source gives per-dish amounts, put the split in the consuming nodes' notes. Each dish still gets its OWN named terminal (its outputName) — merging shared PREP does not merge the dishes' end-products. IDENTITY SIGNAL: if an INGREDIENT IDENTITY block is provided below the extraction, two ingredients listed with the SAME id are DEFINITIVELY the same catalog ingredient — use id equality (not name-string similarity) as the "same ingredient" half of the merge test (transformation AND parameters must still match to merge). An ingredient absent from that block is new/uncataloged — judge it by name + meaning as usual. The identity signal NEVER overrides this rule's SAFETY clause: generic media (water, oil, salt) are not merged as shared prep even when they share an id.
 6c. PRE-RESOLVED DISHES — LINK, DO NOT DECOMPOSE. The user message may include a RESOLVED DISHES list: dishes already matched to existing recipes by an upstream search the user confirmed. For each dish in that list, you MUST NOT decompose it into nodes — do NOT introduce its ingredients or emit any steps for it. Instead, record it in the output "linkedDishes" array as { "dishName": "<name>", "canonicalSlug": "<slug>" } exactly as given. Only dishes NOT in the resolved list are decomposed into nodes as normal. A resolved dish contributes NO nodes and NO terminal node of its own — its presence in linkedDishes IS the dish. (You never decide reuse yourself; you only honour the resolved list you are given.)
 7. Tools & timing. Suggest a "tool" per node. CAPTURE COMPLETION CRITERIA: if the source gives ANY duration or end-condition for a step — "about 8-10 minutes", "until crispy", "until al dente", "until golden", "until combined", "until thickened", "until the sauce coats the back of a spoon" — you MUST put it in that node's "completion". This applies to ACTIVE steps (fry, boil, whisk, simmer, saute, reduce), not only passive waits. Do NOT drop it. Rules for the value:
    - A clear fixed time -> ISO-8601 duration: "10 minutes" -> "PT10M", "1.5 hours" -> "PT1H30M".
@@ -120,6 +121,55 @@ export async function POST(req: NextRequest) {
       ? body.resolvedDishes.filter((d: any) => d && typeof d.dishName === 'string' && typeof d.canonicalSlug === 'string')
       : [];
 
+  // ── INGREDIENT IDENTITY RESOLUTION (4A — identity-based shared-prep merge) ──
+  // Resolve each extraction ingredient NAME to its catalog id (read-only; see
+  // docs/Soupdog_Ingredient_Resolution_Upstream_And_Identity_Merge_v0_1.md §10).
+  // This lets rule 6b merge shared prep across dishes on IDENTITY rather than on
+  // name-string fuzziness. Two names that resolve to the SAME id are definitively
+  // the same catalog ingredient. A null id (new ingredient, not in catalog yet)
+  // falls back to the existing name+meaning merge test. is_product=false is
+  // mirrored from findOrCreateIngredient so resolve-time and save-time see the
+  // same catalog. DB-only, no AI cost. Failures degrade to "all null" (name-based
+  // merge as before) — resolution must never break decomposition.
+  let identityBlock = '';
+  try {
+    const extractionIngredients: any[] = Array.isArray(extraction?.ingredients) ? extraction.ingredients : [];
+    const names = extractionIngredients
+      .map((i: any) => (typeof i?.name === 'string' ? i.name : ''))
+      .filter(Boolean);
+    if (names.length) {
+      const idMap = await resolveIngredientIds(supabase, names);
+      // Annotate the extraction (carried for downstream/debug; harmless if unused).
+      for (const ing of extractionIngredients) {
+        if (typeof ing?.name === 'string') {
+          ing.ingredientId = idMap.get(normalizeIngredientName(ing.name)) ?? null;
+        }
+      }
+      // Build the identity block: ONLY names that resolved to a REAL id (a null
+      // carries no identity info — the model treats it by name as today). State
+      // the conclusion ("these names are the same catalog ingredient") rather
+      // than making the model infer sameness from ids buried in the JSON.
+      const resolved = extractionIngredients
+        .filter((i: any) => typeof i?.name === 'string' && i.ingredientId)
+        .map((i: any) => `- ${i.name} = #${i.ingredientId}`);
+      // De-dupe identical "name = #id" lines (same name listed twice in the parse).
+      const uniqueLines = Array.from(new Set(resolved));
+      if (uniqueLines.length) {
+        identityBlock =
+          '\n\nINGREDIENT IDENTITY (resolved against the catalog). Each line is a recipe ' +
+          'ingredient and its catalog id. When two steps use ingredients with the SAME id, ' +
+          'they are DEFINITIVELY the same catalog ingredient — use that for rule 6b shared-prep ' +
+          'merging (id equality overrides name-string similarity). An ingredient NOT listed here ' +
+          'is new/uncataloged — judge its sameness by name + meaning as usual. This identity ' +
+          'signal does NOT override the rule 6b SAFETY clause: generic cooking media (water, oil, ' +
+          'salt) are never merged as shared prep even if they share an id.\n' +
+          uniqueLines.join('\n');
+      }
+    }
+  } catch (e) {
+    console.error('[decompose] ingredient resolution failed (continuing name-based):', e);
+  }
+
   // ── GUIDE LAYER ──────────────────────────────────────────────────────────
   // Fetch the VERIFIED task library and build a compact "known techniques" block
   // the model must MATCH to (instead of inventing). The expectation (completion
@@ -189,7 +239,8 @@ export async function POST(req: NextRequest) {
     'dependency graph per your instructions. Return ONLY the JSON object.\n\nEXTRACTION:\n<<<\n' +
     JSON.stringify(extraction, null, 2) +
     '\n>>>' +
-    resolvedBlock;
+    resolvedBlock +
+    identityBlock;
 
   try {
     const result = await aiMessage({
