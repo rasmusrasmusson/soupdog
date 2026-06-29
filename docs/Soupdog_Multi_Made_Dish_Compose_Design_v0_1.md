@@ -118,3 +118,43 @@ In `handleCreateMeal`, replace step 2–4 (combine→parse→decompose) with:
 This is the REAL next blocker (without it, any 2+ made-dish meal loses dishes). Do this
 BEFORE served-render/persist and the curated list. The served-not-made robustness already
 shipped keeps it from CRASHING; this makes it CORRECT.
+
+---
+
+## 10. BUILT & PROVEN (Option A + forceGenerate)
+
+Option A shipped, but first attempt STILL showed fries-only. Diagnosis (via the differing
+result — 15 vs 17 steps — which proved new code WAS running, ruling out stale bundle):
+
+### Real root cause of the residual drop
+The Option A loop called `/api/recipes/generate` per dish, but `generate` is the BUTLER
+CLASSIFIER — it only returns `recipeText` for the GENERATE action. For "Hamburger" (which
+matches existing catalogue recipes) it returned `existing` (or could `clarify`) → NO
+recipeText → the loop treated it as un-makeable → pushed to servedComponents → and since
+served isn't rendered, hamburger silently VANISHED. Fries classified as `generate` → survived.
+Same fries-only symptom, different cause from the original §13 bug.
+
+### Fix — `forceGenerate` flag
+`generate` now accepts `forceGenerate: true`: the system prompt directs it to ALWAYS take the
+GENERATE branch for the given dish, and server guards suppress the clarify/existing/meal
+branches under the flag. The compose loop passes `forceGenerate: true` per made dish (a dish
+the user already chose to MAKE — we want a recipe written, not classification). Mirrors the
+`skipExisting` pattern (deterministic mode flags, not prompt hints).
+
+### PROVEN LIVE
+"hamburger with fries and coke" → 41 steps, 21 ingredients, all THREE dishes present:
+HAMBURGER group (beef mince/Worcestershire/mix/shape/sear/cheese…), FRIES group, and Coke
+(Coca-Cola 330ml + lemon/lime + Glass + serve). Each dish its own grouped section. Tools span
+all three (cast iron pan + deep saucepan + glass). Multi-made-dish compose WORKS end to end.
+
+### Note — coke came through as a MADE dish
+With forceGenerate, the butler wrote a serve-a-coke "recipe" (pour over ice, garnish). Didn't
+break anything, but it's not the eventual desired handling (off-the-shelf → served, not a
+recipe). That's the served-not-made / curated-don't-make-list work (Front_Door §13,
+Visibility §12-13) — separate, still pending. For now: acceptable, composes fine.
+
+### STILL TO VERIFY / NEXT
+- SAVE: confirm a multi-made-dish meal SAVES with all dishes (namespaced ids are strings;
+  decompose-save zero-node guard is fine here since nodes>0). Check against LIVE decompose-save.
+- By-dish section rendering CONFIRMED works (HAMBURGER header visible, multiple groups).
+- Then: served-not-made render + curated don't-make list (so coke becomes served, not a recipe).
