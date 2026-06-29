@@ -342,7 +342,7 @@ export default function ImportRecipePage() {
   //  • clarify  → show the question + tappable options (re-submits on tap)
   //  • existing → show links to the user's matching recipe(s); don't regenerate
   //  • generate → feed the returned recipe text into the normal import pipeline
-  const handleGenerate = async (overridePrompt?: string) => {
+  const handleGenerate = async (overridePrompt?: string, skipExisting?: boolean) => {
     const p = (overridePrompt ?? genPrompt).trim();
     if (!p || genLoading) return;
     setGenLoading(true);
@@ -352,7 +352,7 @@ export default function ImportRecipePage() {
     try {
       const res  = await fetch('/api/recipes/generate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: p }),
+        body: JSON.stringify({ prompt: p, skipExisting: skipExisting === true }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Generation failed');
@@ -824,7 +824,7 @@ export default function ImportRecipePage() {
                   ))}
                 </div>
                 <button
-                  onClick={() => { setGenExisting(null); handleGenerate(`${genPrompt} (make a new one anyway)`); }}
+                  onClick={() => { setGenExisting(null); handleGenerate(genPrompt, true); }}
                   style={{ marginTop: 10, fontFamily: MONO, fontSize: 10, color: 'var(--muted)',
                     background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                   Make a new one anyway

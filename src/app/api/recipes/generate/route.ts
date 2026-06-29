@@ -77,6 +77,9 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => ({}));
   const prompt: string = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+  // When the user has explicitly chosen "make a new one anyway", suppress the EXISTING
+  // branch so the butler builds fresh instead of pointing back at the same catalogue match.
+  const skipExisting: boolean = body.skipExisting === true;
   if (!prompt) {
     return NextResponse.json({ error: 'Tell me what you would like to make.' }, { status: 400 });
   }
@@ -140,6 +143,7 @@ Rules:
   const userContent = JSON.stringify({
     request: prompt,
     catalogue: catalogue.map(c => c.title),
+    ...(skipExisting ? { makeNewIgnoreCatalogue: true, note: 'The user has explicitly chosen to make a NEW recipe. Do NOT use the EXISTING action even if the catalogue matches. Choose MEAL (if multiple dishes) or GENERATE.' } : {}),
   });
 
   const result = await aiMessage({
@@ -178,7 +182,7 @@ Rules:
   // ── EXISTING ── validate the model's claimed matches against the real catalogue
   //    (selection-not-invention: we only ever return real, owned recipes). Match
   //    loosely on normalised title so minor wording differences still resolve.
-  if (parsed.action === 'existing' && Array.isArray(parsed.matches)) {
+  if (!skipExisting && parsed.action === 'existing' && Array.isArray(parsed.matches)) {
     const wanted: string[] = parsed.matches.map((m: any) => norm(String(m))).filter(Boolean);
     const existing = catalogue
       .filter(c => wanted.some(w => norm(c.title) === w || norm(c.title).includes(w) || w.includes(norm(c.title))))
