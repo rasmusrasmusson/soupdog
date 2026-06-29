@@ -206,3 +206,54 @@ This time the data came FIRST (offline harness, zero cost), before any code or l
 is the discipline §10's process note was reaching for. The "get the decompose output first"
 instinct was right; the cheaper move was to realise the suspect layer (the client combine) is
 inspectable without the engine at all.
+
+---
+
+## 12. VALIDATED LIVE + a real SIZE CEILING found (2026-06-30)
+
+§9.5 (per-dish parse → ONE decompose with identity merge) was built, deployed, and tested live.
+Results:
+
+### Works on normal meals (validated 3×)
+- Roast chicken (linked) + mash + beans (made): ONE decompose call, both made dishes render as
+  full step tables with intact ingredient/qty/tool bindings, no orphaned bare-list. Chicken
+  correctly LINKED (not decomposed). The §11 client-dedup orphaning bug is GONE.
+- Shrimp skewers + green beans (both made): ONE call (57s). Garlic correctly NOT merged —
+  shrimp MINCES (4 cloves), beans SLICE (3 cloves): different transformation + params → two
+  nodes is CORRECT per rule 6b safety. Proves the merge is conservative, not naive-name-merge.
+- Salt/water/oil correctly never merged (generic media). No positive same-prep merge was
+  exercised (no test meal had identical ingredient+transformation+params across dishes); the
+  no-harm + no-orphan + correct-separation behavior is proven, a positive fan-out merge is not
+  yet observed but the logic is sound in both directions.
+
+### [OPEN] SIZE CEILING — unified decompose can TIME OUT on large meals
+"Garlic butter shrimp + garlic butter mushrooms" (both made, both rich) → the single decompose
+call returned **504 after ~2 min** (hit the route's `maxDuration = 120`). The §9.5 graceful
+degrade fired correctly: both made dishes fell back to SERVED ("0 steps · 0 ingredients · 2
+ready-made"), so the meal didn't crash or vanish — but it also produced no graph.
+
+ROOT CAUSE — the unified approach's tradeoff. The siloed Option A sent N SMALLER decompose
+calls (one per dish), none individually near 120s. The unified path sends ONE call carrying
+BOTH dishes' full ingredient lists + steps + the guide block + the identity block — much
+heavier. Earlier successes were 29s and 57s; a two-rich-dish meal blew past 120s. So:
+**unified decompose has a per-call size ceiling the siloed path did not.**
+
+This is NOT a reason to revert — the unified graph is the correct design and works on normal
+meals, and it degrades safely (served, not crashed). But the ceiling is real and should be
+addressed before meals get routinely large. Candidate fixes (NOT yet decided — needs thought):
+- (a) Raise `maxDuration` on /decompose (Vercel Pro allows higher; but a >2-min AI call is
+  already long and costs scale — diminishing).
+- (b) HYBRID size-threshold fallback: unified decompose for small meals; if the combined
+  extraction exceeds a size/step threshold, fall back to per-dish decompose (Option A) for
+  that meal. Keeps the unified merge where it's cheap, avoids the timeout where it's not.
+  Loses cross-dish merge on big meals — acceptable (big meals rarely share prep that matters
+  more than shipping a graph).
+- (c) Trim the multi-dish prompt token load (guide + identity + two full dishes is a lot);
+  e.g. narrow the guide block to verbs actually present, shrink identity to only cross-dish
+  duplicates.
+- (b) is the most robust (a correct-but-siloed big meal beats a timed-out unified one — the
+  same principle that drove the original Option A revert). Likely (b) + (c) together.
+
+NEXT (when revisited): decide (a/b/c); if (b), define the threshold (step count or extraction
+byte size) and wire the fallback in handleCreateMeal. Until then, large multi-made-dish meals
+will degrade to served — a known, safe limitation.
