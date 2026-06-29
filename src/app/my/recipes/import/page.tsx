@@ -446,20 +446,52 @@ export default function ImportRecipePage() {
         return;
       }
 
-      // 1. Generate each to-make dish's recipe text (single-dish generate).
+      // 1. Generate each to-make dish's recipe text (single-dish generate). If a dish
+      //    can't be written as a recipe (e.g. an off-the-shelf item like a soft drink, or
+      //    a thin/empty generation), DON'T inject junk text into the parser — carry it as a
+      //    SERVED component instead (shown as a ready-made item, not cooked). This keeps one
+      //    un-makeable dish from breaking the whole meal's structure.
       const madeTexts: string[] = [];
+      const servedComponents: string[] = [];
       for (const d of toMake) {
-        const gr = await fetch('/api/recipes/generate', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: d.name }),
+        let madeOk = false;
+        try {
+          const gr = await fetch('/api/recipes/generate', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: d.name }),
+          });
+          const gd = await gr.json();
+          if (gr.ok && typeof gd.recipeText === 'string' && gd.recipeText.trim().length > 40) {
+            madeTexts.push(gd.recipeText.trim());
+            madeOk = true;
+          }
+        } catch { /* fall through to served */ }
+        if (!madeOk) servedComponents.push(d.title || d.name);
+      }
+
+      // If NOTHING could be made (every to-make dish was served/un-makeable), there's no
+      // recipe to structure — build a minimal meal of served components + any linked dishes.
+      if (madeTexts.length === 0) {
+        setStatus('decomposing');
+        const linkedDishesForDag = linked.map(d => ({
+          dishName: d.title || d.name,
+          canonicalSlug: d.canonicalSlug as string,
+        }));
+        const servedDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: linkedDishesForDag, servedComponents };
+        setSourceExtraction(null);
+        setPreview({
+          title:       composeMenuTitle(componentNames),
+          components:  componentNames,
+          description: '',
+          cuisine:     '',
+          tags:        [],
+          servings:    4,
+          difficulty:  'medium',
+          totalTimeMinutes: 0,
+          dag:         servedDag,
         });
-        const gd = await gr.json();
-        if (gr.ok && typeof gd.recipeText === 'string' && gd.recipeText.trim()) {
-          madeTexts.push(gd.recipeText.trim());
-        } else {
-          // couldn't write this dish — surface it but keep going with the rest
-          madeTexts.push(`${d.name}\n(could not generate details)`);
-        }
+        setStatus('done');
+        return;
       }
 
       // 2. Combine into one text blob, each dish a clear section (so the parser emits
@@ -473,7 +505,22 @@ export default function ImportRecipePage() {
         body: JSON.stringify({ text: combined }),
       });
       const idata = await ires.json();
-      if (!ires.ok || !idata.recipe) throw new Error(idata.error ?? 'Could not structure the meal.');
+      if (!ires.ok || !idata.recipe) {
+        // The made dishes couldn't be structured. Rather than fail the whole meal, fall
+        // back to a minimal meal of the linked dishes + served components (the made dishes
+        // become served too, since we couldn't structure them).
+        if (linked.length > 0 || servedComponents.length > 0) {
+          setStatus('decomposing');
+          const linkedDishesForDag = linked.map(d => ({ dishName: d.title || d.name, canonicalSlug: d.canonicalSlug as string }));
+          const fallbackServed = [...servedComponents, ...toMake.map(d => d.title || d.name).filter(n => !servedComponents.includes(n))];
+          const fbDag = { title: composeMenuTitle(componentNames), servings: 4, nodes: [], linkedDishes: linkedDishesForDag, servedComponents: fallbackServed };
+          setSourceExtraction(null);
+          setPreview({ title: composeMenuTitle(componentNames), components: componentNames, description: '', cuisine: '', tags: [], servings: 4, difficulty: 'medium', totalTimeMinutes: 0, dag: fbDag });
+          setStatus('done');
+          return;
+        }
+        throw new Error(idata.error ?? 'Could not structure the meal.');
+      }
       const parse = idata.recipe;
       setSourceExtraction(parse);
 
@@ -485,6 +532,12 @@ export default function ImportRecipePage() {
       });
       const ddata = await dres.json();
       if (!dres.ok || !ddata.dag) throw new Error(ddata.error ?? 'We had trouble structuring that meal. Please try again.');
+
+      // Carry any served components (off-the-shelf / un-makeable dishes) onto the DAG so the
+      // preview shows them as ready-made items alongside the cooked dishes.
+      if (servedComponents.length > 0) {
+        ddata.dag.servedComponents = servedComponents;
+      }
 
       // Menu-style title from the DISH NAMES (not the parser's single-dish title — which
       // would name the meal after whichever dish was decomposed inline). Editable below.

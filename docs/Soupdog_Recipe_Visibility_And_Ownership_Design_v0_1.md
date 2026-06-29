@@ -131,3 +131,88 @@ Served-not-made is NOT its own feature — it's the **public-facing view of a hi
 product**. Building visibility/ownership correctly makes served-not-made fall out as a case,
 AND fixes the compose failures, AND serves private recipes + food-company accounts — instead
 of a throwaway `served` flag rebuilt later. Hence: design (this doc) + reconcile FIRST.
+
+---
+
+## 11. RECONCILIATION DONE (read Sharing v0.2 + recipe-model recon) — outcome
+
+Read: Sharing_And_Delegation_Design_v0.2 (.docx) + Recipe_Model_Reconciliation_v0_1.
+
+### 11.1 Sharing's visibility is a DIFFERENT axis (don't fold into it)
+Sharing's visibility tiers (private / connections / public) + `section_visibility` govern
+**PERSON/PROFILE data** ("who sees my health/allergies/weight"), composed with
+`person_access` grants. They do NOT model recipe content visibility. So recipe visibility is
+a PARALLEL axis on a different object (recipes, not person-sections). DECISION: REUSE
+Sharing's tier VOCABULARY (private/connections/public) and the ownership spine
+(person_access/account), but as a SEPARATE recipe-visibility axis — NOT the same
+section_visibility rows. We are not folding into Sharing; we're echoing its model on recipes.
+
+### 11.2 Recipe model already has the primitives
+`recipe_canonicals` already has `is_published` (public/draft), `author_id` (owner),
+`composition_level` (≈ kind), `source`, `confidence_score`. So "hidden product recipe" is an
+EXTENSION of the existing published/draft visibility (e.g. a new value like `hidden_product`
+beyond published/draft) + the serve/finish-stub concept — NOT a wholesale new system. Full
+visibility model = add values/axis to what exists; reconcile the exact field shape later.
+
+### 11.3 §9 #4 ANSWERED — there IS a safe minimal compose-bug-fix slice
+The minimal fix for the §12 failures (coke drops / lemonade breaks parser):
+- at meal-resolution, recognise SERVED items → compose SKIPS generation for them, includes
+  them as an ingredient/stub;
+- compose DEGRADES GRACEFULLY — one thin/served component can never sink the whole meal.
+This does NOT prejudge the visibility model: "served, not generated" is true under ANY
+version of it, the dish-list model ALREADY reserves the `served` status, and the fix is
+purely RESOLUTION + COMPOSE BEHAVIOUR — **no schema change**. So it is NOT throwaway. Safe to
+build now; the full visibility/ownership schema (hidden_product value, stubs, ownership
+transfer) layers on later without rework.
+
+### 11.4 Build order (updated)
+1. (NOW) Minimal compose fix: `served` resolution + compose-skips-generation + degrade-
+   gracefully. Fixes the live bug. No schema. ← BUILD THIS NEXT.
+   - Trigger v1: the curated don't-make list (§13.2 in Front_Door doc) — Claude drafts it.
+   - Plus: compose never fails the whole meal on one thin component.
+2. (LATER) Recipe-visibility axis proper: `hidden_product` value + serve/finish stubs,
+   echoing Sharing's tiers on recipes. Schema work; reconcile field shape.
+3. (SEAM) Ownership transfer to makers; private-user-recipe visibility (with Sharing).
+
+---
+
+## 12. SLICE 1 BUILT — compose robustness (the bug fix), with a clean boundary
+
+Built in the import page (`handleCreateMeal`). Fixes the §12 live failures WITHOUT schema:
+
+### Done (sound, verified balanced/type-safe)
+- A to-make dish that can't be written as a recipe (off-the-shelf like Coke, or a thin/empty
+  generation, or a thrown error) is NO LONGER injected as junk text into the parser. It's
+  caught and carried as a SERVED component (`servedComponents[]`).
+- Threshold: generation must return real recipe text (>40 chars) to count as "made".
+- **No hard-fail:** if the parse still returns an incomplete structure, the meal DEGRADES to
+  a minimal meal of linked dishes + served components instead of throwing (fixes §4 total
+  failure). If nothing can be made at all, builds a served+linked meal directly.
+- **No silent drop:** un-makeable dishes become `servedComponents` on the DAG, not vanished
+  (fixes §1).
+
+### Explicitly NOT done this slice (NEXT slice — stated boundary, not a hidden gap)
+- **Render** served components in the preview/RecipeDisplay (a "served / ready-made" section).
+  They're carried on `dag.servedComponents` but nothing renders them yet.
+- **Persist** served components on save. Save sends `dag` to decompose-save, which reads
+  specific fields; servedComponents are NOT yet persisted → a saved meal currently keeps its
+  made+linked dishes but not the served items.
+- **Save guard for served-only / zero-node meals:** decompose-save rejects zero-node DAGs
+  (`dag.nodes.length === 0`). The LIVE version reportedly relaxed this for linkedDishes
+  (pure-link works), but my snapshot is STALE — do NOT edit decompose-save blind. A
+  served-only meal (all coke/beer, nothing made/linked) would likely fail save until this is
+  checked against live + extended for servedComponents.
+
+### Curated don't-make list — still pending (this slice is REACTIVE robustness)
+This slice makes compose robust when generation FAILS for any dish. It does NOT yet
+PROACTIVELY mark known off-the-shelf items as served (Coke would still attempt generation,
+just no longer breaks things if it produces junk). The curated don't-make list (Front_Door
+§13.2; Claude to draft) is the next behavioural piece: mark known products served up front,
+skip the wasted generation call.
+
+### Next slice order
+1. Check live decompose-save guard; extend it + persist `servedComponents` (so served items
+   survive save). Needs the LIVE file, not the stale snapshot.
+2. Render served components in RecipeDisplay ("served / ready-made" section).
+3. Curated don't-make list → proactive served marking (skip generation for known products).
+4. Then the fuller visibility model (hidden_product value, stubs, ownership) per §1–10.
