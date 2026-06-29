@@ -265,3 +265,38 @@ The dish-list flow is proven for: pure-link, single-made+linked. It is NOT prove
 
 ### Don't save the test
 The composed "Hamburger with fries, and coke" is fries-only — broken. Not saved.
+
+---
+
+## 14. SERVED-NOT-MADE SLICE — COMPLETE & VERIFIED (web + PDF + persist + meal meta)
+
+All shipped and confirmed on live PDFs/web:
+- **Curated don't-make list** (`src/lib/served-items.ts`): off-the-shelf items (coke, sodas,
+  bottled/sparkling water, commercial spirits, etc.) recognised and marked SERVED before
+  compose wastes a generate call. CONSERVATIVE: "lemonade"/"homemade lemonade" still MADE
+  (verified). Hardcoded list = the named seam; future hidden_product model replaces it.
+- **Recognition verified:** "hamburger + fries + coke" → coke served (no fake pour-over
+  recipe); burger + fries made.
+- **Render verified BOTH surfaces:** "Served alongside · Coke (ready-made)" shows on the web
+  recipe page (RecipeDisplay) AND in the PDF (RecipePrintLayout — was web-only, fixed).
+- **Persist verified:** `recipe_versions.served_items jsonb` column; written by decompose-save,
+  read by the recipe page, survives save + reload + PDF.
+- **Bug 2a fixed (meal meta):** a MULTI-dish meal no longer inherits one dish's
+  description/cuisine/tags. Count = made + linked + served; >1 → blank description/cuisine/tags
+  (header shows plain "RECIPE", no "AMERICAN", no burger blurb). Single-dish meal still inherits
+  its one dish's meta. Verified on fresh compose (mqzg8qe6).
+- **LESSON (again):** stale browser bundle masked the 2a fix twice — needed incognito/disable-
+  cache to see it. Hard-refresh is not always enough for Next.js chunks.
+
+### STILL OPEN (carried)
+- **Bug 2b — dish DROP:** earlier "cobb salad + homemade lemonade" composed to LEMONADE ONLY
+  (cobb salad vanished). The dish-drop pattern resurfacing — most worrying open item (silent
+  data loss). Diagnostic needed: did the DISH LIST show BOTH before Compose? If yes → a made
+  dish failed generate/parse/decompose and fell to served (now would show under "Served
+  alongside", which is itself wrong for a salad). NOT yet investigated.
+- **Meal-level description (enhancement, not bug):** multi-dish meals now have NO description
+  until the user writes one. Could later auto-compose a neutral line ("A meal of X, Y and Z").
+- **Time-threshold guardrail** (Front_Door §13.1) — the OTHER served-not-made mechanism (ask
+  the user when from-scratch time exceeds a threshold). Not built.
+- **Fuller recipe-visibility model** (hidden_product value, serve/finish stubs, ownership
+  transfer) — §1–10. Schema work, deferred.
