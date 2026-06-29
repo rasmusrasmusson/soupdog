@@ -80,6 +80,10 @@ export async function POST(req: NextRequest) {
   // When the user has explicitly chosen "make a new one anyway", suppress the EXISTING
   // branch so the butler builds fresh instead of pointing back at the same catalogue match.
   const skipExisting: boolean = body.skipExisting === true;
+  // When composing a meal, each made dish is already a single dish the user chose to make —
+  // we want a recipe written for it, NOT classification (existing/clarify/meal). forceGenerate
+  // makes the butler always take the GENERATE branch for the given dish.
+  const forceGenerate: boolean = body.forceGenerate === true;
   if (!prompt) {
     return NextResponse.json({ error: 'Tell me what you would like to make.' }, { status: 400 });
   }
@@ -144,6 +148,7 @@ Rules:
     request: prompt,
     catalogue: catalogue.map(c => c.title),
     ...(skipExisting ? { makeNewIgnoreCatalogue: true, note: 'The user has explicitly chosen to make a NEW recipe. Do NOT use the EXISTING action even if the catalogue matches. Choose MEAL (if multiple dishes) or GENERATE.' } : {}),
+    ...(forceGenerate ? { forceGenerate: true, note2: 'This is a single dish to be written for a meal. You MUST use the GENERATE action and return recipeText. Do NOT use existing, clarify, or meal — write the recipe for this exact dish now.' } : {}),
   });
 
   const result = await aiMessage({
@@ -168,7 +173,7 @@ Rules:
   }
 
   // ── CLARIFY ──
-  if (parsed.action === 'clarify' && typeof parsed.question === 'string') {
+  if (!forceGenerate && parsed.action === 'clarify' && typeof parsed.question === 'string') {
     return NextResponse.json({
       clarifyingQuestion: {
         question: parsed.question,
@@ -182,7 +187,7 @@ Rules:
   // ── EXISTING ── validate the model's claimed matches against the real catalogue
   //    (selection-not-invention: we only ever return real, owned recipes). Match
   //    loosely on normalised title so minor wording differences still resolve.
-  if (!skipExisting && parsed.action === 'existing' && Array.isArray(parsed.matches)) {
+  if (!skipExisting && !forceGenerate && parsed.action === 'existing' && Array.isArray(parsed.matches)) {
     const wanted: string[] = parsed.matches.map((m: any) => norm(String(m))).filter(Boolean);
     const existing = catalogue
       .filter(c => wanted.some(w => norm(c.title) === w || norm(c.title).includes(w) || w.includes(norm(c.title))))
@@ -200,7 +205,7 @@ Rules:
   // ── MEAL ── the request named multiple dishes. Resolve each against the catalogue:
   // a match → LINK (reuse the existing dish), no match → MAKE (generate at compose time).
   // Returns { meal: { dishes: [...] } } — the shape the create page's dish-list consumes.
-  if (parsed.action === 'meal' && Array.isArray(parsed.dishes) && parsed.dishes.length > 1) {
+  if (!forceGenerate && parsed.action === 'meal' && Array.isArray(parsed.dishes) && parsed.dishes.length > 1) {
     const dishes = parsed.dishes
       .map((d: any) => String(d ?? '').trim())
       .filter(Boolean)

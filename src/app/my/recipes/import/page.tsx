@@ -455,10 +455,11 @@ export default function ImportRecipePage() {
       for (const d of toMake) {
         const dishName = d.title || d.name;
         try {
-          // generate the dish's recipe text
+          // generate the dish's recipe text (forceGenerate: this is a chosen dish to make —
+          // we want a recipe written, not classification into existing/clarify/meal).
           const gr = await fetch('/api/recipes/generate', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: d.name }),
+            body: JSON.stringify({ prompt: d.name, forceGenerate: true }),
           });
           const gd = await gr.json();
           const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
