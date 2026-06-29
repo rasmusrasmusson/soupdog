@@ -158,3 +158,26 @@ Visibility §12-13) — separate, still pending. For now: acceptable, composes f
   decompose-save zero-node guard is fine here since nodes>0). Check against LIVE decompose-save.
 - By-dish section rendering CONFIRMED works (HAMBURGER header visible, multiple groups).
 - Then: served-not-made render + curated don't-make list (so coke becomes served, not a recipe).
+
+---
+
+## 11. SAVE VERIFIED — feature fully done & shippable
+
+Saved the hamburger+fries+coke meal → persisted → renders on the public recipe page
+(soup.dog/recipes/hamburger-with-fries-and-coke-…) → PDF + QR export all correct. Confirmed:
+- All THREE grouped sections present and persisted: Hamburger (1–25), Fries (26–38),
+  Coke (39–41).
+- All 21 ingredients saved incl. Coca-Cola 330ml + lemon/lime garnish.
+- DAG structure intact: sear w/ 4-min completion, two-stage fry (140°C→rest→190°C), per-step
+  tool inference. Namespaced node ids (`d{i}_`) persisted fine as strings — no decompose-save
+  change needed.
+- Full chain works: compose → preview → save → public page → PDF/QR.
+
+**Multi-made-dish compose is DONE.** Closes the §13 (Visibility doc) thread end to end.
+
+### Remaining (separate threads, NOT this feature)
+- Served-not-made: coke is currently a MADE dish (forceGenerate wrote it a serve-recipe).
+  Acceptable; the curated don't-make-list / served rendering would make off-the-shelf items
+  served instead. Front_Door §13, Visibility §12–13. Pending.
+- The earlier served-not-made ROBUSTNESS (un-makeable dish → servedComponent, graceful
+  degrade) still stands underneath as the safety net for dishes that genuinely can't be made.
