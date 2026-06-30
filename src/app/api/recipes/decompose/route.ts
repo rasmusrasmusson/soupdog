@@ -276,6 +276,11 @@ export async function POST(req: NextRequest) {
       accountId:  user.id,
       max_tokens: 8000,
       system:     SYSTEM + guideBlock,
+      cacheSystem: true,   // SYSTEM + guideBlock is a large STABLE prefix (rules + task
+                           // guide), identical across calls — ideal for prompt caching.
+                           // The variable recipe is in the user message (after system),
+                           // so the cached prefix stays stable. ~0.1x cost + faster
+                           // prefill on hits within the TTL.
       messages:   [{ role: 'user', content: userMsg }],
     });
 

@@ -61,6 +61,13 @@ type CommonArgs = {
   system?: string;
   messages: any[];
   max_tokens: number;
+  // When true, the system prompt is sent as a cached content block (prompt caching):
+  // Anthropic stores the processed system prefix and subsequent calls within the TTL
+  // read it at ~0.1x cost and skip re-prefilling it (lower latency). OPT-IN — when
+  // omitted, system is sent as a plain string exactly as before (no behavior change
+  // for existing callers). Only worth setting when the system prompt is large AND
+  // stable across calls (e.g. decompose's task-guide prefix).
+  cacheSystem?: boolean;
 };
 
 // ---- Non-streaming call ----------------------------------------------------
@@ -80,7 +87,14 @@ function backoffMs(attempt: number): number {
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export async function aiMessage(args: CommonArgs): Promise<{ ok: boolean; status: number; data?: any; errorText?: string }> {
-  const { model, feature, accountId, personId, system, messages, max_tokens } = args;
+  const { model, feature, accountId, personId, system, messages, max_tokens, cacheSystem } = args;
+
+  // Build the system payload. Default (cacheSystem falsy): plain string, byte-identical
+  // to before. Opt-in (cacheSystem true): a single cached text block so Anthropic caches
+  // the system prefix and reads it cheaply/faster on subsequent calls within the TTL.
+  const systemPayload: any = system
+    ? (cacheSystem ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system)
+    : undefined;
 
   let lastErrorText = 'AI request failed';
   let lastStatus = 500;
@@ -98,7 +112,7 @@ export async function aiMessage(args: CommonArgs): Promise<{ ok: boolean; status
           'x-api-key': process.env.ANTHROPIC_API_KEY!,
           'anthropic-version': '2023-06-01',
         },
-        body: JSON.stringify({ model, max_tokens, ...(system ? { system } : {}), messages }),
+        body: JSON.stringify({ model, max_tokens, ...(systemPayload ? { system: systemPayload } : {}), messages }),
       });
     } catch (e: any) {
       // Network/transport error — retry if attempts remain.
@@ -123,6 +137,11 @@ export async function aiMessage(args: CommonArgs): Promise<{ ok: boolean; status
 
     const data = await res.json();
     const usage = data?.usage ?? {};
+    // When caching is in use, surface cache token counts so a hit is VERIFIABLE in logs:
+    // cache_read_input_tokens > 0 on the 2nd+ call within the TTL = the cache is working.
+    if (cacheSystem) {
+      console.log(`[ai cache] ${feature}: read=${usage.cache_read_input_tokens ?? 0} write=${usage.cache_creation_input_tokens ?? 0} input=${usage.input_tokens ?? 0}`);
+    }
     void logAiUsage({
       accountId, personId, model, feature,
       inputTokens: usage.input_tokens ?? 0,
@@ -147,7 +166,11 @@ export async function aiMessage(args: CommonArgs): Promise<{ ok: boolean; status
 // To keep the caller's stream logic untouched, we expose a tiny usage collector
 // the caller feeds each parsed event into; it logs once on message_stop.
 export async function aiStreamStart(args: CommonArgs): Promise<{ ok: boolean; status: number; res?: Response; errorText?: string }> {
-  const { model, feature, accountId, personId, system, messages, max_tokens } = args;
+  const { model, feature, accountId, personId, system, messages, max_tokens, cacheSystem } = args;
+
+  const systemPayload: any = system
+    ? (cacheSystem ? [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] : system)
+    : undefined;
   let res: Response;
   try {
     res = await fetch(ANTHROPIC_URL, {
@@ -157,7 +180,7 @@ export async function aiStreamStart(args: CommonArgs): Promise<{ ok: boolean; st
         'x-api-key': process.env.ANTHROPIC_API_KEY!,
         'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({ model, max_tokens, ...(system ? { system } : {}), messages, stream: true }),
+      body: JSON.stringify({ model, max_tokens, ...(systemPayload ? { system: systemPayload } : {}), messages, stream: true }),
     });
   } catch (e: any) {
     void logAiUsage({ accountId, personId, model, feature, inputTokens: 0, outputTokens: 0, success: false, error: e?.message ?? 'fetch failed' });
