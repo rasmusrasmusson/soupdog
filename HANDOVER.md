@@ -3886,3 +3886,118 @@ telemetry/butler spine; billing seam; PWA→Capacitor; schema cruft consolidatio
   caller affected; verify the cache actually HITS (cache_read_input_tokens) rather than assume.
 - **Confirm prompt fixes across repeats** — LLM variance means one green run isn't "fixed";
   3 consecutive 7/7 is.
+# SESSION UPDATE — 2026-07-01 — Meal-graph stabilization → decompose latency (Haiku + caching) → quality eval
+
+Long session. Two arcs: (1) finished stabilizing the unified-meal-graph feature, (2) turned
+the "decompose is slow" complaint into a measured latency strategy (caching shipped, Haiku
+adopted), then (3) a measure-first quality pass on decompose output. All SHIPPED & VERIFIED
+LIVE unless marked. Paste-in block for HANDOVER.md.
+
+## MEAL-GRAPH STABILIZATION (all shipped + validated)
+- **Linked-dish bare-list bug** → linked dishes now ALWAYS render as a reference card
+  (title + "View recipe →"), never inline step-dump. Removed inline-steps from
+  RecipeDisplay + RecipePrintLayout; simplified hydration in recipes/[slug]/page.
+- **Ingredient-list dedupe (minimal §7)** → NEW `src/lib/ingredients/aggregate-list.ts`
+  (`aggregateIngredientList`): groups a meal's repeated ingredient lines by ingredientId
+  (fallback lowercased name), sums same-unit numerics, safe-combines qualitative ("to
+  taste"). No cross-unit conversion. Inert no-op for single recipes. Full quantity model
+  (pinch-as-magnitude, conversion table) DESIGNED in
+  `docs/Soupdog_Quantity_Aggregation_And_Qualitative_Units_v0_1.md`, build deferred.
+- **Honest vessel edges + reading order** → prompt rules 4b/4c (adds depend on own prep +
+  active vessel, NOT previous add; consumer-follows-producer emission; order-independent
+  salad = siblings vs order-dependent roux = keep chain). NEW
+  `src/lib/recipes/toposort-nodes.ts` (`toposortNodes`: group-aware stable Kahn's sort —
+  dependency-correct → group-contiguous → emission tiebreak), wired into decompose-save
+  before order_index assignment. Eval + admin harness built (see below).
+- **Size ceiling (§12/§13)** → hybrid fallback in `handleCreateMeal`: combined made-dish
+  steps ≤ `UNIFIED_STEP_CEILING (22)` → unified single decompose (cross-dish merge);
+  above → PER-DISH siloed decompose + namespaced concat (`n1`→`d{i}_n1`). v2 fix: pass FULL
+  ingredient list to each siloed dish (filtering by name-match starved dishes → objectless
+  Adds). maxDuration 120→240 (a single rich dish can exceed 120s; measured 504s gone).
+- **Made-dish failure handling** → `generateAndParseDish` retries once + captures a precise
+  `failureReasons` (HTTP status / empty / parse). A made dish that fails is NO LONGER
+  silently served — it goes to `failedDishes` and surfaces an amber "Couldn't generate this
+  dish… Try again" notice (with retry). Diagnosed via Network tab that the silent-serve was
+  really decompose 504s. Single-recipe import path already had its own "Try again" button.
+
+## DECOMPOSE LATENCY — caching + Haiku (the headline of the day)
+Full design + decisions in `docs/Soupdog_Processing_Tiers_And_Decompose_Latency_v0_1.md`
+(§4 is the decision record). Three-tier processing model captured there (fast interactive /
+background-job interactive = generalise the Active Cooking Session pattern / bulk Batch API).
+
+- **Prompt caching — SHIPPED & VERIFIED.** Added opt-in `cacheSystem?: boolean` to the
+  shared `aiMessage`/`aiStreamStart` gate (`src/lib/ai/anthropic.ts`). Default = plain
+  string, byte-identical, ALL existing callers unchanged. ONLY decompose opts in (large
+  STABLE system prefix = rules + task guide). Logs `[ai cache] <feature>: read=X write=Y`.
+  VERIFIED LIVE: 1st call read=0 write=6775, 2nd within TTL read=6775 write=0 = real hit.
+  Finding: OUTPUT generation (≤8000 tok) dominates decompose latency, not input prefill —
+  which pointed to the Haiku experiment.
+- **Decompose model = Haiku 4.5 — ADOPTED.** Env-configurable:
+  `process.env.DECOMPOSE_MODEL || 'claude-sonnet-4-6'`. `DECOMPOSE_MODEL=claude-haiku-4-5-20251001`
+  set in Vercel (Production). Remove env var = instant revert to Sonnet, no code change.
+  EVIDENCE: vessel-edges eval 4x green; six hard recipes (bolognese+risotto 77-step,
+  sourdough long-passive, crème brûlée strict-order+bain-marie, Thai curry made-intermediate,
+  whiskey sour trivial, Beef Wellington convergence) — quality HELD, matched Sonnet, ~45%
+  faster, ~3x cheaper. **[WATCH→ADDRESSED] Beef Wellington 502'd once (Anthropic call at
+  27.85s, NOT the 240s ceiling) then succeeded on retry** — one sample. NOW MITIGATED: the
+  decompose route auto-retries ONCE on a content failure (malformed/empty/invalid DAG — the
+  class the gate's HTTP retry can't catch), so Wellington-class one-off bad generations
+  self-heal invisibly. If 502s still surface as a PATTERN, the remaining lever is routing
+  convergence-heavy recipes to Sonnet (env-toggle supports a per-context split). Harness
+  reports `modelUnderTest` + per-case `decomposeMs`.
+
+## DECOMPOSE QUALITY — measure-first pass (eval expanded; one real fix shipped)
+Chased the "objectless steps / duplicate steps" seen in PDFs. Discipline: made it MEASURABLE
+before fixing. Expanded `src/eval/vessel_edges_reading_order.eval.ts` from 2 → 4 cases and
+added a **Binding (B)** behaviour class (no objectless prep/add, no dangling prep, no
+duplicate-task). Harness counts B.
+- **FINDING (objectless steps):** do NOT reproduce in single recipes — even a dense 24-step
+  risotto binds correctly (B passes). So the objectless "Dice"/"Add" in the big PDFs are a
+  **siloed MULTI-DISH path artifact**, NOT a decompose-prompt failure. Logged as a separate
+  meal-compose investigation; NOT fixed tonight (correctly deferred).
+- **FIXED (duplicate cooks):** the dense case reproduced a real prompt defect — two adjacent
+  bare "sauté/sauté" nodes that dropped their completion. Added **rule 2c** to the decompose
+  prompt: distinct adjacent cooks must each carry their own completion ("until soft" vs
+  "until fragrant") so they're genuinely distinct; one continuous action = one node (no
+  padding). Made the eval's duplicate assertion completion-aware (two cooks sharing a verb
+  but differing in completion are NOT duplicates). RESULT: B 6/7 → **7/7, verified across 3
+  consecutive runs**, no O/E/C regression.
+- **Durable value:** the eval now guards binding + duplicate-step regressions on every future
+  prompt change (2 → 4 cases, new B class).
+
+## ADMIN EVAL HARNESS (built this session)
+`src/app/api/admin/eval/vessel-edges/route.ts` — admin-gated GET, runs the eval cases
+against LIVE `/api/recipes/decompose`, applies toposort, reports per-behaviour pass/fail
+(O/E/C/B) + timing + modelUnderTest. Run from console:
+`fetch('/api/admin/eval/vessel-edges').then(r=>r.json()).then(j=>console.log(JSON.stringify(j,null,2)))`
+Admin gate = ACCOUNT UIDs (bb02ae50… / 1a0f72dd…), env override SOUPDOG_ADMIN_ACCOUNT_IDS.
+
+## OPEN / NEXT (this area)
+- **Objectless steps in siloed multi-dish meals** — proven to originate in the meal-compose
+  siloed-concat path, not the prompt. Own investigation. The expanded eval + the 6-recipe
+  PDFs are test material.
+- **DAG chat-modify / advanced editor** — currently GATED OFF (`{false && …}`) on the import
+  DAG path. Editing story is half-built (meta fields editable, steps/DAG not). Real feature.
+- **Chat-to-generate a recipe** ("give me a croissant recipe" → fills form) — 3rd entry path, unbuilt.
+- **Wellington-502 watch** — auto-retry on content failure SHIPPED (decompose route).
+  Remaining lever only if 502s recur as a pattern: route convergence-heavy recipes to Sonnet.
+- **Decompose-quality on huge recipes** (scrambled cross-sub-group ordering on 70+ steps) —
+  logged in Unified_Meal_Graph §13; separate from the duplicate-cook fix.
+
+## LARGER PENDING (unchanged, carried)
+Revenue track (Stripe enforcement gate in `src/lib/ai/anthropic.ts`, checkout, quota) — still
+the standing-flagged neglected high-leverage work, held until users. Tier-2 background jobs;
+tier-3 Batch API bulk pipeline (content-pipeline track); full quantity model; behavioral
+telemetry/butler spine; billing seam; PWA→Capacitor; schema cruft consolidation.
+
+## KEY LESSONS THIS SESSION
+- **Measure before fixing** paid off twice: token counts redirected latency work from
+  "caching fixes latency" → "output dominates, test Haiku"; and the binding eval redirected
+  the quality fix from "objectless steps" (a siloed-path artifact, not the prompt) → the real
+  duplicate-cook defect. Both would have been wasted effort if fixed blind.
+- **Diagnose with the Network tab** — the silent-serve was decompose 504s; the "slow" was
+  server-side Sonnet latency (NOT the China VPN — decompose runs Vercel-side).
+- **Touch the shared AI gate additively** — opt-in flag, default unchanged, only the intended
+  caller affected; verify the cache actually HITS (cache_read_input_tokens) rather than assume.
+- **Confirm prompt fixes across repeats** — LLM variance means one green run isn't "fixed";
+  3 consecutive 7/7 is.
