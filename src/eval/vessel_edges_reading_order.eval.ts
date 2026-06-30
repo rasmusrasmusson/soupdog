@@ -297,4 +297,116 @@ export const caseBindingNoOrphans: { name: string; extraction: Extraction; asser
   ],
 };
 
-export const vesselEdgesCases = [caseSaladConcurrent, caseBechamelOrdered, caseBindingNoOrphans];
+// ─── CASE 4 — DENSE binding: a full risotto (~24 steps, multiple sub-groups) ────
+// Hypothesis under test: the objectless steps seen in the big PDFs (bolognese+risotto
+// 77 steps; the risotto half had bare "Dice"/"Mince"/"Grate" and "Add to the pan")
+// are a SIZE/DENSITY effect, not a basic binding failure — the small 10-node case
+// (caseBindingNoOrphans) was clean (B:3/3). This case reproduces the real risotto:
+// many ingredients each with a prep, several sub-groups (mushroom-cook → risotto-base
+// → mantecatura → plate), lots of adds. If orphans appear HERE but not in the small
+// case, density is the trigger and the prompt fix must hold at scale. Same B assertions.
+export const caseDenseBinding: { name: string; extraction: Extraction; assertions: Assertion[] } = {
+  name: 'dense binding: full risotto (~24 steps, multi sub-group) — no objectless steps at scale',
+  extraction: {
+    title: 'Creamy Mushroom Risotto',
+    servings: 4,
+    ingredients: [
+      { name: 'mixed mushrooms', quantityValue: 400, quantityUnit: 'g', prepNote: 'sliced' },
+      { name: 'onion', quantityValue: 1, quantityUnit: 'piece', prepNote: 'finely diced' },
+      { name: 'garlic', quantityValue: 2, quantityUnit: 'clove', prepNote: 'minced' },
+      { name: 'fresh parsley', quantityValue: 2, quantityUnit: 'tbsp', prepNote: 'chopped' },
+      { name: 'parmesan', quantityValue: 50, quantityUnit: 'g', prepNote: 'grated' },
+      { name: 'arborio rice', quantityValue: 300, quantityUnit: 'g', prepNote: null },
+      { name: 'unsalted butter', quantityValue: 40, quantityUnit: 'g', prepNote: null },
+      { name: 'olive oil', quantityValue: 2, quantityUnit: 'tbsp', prepNote: null },
+      { name: 'dry white wine', quantityValue: 120, quantityUnit: 'ml', prepNote: null },
+      { name: 'vegetable stock', quantityValue: 1200, quantityUnit: 'ml', prepNote: 'warm' },
+      { name: 'salt', quantityValue: null, quantityUnit: 'to taste', prepNote: null },
+      { name: 'black pepper', quantityValue: null, quantityUnit: 'to taste', prepNote: null },
+    ],
+    equipment: ['chefs knife', 'grater', 'large pan', 'small saucepan', 'wooden spoon', 'bowl', 'ladle'],
+    groups: [
+      { outputName: 'warm stock', steps: [
+        { instruction: 'Add the stock to the small saucepan and keep warm over low heat', stepIngredients: ['vegetable stock'], stepTools: ['small saucepan'], taskFamily: 'heat', durationMinutes: 5 },
+      ]},
+      { outputName: 'prep', steps: [
+        { instruction: 'Slice the mushrooms', stepIngredients: ['mixed mushrooms'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Finely dice the onion', stepIngredients: ['onion'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Mince the garlic', stepIngredients: ['garlic'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Chop the parsley', stepIngredients: ['fresh parsley'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Grate the parmesan', stepIngredients: ['parmesan'], stepTools: ['grater'], taskFamily: 'cut' },
+      ]},
+      { outputName: 'mushroom cook', steps: [
+        { instruction: 'Heat half the butter and the oil in the pan', stepIngredients: ['olive oil', 'unsalted butter'], stepTools: ['large pan'], taskFamily: 'heat' },
+        { instruction: 'Add the sliced mushrooms and cook until golden', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'cook', durationMinutes: 5 },
+        { instruction: 'Season the mushrooms with salt and pepper', stepIngredients: ['salt', 'black pepper'], stepTools: ['large pan'], taskFamily: 'season' },
+        { instruction: 'Transfer the mushrooms to a bowl and set aside', stepIngredients: [], stepTools: ['bowl'], taskFamily: 'transfer' },
+      ]},
+      { outputName: 'risotto base', steps: [
+        { instruction: 'Add the diced onion to the pan and cook until soft', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'cook', durationMinutes: 6 },
+        { instruction: 'Add the minced garlic and cook until fragrant', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'cook', durationMinutes: 1 },
+        { instruction: 'Add the arborio rice and toast for two minutes', stepIngredients: ['arborio rice'], stepTools: ['large pan'], taskFamily: 'cook', durationMinutes: 2 },
+        { instruction: 'Pour in the white wine and stir until absorbed', stepIngredients: ['dry white wine'], stepTools: ['wooden spoon'], taskFamily: 'mix', durationMinutes: 2 },
+        { instruction: 'Add the warm stock one ladle at a time, stirring until absorbed each time, until rice is al dente', stepIngredients: [], stepTools: ['ladle'], taskFamily: 'simmer', durationMinutes: 19 },
+      ]},
+      { outputName: 'mantecatura', steps: [
+        { instruction: 'Off the heat, stir in the remaining butter', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'mix' },
+        { instruction: 'Stir in the grated parmesan until creamy', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'mix', durationMinutes: 1 },
+        { instruction: 'Fold the reserved mushrooms back into the risotto', stepIngredients: [], stepTools: ['wooden spoon'], taskFamily: 'mix' },
+        { instruction: 'Season to taste', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'season' },
+      ]},
+      { outputName: 'plate', steps: [
+        { instruction: 'Spoon the risotto into warmed bowls', stepIngredients: [], stepTools: ['bowl'], taskFamily: 'plate' },
+        { instruction: 'Scatter the chopped parsley over the top and serve', stepIngredients: [], stepTools: ['bowl'], taskFamily: 'plate' },
+      ]},
+    ],
+  },
+  assertions: [
+    {
+      name: 'DENSE: every prep node binds an ingredient (no bare Dice/Mince/Slice/Grate at scale)',
+      behaviour: 'B',
+      check: (dag) => {
+        const prepRe = /^(slice|chop|dice|cut|grate|mince|tear|crush|zest|peel)\b/;
+        const orphans = dag.nodes.filter(n =>
+          prepRe.test(norm(n.task)) && (n.ingredients ?? []).length === 0 && (n.consumes ?? []).length === 0);
+        return orphans.length === 0 ? true : `objectless prep node(s): ${orphans.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+    {
+      name: 'DENSE: every add/combine/stir-in node binds an ingredient OR consumes a producer',
+      behaviour: 'B',
+      check: (dag) => {
+        const addRe = /^(add|combine|place|tip|scatter|stir in|fold in|fold|pour|spoon)\b/;
+        const orphans = dag.nodes.filter(n =>
+          addRe.test(norm(n.task)) && (n.ingredients ?? []).length === 0 && (n.consumes ?? []).length === 0);
+        return orphans.length === 0 ? true : `objectless add node(s): ${orphans.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+    {
+      name: 'DENSE: no prep output is left unconsumed (dangling chop — flip side of an objectless add)',
+      behaviour: 'B',
+      check: (dag) => {
+        const prepRe = /^(slice|chop|dice|cut|grate|mince|tear)\b/;
+        const consumedIds = new Set<string>(dag.nodes.flatMap(n => n.consumes ?? []));
+        const dangling = dag.nodes.filter(n =>
+          prepRe.test(norm(n.task)) && (n.ingredients ?? []).length > 0 && !consumedIds.has(n.id));
+        return dangling.length === 0 ? true : `unconsumed prep node(s): ${dangling.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+    {
+      name: 'DENSE: no duplicate adjacent identical task (e.g. Season/Season)',
+      behaviour: 'B',
+      check: (dag) => {
+        for (let i = 1; i < dag.nodes.length; i++) {
+          const a = norm(dag.nodes[i - 1].task), b = norm(dag.nodes[i].task);
+          const aIng = (dag.nodes[i - 1].ingredients ?? []).map(x => norm(x.name)).join(',');
+          const bIng = (dag.nodes[i].ingredients ?? []).map(x => norm(x.name)).join(',');
+          if (a && a === b && aIng === bIng) return `adjacent duplicate: ${dag.nodes[i - 1].id} & ${dag.nodes[i].id} both "${a}"`;
+        }
+        return true;
+      },
+    },
+  ],
+};
+
+export const vesselEdgesCases = [caseSaladConcurrent, caseBechamelOrdered, caseBindingNoOrphans, caseDenseBinding];
