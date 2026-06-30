@@ -260,10 +260,15 @@ function composeStepLine(
     out = out.replace(/\s{2,}/g, ' ').trim();
     if (out) return out;
   }
-  // No template: curated verb, with the intermediate phrase appended if we have one
-  // (so a bare "Toss" still becomes "Toss the drained spaghetti and garlic oil").
+  // No template: curated verb, with the fill appended if we have one — the fill is
+  // the node's OWN ingredient ("Season black pepper") or, failing that, the consumed
+  // intermediate phrase ("Toss the drained spaghetti and garlic oil"). Using `fill`
+  // (not just intermediatePhrase) means a templateless task that DOES carry an own
+  // ingredient — e.g. a "season" node with black pepper — no longer renders as a bare
+  // verb. `fill` already lowercases an own ingredient and "the …"-prefixes an
+  // intermediate, so it reads correctly mid-sentence in both cases.
   const verb = (taskName ?? '').trim();
-  if (verb && intermediatePhrase) return `${verb} ${intermediatePhrase}`;
+  if (verb && fill) return `${verb} ${fill}`;
   return verb || instruction;
 }
 

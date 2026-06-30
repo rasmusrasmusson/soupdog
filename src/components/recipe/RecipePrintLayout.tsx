@@ -179,8 +179,12 @@ function composeStepLine(
     out = out.replace(/\s{2,}/g, ' ').trim();
     if (out) return out;
   }
+  // No template: append the fill (own ingredient, else consumed intermediate) so a
+  // templateless task carrying an own ingredient (e.g. a "season" node with black
+  // pepper) renders "Season black pepper" instead of a bare verb. Mirrors the same
+  // fix in RecipeDisplay.composeStepLine.
   const verb = (taskName ?? '').trim();
-  if (verb && intermediatePhrase) return `${verb} ${intermediatePhrase}`;
+  if (verb && fill) return `${verb} ${fill}`;
   return verb || instruction;
 }
 
