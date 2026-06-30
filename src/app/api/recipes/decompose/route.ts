@@ -271,68 +271,95 @@ export async function POST(req: NextRequest) {
     identityBlock;
 
   try {
-    const result = await aiMessage({
-      // Model is configurable so we can A/B Haiku vs Sonnet for decompose without a code
-      // change. Default = Sonnet 4.6 (current behavior, no env var needed). Set
-      // DECOMPOSE_MODEL=claude-haiku-4-5-20251001 in the environment to try Haiku
-      // (faster + cheaper generation — the dominant cost here per the latency analysis);
-      // verify quality with the vessel-edges + multi-dish eval harnesses before keeping.
-      // Remove the env var to instantly revert to Sonnet.
-      model:      process.env.DECOMPOSE_MODEL || 'claude-sonnet-4-6',
-      feature:    'import_parse',          // reuse existing feature label; decomposition is part of import
-      accountId:  user.id,
-      max_tokens: 8000,
-      system:     SYSTEM + guideBlock,
-      cacheSystem: true,   // SYSTEM + guideBlock is a large STABLE prefix (rules + task
-                           // guide), identical across calls — ideal for prompt caching.
-                           // The variable recipe is in the user message (after system),
-                           // so the cached prefix stays stable. ~0.1x cost + faster
-                           // prefill on hits within the TTL.
-      messages:   [{ role: 'user', content: userMsg }],
-    });
+    // One AI call + parse + structural validation. Returns { dag } on success, or
+    // { fail } with a user-facing message when the MODEL produced unusable output
+    // (bad JSON, no nodes, dangling consumes). HTTP-level transient failures (429/5xx)
+    // are already retried inside aiMessage; this handles CONTENT failures the gate
+    // can't see — which is the class Beef Wellington hit (200 OK, malformed output).
+    const attemptDecompose = async (): Promise<
+      { dag: any } | { fail: { error: string; status: number; retryable?: boolean } }
+    > => {
+      const result = await aiMessage({
+        // Model is configurable so we can A/B Haiku vs Sonnet for decompose without a code
+        // change. Default = Sonnet 4.6 (current behavior, no env var needed). Set
+        // DECOMPOSE_MODEL=claude-haiku-4-5-20251001 in the environment to try Haiku
+        // (faster + cheaper generation — the dominant cost here per the latency analysis);
+        // verify quality with the vessel-edges + multi-dish eval harnesses before keeping.
+        // Remove the env var to instantly revert to Sonnet.
+        model:      process.env.DECOMPOSE_MODEL || 'claude-sonnet-4-6',
+        feature:    'import_parse',          // reuse existing feature label; decomposition is part of import
+        accountId:  user.id,
+        max_tokens: 8000,
+        system:     SYSTEM + guideBlock,
+        cacheSystem: true,   // SYSTEM + guideBlock is a large STABLE prefix (rules + task
+                             // guide), identical across calls — ideal for prompt caching.
+                             // The variable recipe is in the user message (after system),
+                             // so the cached prefix stays stable. ~0.1x cost + faster
+                             // prefill on hits within the TTL.
+        messages:   [{ role: 'user', content: userMsg }],
+      });
 
-    if (!result.ok) {
-      console.error('[decompose] Anthropic error:', result.errorText);
-      return NextResponse.json({ error: 'Decomposition failed' }, { status: 502 });
-    }
+      if (!result.ok) {
+        console.error('[decompose] Anthropic error:', result.errorText);
+        return { fail: { error: 'Decomposition failed', status: 502 } };
+      }
 
-    // Robust extraction: strip fences, take outermost { ... } (same pattern as import).
-    const raw = result.data.content?.[0]?.text ?? '';
-    let clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
-    const a = clean.indexOf('{');
-    const b = clean.lastIndexOf('}');
-    if (a !== -1 && b !== -1 && b > a) clean = clean.slice(a, b + 1);
+      // Robust extraction: strip fences, take outermost { ... } (same pattern as import).
+      const raw = result.data.content?.[0]?.text ?? '';
+      let clean = raw.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '').trim();
+      const a = clean.indexOf('{');
+      const b = clean.lastIndexOf('}');
+      if (a !== -1 && b !== -1 && b > a) clean = clean.slice(a, b + 1);
 
-    let dag: any;
-    try {
-      dag = JSON.parse(clean);
-    } catch {
-      console.error('[decompose] JSON parse failed. rawLen=%d, tail=%j', raw.length, raw.slice(-200));
-      return NextResponse.json({
-        error: 'We had trouble structuring that recipe. Please try again.',
-        retryable: true,
-      }, { status: 502 });
-    }
+      let dag: any;
+      try {
+        dag = JSON.parse(clean);
+      } catch {
+        console.error('[decompose] JSON parse failed. rawLen=%d, tail=%j', raw.length, raw.slice(-200));
+        return { fail: { error: 'We had trouble structuring that recipe. Please try again.', status: 502, retryable: true } };
+      }
 
-    if (!Array.isArray(dag.nodes) || dag.nodes.length === 0) {
-      return NextResponse.json({ error: 'Decomposition returned no steps' }, { status: 502 });
-    }
+      if (!Array.isArray(dag.nodes) || dag.nodes.length === 0) {
+        return { fail: { error: 'Decomposition returned no steps', status: 502, retryable: true } };
+      }
 
-    // Light structural guard (cheap; full validation lives in decompose-save).
-    const ids = new Set(dag.nodes.map((n: any) => n.id));
-    for (const n of dag.nodes) {
-      for (const c of n.consumes ?? []) {
-        if (!ids.has(c)) {
-          console.error('[decompose] node %s consumes unknown id %s', n.id, c);
-          return NextResponse.json({ error: 'Decomposition produced an invalid graph. Please try again.', retryable: true }, { status: 502 });
+      // Light structural guard (cheap; full validation lives in decompose-save).
+      const ids = new Set(dag.nodes.map((n: any) => n.id));
+      for (const n of dag.nodes) {
+        for (const c of n.consumes ?? []) {
+          if (!ids.has(c)) {
+            console.error('[decompose] node %s consumes unknown id %s', n.id, c);
+            return { fail: { error: 'Decomposition produced an invalid graph. Please try again.', status: 502, retryable: true } };
+          }
         }
       }
+
+      // Ensure linkedDishes is always an array (model may omit it for single-dish).
+      if (!Array.isArray(dag.linkedDishes)) dag.linkedDishes = [];
+      return { dag };
+    };
+
+    // Try up to twice: a content failure on the first attempt is usually transient
+    // (the model is non-deterministic — re-calling often yields valid output, as Beef
+    // Wellington demonstrated). Only surface the error after BOTH attempts fail, so a
+    // one-off malformed generation self-heals without the user seeing it.
+    const MAX_DECOMPOSE_ATTEMPTS = 2;
+    let lastFail: { error: string; status: number; retryable?: boolean } | null = null;
+    for (let attempt = 1; attempt <= MAX_DECOMPOSE_ATTEMPTS; attempt++) {
+      const outcome = await attemptDecompose();
+      if ('dag' in outcome) {
+        return NextResponse.json({ dag: outcome.dag });
+      }
+      lastFail = outcome.fail;
+      if (attempt < MAX_DECOMPOSE_ATTEMPTS) {
+        console.warn('[decompose] attempt %d failed (%s) — retrying once', attempt, lastFail.error);
+      }
     }
-
-    // Ensure linkedDishes is always an array (model may omit it for single-dish).
-    if (!Array.isArray(dag.linkedDishes)) dag.linkedDishes = [];
-
-    return NextResponse.json({ dag });
+    // Both attempts failed — surface the last failure to the user (still retryable).
+    return NextResponse.json(
+      { error: lastFail!.error, ...(lastFail!.retryable ? { retryable: true } : {}) },
+      { status: lastFail!.status },
+    );
 
   } catch (err: any) {
     console.error('[decompose]', err);
