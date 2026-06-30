@@ -398,10 +398,19 @@ export const caseDenseBinding: { name: string; extraction: Extraction; assertion
       behaviour: 'B',
       check: (dag) => {
         for (let i = 1; i < dag.nodes.length; i++) {
-          const a = norm(dag.nodes[i - 1].task), b = norm(dag.nodes[i].task);
-          const aIng = (dag.nodes[i - 1].ingredients ?? []).map(x => norm(x.name)).join(',');
-          const bIng = (dag.nodes[i].ingredients ?? []).map(x => norm(x.name)).join(',');
-          if (a && a === b && aIng === bIng) return `adjacent duplicate: ${dag.nodes[i - 1].id} & ${dag.nodes[i].id} both "${a}"`;
+          const prev = dag.nodes[i - 1], cur = dag.nodes[i];
+          const a = norm(prev.task), b = norm(cur.task);
+          const aIng = (prev.ingredients ?? []).map(x => norm(x.name)).join(',');
+          const bIng = (cur.ingredients ?? []).map(x => norm(x.name)).join(',');
+          // Two adjacent nodes are a DUPLICATE only if same task AND same ingredients AND
+          // same completion. Distinct cooks legitimately share a verb when their end-
+          // condition differs ("sauté until soft" vs "sauté until fragrant") — per rule 2c
+          // the completion is what makes them distinct, so it must differ to be OK.
+          const aDone = norm((prev as any).completion);
+          const bDone = norm((cur as any).completion);
+          if (a && a === b && aIng === bIng && aDone === bDone) {
+            return `adjacent duplicate (same task, ingredients & completion): ${prev.id} & ${cur.id} both "${a}"${aDone ? ` [${aDone}]` : ' [no completion]'}`;
+          }
         }
         return true;
       },
