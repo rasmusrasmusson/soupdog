@@ -46,12 +46,14 @@ export async function GET(req: NextRequest) {
 
     let dag: Dag | null = null;
     try {
+      const t0 = Date.now();
       const r = await fetch(`${origin}/api/recipes/decompose`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', cookie },
         body: JSON.stringify({ extraction: c.extraction }),
       });
       const text = await r.text();
+      caseResult.decomposeMs = Date.now() - t0;   // latency — the half of the A/B that the eval doesn't otherwise capture
       if (!r.ok) {
         caseResult.error = `decompose ${r.status}: ${text.slice(0, 300)}`;
         for (const a of c.assertions) {
@@ -106,7 +108,15 @@ export async function GET(req: NextRequest) {
     Object.entries(behaviourTally).map(([k, v]) => [k, `${v.pass}/${v.total}`]),
   );
 
+  // Self-document which model produced these results (reads the same env the decompose
+  // route reads), and the total decompose time across cases — so a Sonnet run and a
+  // Haiku run are distinguishable + comparable after the fact.
+  const modelUnderTest = process.env.DECOMPOSE_MODEL || 'claude-sonnet-4-6';
+  const totalDecomposeMs = report.reduce((acc: number, c: any) => acc + (c.decomposeMs ?? 0), 0);
+
   return NextResponse.json({
+    modelUnderTest,
+    totalDecomposeMs,
     summary,
     legend: {
       O: 'order — independent adds unchained / dependent chain kept',

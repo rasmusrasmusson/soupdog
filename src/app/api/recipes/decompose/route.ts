@@ -271,7 +271,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const result = await aiMessage({
-      model:      'claude-sonnet-4-6',
+      // Model is configurable so we can A/B Haiku vs Sonnet for decompose without a code
+      // change. Default = Sonnet 4.6 (current behavior, no env var needed). Set
+      // DECOMPOSE_MODEL=claude-haiku-4-5-20251001 in the environment to try Haiku
+      // (faster + cheaper generation — the dominant cost here per the latency analysis);
+      // verify quality with the vessel-edges + multi-dish eval harnesses before keeping.
+      // Remove the env var to instantly revert to Sonnet.
+      model:      process.env.DECOMPOSE_MODEL || 'claude-sonnet-4-6',
       feature:    'import_parse',          // reuse existing feature label; decomposition is part of import
       accountId:  user.id,
       max_tokens: 8000,
