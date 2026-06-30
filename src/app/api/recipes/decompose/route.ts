@@ -22,7 +22,12 @@ import { resolveIngredientIds, normalizeIngredientName } from '@/lib/ingredients
 
 // Allow time for the (possibly slow) Anthropic call — without this the
 // serverless function can be killed mid-request and return a 502 intermittently.
-export const maxDuration = 120;
+// Vercel function timeout. Sonnet structuring of a substantial recipe (40+ nodes)
+// measured at 50s and, for the heaviest, >120s — which 504'd at the old ceiling.
+// Raised to 240s (Vercel Pro allows up to 300) to give real headroom. NOTE: this
+// stops the FAILURE; the durable LATENCY fix is prompt caching on the stable guide
+// prefix + (for bulk) the Batch API — see the async/latency design note.
+export const maxDuration = 240;
 
 // Hardened step-2 system prompt — kept in sync with...
 // Allow time for the (possibly slow) Anthropic call — without this the
