@@ -464,33 +464,50 @@ export default function ImportRecipePage() {
       setStatus('decomposing');
       const servedComponents: string[] = [];
       const failedDishes: string[] = [];
+      const failureReasons: Record<string, string> = {}; // dishName → why it failed (diagnostic)
       const combinedIngredients: any[] = [];
       const combinedGroups: any[] = [];
       let metaFromParse: any = null;   // description/cuisine/tags (only used if single dish)
       let madeDishCount = 0;
 
-      // Generate + parse one made dish. Returns the parsed recipe, or null on failure.
-      // Retries ONCE on a transient generate/parse miss before giving up.
-      const generateAndParseDish = async (dishPrompt: string): Promise<any | null> => {
+      // Generate + parse one made dish. Returns { recipe } on success, or { reason } with a
+      // precise failure cause (HTTP status / empty-vs-error / parse miss) for diagnosis.
+      // Retries ONCE on a transient miss before giving up; keeps the LAST attempt's reason.
+      const generateAndParseDish = async (dishPrompt: string): Promise<{ recipe?: any; reason?: string }> => {
+        let lastReason = 'unknown';
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const gr = await fetch('/api/recipes/generate', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ prompt: dishPrompt, forceGenerate: true }),
             });
-            const gd = await gr.json();
-            const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
-            if (recipeText.length <= 40) continue; // transient empty generate → retry
+            let gd: any = null;
+            try { gd = await gr.json(); } catch { gd = null; }
+            if (!gr.ok) {
+              lastReason = `generate HTTP ${gr.status}${gd?.error ? ` (${String(gd.error).slice(0, 80)})` : ''}`;
+              continue;
+            }
+            const recipeText = (typeof gd?.recipeText === 'string') ? gd.recipeText.trim() : '';
+            if (recipeText.length <= 40) {
+              // 200 but no usable recipe — classification/clarify instead of a recipe, or empty.
+              const kind = gd?.kind ?? gd?.type ?? (gd?.recipeText === undefined ? 'no recipeText field' : 'short/empty recipeText');
+              lastReason = `generate returned no recipe (200; ${kind}; len ${recipeText.length})`;
+              continue;
+            }
             const ires = await fetch('/api/recipes/import', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ text: recipeText }),
             });
-            const idata = await ires.json();
-            if (!ires.ok || !idata.recipe) continue; // transient parse miss → retry
-            return idata.recipe;
-          } catch { /* fall through to retry */ }
+            let idata: any = null;
+            try { idata = await ires.json(); } catch { idata = null; }
+            if (!ires.ok) { lastReason = `parse HTTP ${ires.status}${idata?.error ? ` (${String(idata.error).slice(0, 80)})` : ''}`; continue; }
+            if (!idata?.recipe) { lastReason = `parse returned no recipe (200${idata?.retryable ? ', retryable' : ''})`; continue; }
+            return { recipe: idata.recipe };
+          } catch (e: any) {
+            lastReason = `network/exception: ${String(e?.message ?? e).slice(0, 80)}`;
+          }
         }
-        return null;
+        return { reason: lastReason };
       };
 
       for (const d of toMake) {
@@ -499,10 +516,11 @@ export default function ImportRecipePage() {
         // water, etc.) are genuinely SERVED as-is — skip the wasted generation call entirely.
         if (isServedItem(d.name)) { servedComponents.push(dishName); continue; }
 
-        const recipe = await generateAndParseDish(d.name);
+        const { recipe, reason } = await generateAndParseDish(d.name);
         if (!recipe) {
           // The user chose to MAKE this dish and we couldn't. Do NOT pretend it's served.
           failedDishes.push(dishName);
+          if (reason) failureReasons[dishName] = reason;
           continue;
         }
         if (!metaFromParse) metaFromParse = recipe;
@@ -620,7 +638,7 @@ export default function ImportRecipePage() {
           title: composeMenuTitle(componentNames), components: componentNames,
           description: '', cuisine: '', tags: [], servings: 4, difficulty: 'medium',
           totalTimeMinutes: 0, dag: servedDag,
-          ...(failedDishes.length ? { failedDishes } : {}),
+          ...(failedDishes.length ? { failedDishes, failureReasons } : {}),
         });
         setStatus('done');
         return;
@@ -656,7 +674,7 @@ export default function ImportRecipePage() {
         difficulty:  metaFromParse?.difficulty ?? 'medium',
         totalTimeMinutes: 0,
         dag:         mealDag,
-        ...(failedDishes.length ? { failedDishes } : {}),
+        ...(failedDishes.length ? { failedDishes, failureReasons } : {}),
       });
       setStatus('done');
     } catch (err: any) {
@@ -1182,6 +1200,13 @@ export default function ImportRecipePage() {
                       >
                         {composing ? 'Composing…' : 'Try again'}
                       </button>
+                      {preview.failureReasons && Object.keys(preview.failureReasons).length > 0 && (
+                        <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 10.5, color: '#8a7320', lineHeight: 1.6 }}>
+                          {Object.entries(preview.failureReasons).map(([dish, reason]) => (
+                            <div key={dish}>{dish}: {String(reason)}</div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
