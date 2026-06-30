@@ -9,6 +9,7 @@ import { RecipePrintLayout } from '@/components/recipe/RecipePrintLayout';
 import type { RecipeStep, RecipeIngredientRef, Recipe, SubRecipeRef } from '@/types';
 import { calculateRecipeNutrition, type IngredientNutrition } from '@/lib/recipe-nutrition';
 import { RecipeDisplay } from '@/components/recipe/RecipeDisplay';
+import { aggregateIngredientList } from '@/lib/ingredients/aggregate-list';
 import { useAssistantContext } from '@/components/assistant/AssistantProvider';
 import { NutrientDetailModal } from '@/components/recipe/NutrientDetailModal';
 import RecipePeoplePanel from '@/components/recipe/RecipePeoplePanel';
@@ -168,7 +169,7 @@ function RespecialiseButton({ canonicalId, isAuthor }: { canonicalId: string; is
 function mapNewSchemaRecipe(row: any): Recipe {
   const rv = row.recipe_versions;
 
-  const ingredients: RecipeIngredientRef[] = (rv?.version_ingredients ?? [])
+  const ingredientsRaw: RecipeIngredientRef[] = (rv?.version_ingredients ?? [])
     .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
     .map((vi: any) => ({
       ingredientId:   vi.ingredients?.id   ?? vi.ingredient_id,
@@ -184,6 +185,12 @@ function mapNewSchemaRecipe(row: any): Recipe {
       densityGPerMl:       vi.ingredients?.density_g_per_ml      ?? undefined,
       typicalUnitWeightG:  vi.ingredients?.typical_unit_weight_g ?? undefined,
     }));
+
+  // Collapse to ONE line per ingredient identity (minimal §7 aggregation). Inert for a
+  // single recipe (no duplicate ids → every group is size 1); for a multi-dish meal it
+  // sums same-unit numerics and safely combines the rest. See
+  // docs/Soupdog_Quantity_Aggregation_And_Qualitative_Units_v0_1.md.
+  const ingredients: RecipeIngredientRef[] = aggregateIngredientList(ingredientsRaw);
 
   const steps: RecipeStep[] = (rv?.version_steps ?? [])
     .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
