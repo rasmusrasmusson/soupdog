@@ -512,8 +512,52 @@ export default function ImportRecipePage() {
       // ONE decompose over the combined multi-group extraction → the unified meal DAG.
       // The engine merges shared prep on resolved identity (rule 6b), keeps independent
       // chains parallel, and emits one named terminal per dish.
+      //
+      // SIZE CEILING (§12): the unified call carries BOTH dishes' full ingredients +
+      // steps + guide + identity blocks — heavy. A two-rich-dish meal can blow past the
+      // route's maxDuration and 504, degrading everything to served. So use a HYBRID:
+      // unified decompose when the combined meal is small enough; otherwise fall back to
+      // PER-DISH decompose (each call small, none times out) and concatenate the dishes'
+      // DAGs. The cost is losing cross-dish prep merge on big meals — acceptable: a
+      // correct-but-siloed big meal beats a timed-out unified one (same principle as the
+      // original Option A). Threshold = total step count across the made dishes.
+      const UNIFIED_STEP_CEILING = 22; // combined made-dish steps above which we silo (tunable)
+      const combinedStepCount = combinedGroups.reduce(
+        (acc: number, g: any) => acc + (Array.isArray(g.steps) ? g.steps.length : 0), 0);
+      const useUnified = combinedGroups.length > 0 && combinedStepCount <= UNIFIED_STEP_CEILING;
+
+      // Decompose one single-dish extraction → its nodes (namespaced ids), or null on failure.
+      const decomposeOneDish = async (group: any, dishIngredients: any[], idx: number): Promise<any[] | null> => {
+        try {
+          const ext = {
+            title:    group.outputName,
+            servings: metaFromParse?.servings ?? 4,
+            ingredients: dishIngredients,
+            groups:   [{ outputName: group.outputName, steps: group.steps }],
+          };
+          const r = await fetch('/api/recipes/decompose', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ extraction: ext }),
+          });
+          const d = await r.json();
+          if (!r.ok || !d.dag || !Array.isArray(d.dag.nodes) || d.dag.nodes.length === 0) return null;
+          // Namespace node ids so siloed dishes never collide (n1 → d0_n1) and rewrite
+          // consumes accordingly. No cross-dish edges exist (siloed), so this is self-contained.
+          // Also stamp the dish name as the node group when the model left it null — in a
+          // single-dish decompose the model has no reason to tag the dish section, but the
+          // meal display + toposort want each dish to read as its own contiguous block.
+          const pfx = `d${idx}_`;
+          return d.dag.nodes.map((n: any) => ({
+            ...n,
+            id: pfx + n.id,
+            consumes: Array.isArray(n.consumes) ? n.consumes.map((c: string) => pfx + c) : [],
+            group: (n.group && String(n.group).trim()) ? n.group : group.outputName,
+          }));
+        } catch { return null; }
+      };
+
       let mealNodes: any[] = [];
-      if (combinedGroups.length > 0) {
+      if (useUnified) {
         const combinedExtraction = {
           title:    composeMenuTitle(componentNames),
           servings: metaFromParse?.servings ?? 4,
@@ -534,6 +578,22 @@ export default function ImportRecipePage() {
           }
         } catch {
           for (const g of combinedGroups) servedComponents.push(g.outputName);
+        }
+      } else if (combinedGroups.length > 0) {
+        // SILOED FALLBACK (large meal): decompose each dish on its own (small calls),
+        // concatenate the namespaced node sets. Per-dish failures serve only that dish.
+        for (let gi = 0; gi < combinedGroups.length; gi++) {
+          const g = combinedGroups[gi];
+          // this dish's ingredients = those referenced by its own steps (fall back to all if unsure)
+          const names = new Set<string>(
+            (Array.isArray(g.steps) ? g.steps : []).flatMap((s: any) =>
+              Array.isArray(s.stepIngredients) ? s.stepIngredients.map((x: string) => x.toLowerCase()) : []));
+          const dishIngredients = names.size
+            ? combinedIngredients.filter((ing: any) => names.has(String(ing.name).toLowerCase()))
+            : combinedIngredients;
+          const nodes = await decomposeOneDish(g, dishIngredients, gi);
+          if (nodes) mealNodes.push(...nodes);
+          else servedComponents.push(g.outputName);
         }
       }
 
