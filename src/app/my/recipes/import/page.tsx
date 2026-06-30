@@ -582,16 +582,16 @@ export default function ImportRecipePage() {
       } else if (combinedGroups.length > 0) {
         // SILOED FALLBACK (large meal): decompose each dish on its own (small calls),
         // concatenate the namespaced node sets. Per-dish failures serve only that dish.
+        // Pass the FULL ingredient list to each dish (do NOT filter per-dish): the
+        // decompose prompt only emits nodes for the steps it is given, so surplus
+        // ingredients are simply unused — whereas filtering by a name-match against
+        // stepIngredients risks DROPPING an ingredient whose step-name differs from its
+        // list-name ("parsley" vs "Fresh flat-leaf parsley"), which starves the dish and
+        // produces objectless "Add" steps with nothing to bind. Correctness over a
+        // marginal token saving.
         for (let gi = 0; gi < combinedGroups.length; gi++) {
           const g = combinedGroups[gi];
-          // this dish's ingredients = those referenced by its own steps (fall back to all if unsure)
-          const names = new Set<string>(
-            (Array.isArray(g.steps) ? g.steps : []).flatMap((s: any) =>
-              Array.isArray(s.stepIngredients) ? s.stepIngredients.map((x: string) => x.toLowerCase()) : []));
-          const dishIngredients = names.size
-            ? combinedIngredients.filter((ing: any) => names.has(String(ing.name).toLowerCase()))
-            : combinedIngredients;
-          const nodes = await decomposeOneDish(g, dishIngredients, gi);
+          const nodes = await decomposeOneDish(g, combinedIngredients, gi);
           if (nodes) mealNodes.push(...nodes);
           else servedComponents.push(g.outputName);
         }
