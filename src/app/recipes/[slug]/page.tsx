@@ -319,42 +319,16 @@ async function attachLinkedDishes(supabase: any, recipe: Recipe): Promise<Recipe
 
     const childVersionId = ln.child_version_id ?? canon.current_version_id;
     let title = ln.used_as_ingredient_label ?? canon.slug;
-    let childSteps: RecipeStep[] | undefined;
 
+    // Linked dishes render as a REFERENCE CARD only (title + "View recipe →"),
+    // never inline-expanded — so we only need the child's title, not its steps.
     if (childVersionId) {
-      // title + steps + ingredients from the child version
       const { data: cv } = await supabase
         .from('recipe_versions')
-        .select('title, version_ingredients ( quantity_value, quantity_unit, step_id, ingredients!ingredient_id ( name ) ), version_steps ( id, order_index, step_type, group_label, instruction, notes, duration_seconds, temperature_celsius, appliance_settings, task_id, tasks ( name, display_template, single_tool, category ) )')
+        .select('title')
         .eq('id', childVersionId)
         .maybeSingle();
       if (cv?.title) title = ln.used_as_ingredient_label ?? cv.title;
-
-      // expand the child's steps inline only when flagged
-      if (ln.expand_by_default && Array.isArray(cv?.version_steps)) {
-        // map child step_id → first introduced ingredient name (mirrors the host
-        // display's stepIngMap, which the linked dish doesn't have access to)
-        const ingByStep = new Map<string, string>();
-        for (const vi of (cv.version_ingredients ?? [])) {
-          const sid = vi.step_id; if (!sid || ingByStep.has(sid)) continue;
-          const nm = Array.isArray(vi.ingredients) ? vi.ingredients[0]?.name : vi.ingredients?.name;
-          if (nm) ingByStep.set(sid, nm);
-        }
-        childSteps = cv.version_steps
-          .sort((a: any, b: any) => (a.order_index ?? 0) - (b.order_index ?? 0))
-          .map((s: any) => ({
-            id: s.id, order: s.order_index, type: s.step_type,
-            group: s.group_label ?? undefined, instruction: s.instruction,
-            notes: s.notes ?? undefined,
-            durationSeconds: s.duration_seconds ?? undefined,
-            temperature: s.temperature_celsius ? { value: s.temperature_celsius, unit: 'celsius' as const } : undefined,
-            taskName: (Array.isArray(s.tasks) ? s.tasks[0]?.name : s.tasks?.name) ?? undefined,
-            taskTemplate: (Array.isArray(s.tasks) ? s.tasks[0]?.display_template : s.tasks?.display_template) ?? undefined,
-            taskSingleTool: (Array.isArray(s.tasks) ? s.tasks[0]?.single_tool : s.tasks?.single_tool) ?? false,
-            taskCategory: (Array.isArray(s.tasks) ? s.tasks[0]?.category : s.tasks?.category) ?? undefined,
-            firstIngredientName: ingByStep.get(s.id) ?? undefined,
-          }));
-      }
     }
 
     subRecipes.push({
@@ -363,8 +337,8 @@ async function attachLinkedDishes(supabase: any, recipe: Recipe): Promise<Recipe
       title,
       usedAsIngredient: ln.used_as_ingredient_label ?? undefined,
       optional:        ln.optional ?? false,
-      expandByDefault: ln.expand_by_default ?? false,
-      steps:           childSteps,
+      expandByDefault: false,
+      steps:           undefined,
     });
   }
 

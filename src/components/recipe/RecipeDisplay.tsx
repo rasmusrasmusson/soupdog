@@ -625,7 +625,7 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
           <div className="flex flex-col gap-3">
             {recipe.subRecipes.map((sr) => (
               <div key={sr.recipeId} style={{ border: B, borderRadius: 6 }}>
-                <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: (sr.expandByDefault && sr.steps && sr.steps.length) ? B : undefined }}>
+                <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontFamily: 'var(--font-serif, var(--font-display))', fontSize: 15, color: 'var(--fg)' }}>{capitalizeLabel(sr.title)}</span>
                   {linkIngredients ? (
                     <a href={`/recipes/${sr.recipeSlug}`} style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: 'var(--accent)', textDecoration: 'none' }}>View recipe →</a>
@@ -633,15 +633,6 @@ export function RecipeDisplay({ recipe, interactive, linkIngredients = false, sh
                     <span style={{ fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', color: MUT }}>From your recipes</span>
                   )}
                 </div>
-                {sr.expandByDefault && sr.steps && sr.steps.length > 0 && (
-                  <ol style={{ margin: 0, padding: '8px 14px 12px 30px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {sr.steps.map((st) => (
-                      <li key={st.id} style={{ fontSize: 13, lineHeight: 1.6, color: 'var(--fg)' }}>
-                        <StepLine taskName={st.taskName} template={st.taskTemplate} singleTool={st.taskSingleTool} ingredientName={st.firstIngredientName} toolName={(st.applianceSettings as any)?.stepTools?.[0]?.name} instruction={st.instruction} notes={st.notes} taskId={st.taskId} onOpenTask={setOpenTaskId} intermediates={st.consumedIntermediates} />
-                      </li>
-                    ))}
-                  </ol>
-                )}
               </div>
             ))}
           </div>

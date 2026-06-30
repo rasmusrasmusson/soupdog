@@ -359,18 +359,6 @@ export function RecipePrintLayout({ recipe, url, peopleNames }: { recipe: Recipe
               <h3 style={{ ...SERIF, fontSize: 14, color: '#2e4638', margin: '4px 0 6px' }}>
                 {capitalizeLabel(sr.title)}
               </h3>
-              {sr.expandByDefault && Array.isArray(sr.steps) && sr.steps.length > 0 ? (
-                <div>
-                  {sr.steps.map((st, i) => (
-                    <div key={st.id ?? `s${i}`} style={{ display: 'flex', gap: 10, padding: '5px 0', breakInside: 'avoid' }}>
-                      <span style={{ ...MONO, fontSize: 12, color: '#b08a3e', fontWeight: 500, flexShrink: 0, width: 18, textAlign: 'right' }}>{i + 1}</span>
-                      <div style={{ ...SANS, fontSize: 12, lineHeight: 1.55, color: '#111', flex: 1 }}>
-                        {composeStepLine(st.taskName, st.taskTemplate, !!st.taskSingleTool, st.firstIngredientName, (st.applianceSettings as { stepTools?: { name?: string }[] } | undefined)?.stepTools?.[0]?.name, st.instruction, st.consumedIntermediates)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </div>
           ))}
         </section>
