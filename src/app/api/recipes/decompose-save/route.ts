@@ -494,8 +494,94 @@ function buildInstruction(n: any): string {
 function capitalize(s: string) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
 
 // The `produces` name of the node that an edge points at (the intermediate flowing
-// along the edge), or null.
+// along the edge). The decompose prompt only REQUIRES `produces` on chain-ends that
+// feed a convergence (rule 5), so most prep/introduce/transform nodes carry null —
+// which left consuming steps with an empty intermediates list and rendered them as a
+// bare verb ("Add", "Transfer", "Season"). When `produces` is absent we DERIVE a
+// readable name from the node itself: its transformation verb (as a past participle)
+// applied to its subject — the node's own ingredient, else the derived name of the
+// first nameable node it consumes. "dice"+onion → "diced onion"; an unlabelled
+// "transfer" consuming the blanched-beans chain → "blanched green beans". Returns
+// null only when nothing nameable can be reached (e.g. a bare "Season → generously"
+// with no ingredient and no consumes — that is a decompose defect, fixed upstream,
+// not here). This label is written once at save into version_step_dependencies and
+// read back by the page's Layer-2 intermediate threading.
 function producerLabel(dag: any, nodeId: string): string | null {
-  const producer = dag.nodes.find((x: any) => x.id === nodeId);
-  return producer?.produces?.trim() || null;
+  return deriveProducesName(dag, nodeId, new Set<string>());
+}
+
+// Verbs whose past participle is irregular or would mangle under naive "+ed".
+const PRODUCE_PARTICIPLES: Record<string, string> = {
+  chop: 'chopped', dice: 'diced', slice: 'sliced', mince: 'minced',
+  grate: 'grated', peel: 'peeled', trim: 'trimmed', crush: 'crushed',
+  blanch: 'blanched', boil: 'boiled', saute: 'sautéed', 'sauté': 'sautéed',
+  fry: 'fried', roast: 'roasted', bake: 'baked', grill: 'grilled',
+  steam: 'steamed', simmer: 'simmered', reduce: 'reduced', melt: 'melted',
+  whisk: 'whisked', beat: 'beaten', mix: 'mixed', combine: 'combined',
+  toss: 'tossed', drain: 'drained', cool: 'cooled', chill: 'chilled',
+  season: 'seasoned', marinate: 'marinated', soften: 'softened',
+  caramelize: 'caramelized', sear: 'seared', poach: 'poached',
+  knead: 'kneaded', rest: 'rested', cook: 'cooked', heat: 'heated',
+};
+
+// Verbs that move/introduce an ingredient WITHOUT renaming it — a derived label
+// for these passes the subject through unchanged ("add onion" → "onion", not
+// "added onion"; "transfer the beans" → "the beans").
+const PRODUCE_PASSTHROUGH = new Set<string>([
+  'add', 'transfer', 'introduce', 'put', 'place', 'pour', 'spoon', 'arrange',
+  'scatter', 'drizzle', 'sprinkle', 'return', 'set', 'bring', 'serve', 'plate',
+]);
+
+function produceParticiple(verb: string): string {
+  const v = (verb || '').toLowerCase().trim();
+  if (PRODUCE_PARTICIPLES[v]) return PRODUCE_PARTICIPLES[v];
+  if (!v) return '';
+  return v.endsWith('e') ? v + 'd' : v + 'ed';
+}
+
+function deriveProducesName(dag: any, nodeId: string, seen: Set<string>): string | null {
+  if (seen.has(nodeId)) return null;            // cycle guard (DAG should have none, but be safe)
+  seen.add(nodeId);
+  const n = (dag.nodes ?? []).find((x: any) => x.id === nodeId);
+  if (!n) return null;
+
+  // Explicit produces always wins — that's the model's own intermediate name.
+  const explicit = (n.produces || '').trim();
+  if (explicit) return explicit;
+
+  const verb   = (n.task || '').toLowerCase().trim();
+  const ownIng = ((n.ingredients ?? [])[0]?.name || '').trim();
+
+  // Subject = own ingredient, else the BARE ingredient name of the first nameable
+  // node we consume (we walk to the raw ingredient, NOT the upstream's derived
+  // participle, so the chain doesn't stack — "drain"+["blanch beans"] yields
+  // "drained green beans", not "drained blanched green beans"). The current node's
+  // own verb is then applied to that subject, so a transform node still names its
+  // result ("blanch" → "blanched green beans") rather than the raw input.
+  const subject = ownIng || rawSubject(dag, nodeId, new Set<string>());
+  if (!subject) return null;                    // nothing nameable to anchor on
+
+  if (PRODUCE_PASSTHROUGH.has(verb)) return subject;   // "add"/"transfer" don't rename
+  const part = produceParticiple(verb);
+  if (!part) return subject;
+  if (subject.toLowerCase().startsWith(part.toLowerCase())) return subject;
+  return `${part} ${subject}`;
+}
+
+// Walk the consume chain to the nearest node that introduces an actual ingredient,
+// and return that RAW ingredient name (no participles). This is the stable anchor a
+// transform node names its output against. Distinct from deriveProducesName, which
+// applies a verb; this only finds the underlying thing.
+function rawSubject(dag: any, nodeId: string, seen: Set<string>): string | null {
+  if (seen.has(nodeId)) return null;
+  seen.add(nodeId);
+  const n = (dag.nodes ?? []).find((x: any) => x.id === nodeId);
+  if (!n) return null;
+  const ownIng = ((n.ingredients ?? [])[0]?.name || '').trim();
+  if (ownIng) return ownIng;
+  for (const c of n.consumes ?? []) {
+    const up = rawSubject(dag, c, seen);
+    if (up) return up;
+  }
+  return null;
 }
