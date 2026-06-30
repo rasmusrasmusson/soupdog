@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { logAiUsage } from '@/lib/ai/anthropic';
+import { toposortNodes } from '@/lib/recipes/toposort-nodes';
 
 function slugify(text: string) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -318,12 +319,21 @@ export async function POST(req: NextRequest) {
 
     // ── Insert one version_step per DAG node. Keep nodeId → stepId so we can wire
     //    dependency edges after all steps exist. ──
+    // FIRST: reorder nodes so order_index (assigned as emission order below) is
+    // dependency-correct. The model's emission can violate dependencies (e.g.
+    // "plate the dressing over the salad" emitted before the dressing is made).
+    // A group-aware stable topological sort guarantees consumer-after-producer,
+    // keeps groups contiguous, and preserves emission order as the tiebreak (so
+    // the cut-one-add-one reading survives). Edges are keyed by node id, not
+    // array position, so reordering here is safe for everything downstream.
+    const orderedNodes = toposortNodes(dag.nodes);
+
     const stepIdByNode = new Map<string, string>();
     let ingOrderIndex = 0;
     const stepIngredientIds = new Set<string>();
 
-    for (let i = 0; i < dag.nodes.length; i++) {
-      const n = dag.nodes[i];
+    for (let i = 0; i < orderedNodes.length; i++) {
+      const n = orderedNodes[i];
 
       const genericTaskId = await findOrCreateTask(db, n.task, taskCache, createdTasks);
 
