@@ -257,3 +257,35 @@ addressed before meals get routinely large. Candidate fixes (NOT yet decided —
 NEXT (when revisited): decide (a/b/c); if (b), define the threshold (step count or extraction
 byte size) and wire the fallback in handleCreateMeal. Until then, large multi-made-dish meals
 will degrade to served — a known, safe limitation.
+
+## 13. SIZE CEILING — RESOLVED via (b) hybrid fallback (2026-06-30)
+
+Decision: built **(b)** — hybrid size-threshold fallback — in `handleCreateMeal`.
+- Threshold = total step count across the made dishes; `UNIFIED_STEP_CEILING = 22` (tunable).
+- At/below threshold → unified single decompose (cross-dish merge preserved, as before).
+- Above threshold → **per-dish decompose** (each call small, none near maxDuration), then
+  CONCATENATE the dishes' DAGs. Node ids are namespaced per dish (`n1` → `d{i}_n1`) and
+  `consumes` rewritten, so siloed dishes never collide; no cross-dish edges exist (the
+  accepted tradeoff). Each dish's nodes are stamped with its `outputName` as `group` so the
+  meal display + toposort keep each dish a contiguous, separately-labelled block.
+- (c) trim-prompt-token-load was deliberately NOT bundled — it's a separate tuning pass that
+  would raise the threshold; doing it here would muddy what fixed what.
+
+VALIDATED: the meal that 504'd ("garlic butter shrimp + garlic butter mushrooms", 43 combined
+steps) now produces a full two-section graph — no timeout, no degrade-to-served. The ceiling
+is gone: large meals ship a graph.
+
+Two follow-ups recorded (NOT this fix):
+- **v1 had an ingredient-starvation bug** (per-dish ingredient filtering by name-match dropped
+  ingredients whose step-name ≠ list-name, e.g. "parsley" vs "Fresh flat-leaf parsley",
+  producing objectless "Add" steps). FIXED in v2: each siloed dish gets the FULL ingredient
+  list; the prompt only emits nodes for the steps it's given, so surplus ingredients are
+  harmlessly unused. Correctness over a marginal token saving.
+- **[OPEN — separate, deeper] DECOMPOSE QUALITY ON LARGE/DENSE MEALS.** Surfacing the graph
+  (instead of a 504) revealed that decompose quality on a long, dense source is itself rough:
+  duplicate steps, bare/objectless transformation steps ("Mince", "Chop" with no object), and
+  siloed dishes re-deriving/cross-referencing a shared intermediate ("garlic butter") messily.
+  This is a decompose-PROMPT / guide-layer problem (faithfulness + atomicity at scale), NOT a
+  meal-compose problem — the size fix only exposed it. Its own effort; candidate levers:
+  tighter faithfulness rules for long inputs, (c) token trimming, or chunked/sectioned
+  decomposition. Tracked as the next decompose-quality item, distinct from §13.

@@ -456,52 +456,67 @@ export default function ImportRecipePage() {
       // ingredients[] and make ONE GROUP per dish, with BARE names (steps reference ingredients
       // by name; the resolver maps duplicates to ids server-side). No client dedup, no id remap.
       //
-      // A dish that can't generate/parse becomes a SERVED component (don't sink the meal).
+      // A dish that is genuinely OFF-THE-SHELF becomes a SERVED component. A dish the user
+      // chose to MAKE that fails to generate/parse is NOT silently served (that would lie —
+      // telling the user "ready-made" when really "we failed to make it"). Instead we retry
+      // once (these are transient sequential-AI flakes), and if it still fails, record it in
+      // failedDishes and surface it so the user can re-trigger — never a silent serve.
       setStatus('decomposing');
       const servedComponents: string[] = [];
+      const failedDishes: string[] = [];
       const combinedIngredients: any[] = [];
       const combinedGroups: any[] = [];
       let metaFromParse: any = null;   // description/cuisine/tags (only used if single dish)
       let madeDishCount = 0;
 
+      // Generate + parse one made dish. Returns the parsed recipe, or null on failure.
+      // Retries ONCE on a transient generate/parse miss before giving up.
+      const generateAndParseDish = async (dishPrompt: string): Promise<any | null> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const gr = await fetch('/api/recipes/generate', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ prompt: dishPrompt, forceGenerate: true }),
+            });
+            const gd = await gr.json();
+            const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
+            if (recipeText.length <= 40) continue; // transient empty generate → retry
+            const ires = await fetch('/api/recipes/import', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: recipeText }),
+            });
+            const idata = await ires.json();
+            if (!ires.ok || !idata.recipe) continue; // transient parse miss → retry
+            return idata.recipe;
+          } catch { /* fall through to retry */ }
+        }
+        return null;
+      };
+
       for (const d of toMake) {
         const dishName = d.title || d.name;
         // Curated don't-make list: obviously off-the-shelf items (a soft drink, bottled
-        // water, etc.) are SERVED as-is — skip the wasted generation call entirely.
+        // water, etc.) are genuinely SERVED as-is — skip the wasted generation call entirely.
         if (isServedItem(d.name)) { servedComponents.push(dishName); continue; }
-        try {
-          // generate the dish's recipe text (forceGenerate: this is a chosen dish to make —
-          // we want a recipe written, not classification into existing/clarify/meal).
-          const gr = await fetch('/api/recipes/generate', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: d.name, forceGenerate: true }),
-          });
-          const gd = await gr.json();
-          const recipeText = (gr.ok && typeof gd.recipeText === 'string') ? gd.recipeText.trim() : '';
-          if (recipeText.length <= 40) { servedComponents.push(dishName); continue; }
 
-          // parse this ONE dish (single-recipe parser — what it's good at)
-          const ires = await fetch('/api/recipes/import', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text: recipeText }),
-          });
-          const idata = await ires.json();
-          if (!ires.ok || !idata.recipe) { servedComponents.push(dishName); continue; }
-          if (!metaFromParse) metaFromParse = idata.recipe;
-
-          // COMBINE into the multi-group extraction (do NOT decompose per-dish here):
-          //  - concatenate this dish's ingredients (BARE names — resolver dedupes by id).
-          //  - one GROUP per dish, outputName = dish name, steps flattened from the dish's
-          //    own groups in order (intra-dish sub-groups flattened for now — §9 OPEN).
-          const dishIngredients = Array.isArray(idata.recipe.ingredients) ? idata.recipe.ingredients : [];
-          combinedIngredients.push(...dishIngredients);
-          const dishSteps = (Array.isArray(idata.recipe.groups) ? idata.recipe.groups : [])
-            .flatMap((g: any) => (Array.isArray(g.steps) ? g.steps : []));
-          combinedGroups.push({ outputName: dishName, steps: dishSteps });
-          madeDishCount++;
-        } catch {
-          servedComponents.push(dishName);   // any failure → serve it, don't sink the meal
+        const recipe = await generateAndParseDish(d.name);
+        if (!recipe) {
+          // The user chose to MAKE this dish and we couldn't. Do NOT pretend it's served.
+          failedDishes.push(dishName);
+          continue;
         }
+        if (!metaFromParse) metaFromParse = recipe;
+
+        // COMBINE into the multi-group extraction (do NOT decompose per-dish here):
+        //  - concatenate this dish's ingredients (BARE names — resolver dedupes by id).
+        //  - one GROUP per dish, outputName = dish name, steps flattened from the dish's
+        //    own groups in order (intra-dish sub-groups flattened for now — §9 OPEN).
+        const dishIngredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+        combinedIngredients.push(...dishIngredients);
+        const dishSteps = (Array.isArray(recipe.groups) ? recipe.groups : [])
+          .flatMap((g: any) => (Array.isArray(g.steps) ? g.steps : []));
+        combinedGroups.push({ outputName: dishName, steps: dishSteps });
+        madeDishCount++;
       }
 
       const resolvedLinkedDishes = linked.map(d => ({
@@ -573,27 +588,27 @@ export default function ImportRecipePage() {
           if (dres.ok && ddata.dag && Array.isArray(ddata.dag.nodes) && ddata.dag.nodes.length > 0) {
             mealNodes = ddata.dag.nodes;
           } else {
-            // Unified decompose failed for ALL made dishes → serve them rather than sink the meal.
-            for (const g of combinedGroups) servedComponents.push(g.outputName);
+            // Unified decompose failed for ALL made dishes → these are make-failures, not
+            // served items. Surface them rather than silently labelling them ready-made.
+            for (const g of combinedGroups) failedDishes.push(g.outputName);
           }
         } catch {
-          for (const g of combinedGroups) servedComponents.push(g.outputName);
+          for (const g of combinedGroups) failedDishes.push(g.outputName);
         }
       } else if (combinedGroups.length > 0) {
         // SILOED FALLBACK (large meal): decompose each dish on its own (small calls),
-        // concatenate the namespaced node sets. Per-dish failures serve only that dish.
-        // Pass the FULL ingredient list to each dish (do NOT filter per-dish): the
-        // decompose prompt only emits nodes for the steps it is given, so surplus
-        // ingredients are simply unused — whereas filtering by a name-match against
-        // stepIngredients risks DROPPING an ingredient whose step-name differs from its
-        // list-name ("parsley" vs "Fresh flat-leaf parsley"), which starves the dish and
-        // produces objectless "Add" steps with nothing to bind. Correctness over a
-        // marginal token saving.
+        // concatenate the namespaced node sets. Pass the FULL ingredient list to each dish
+        // (do NOT filter per-dish): the decompose prompt only emits nodes for the steps it
+        // is given, so surplus ingredients are simply unused — whereas filtering by a
+        // name-match against stepIngredients risks DROPPING an ingredient whose step-name
+        // differs from its list-name ("parsley" vs "Fresh flat-leaf parsley"), which
+        // starves the dish and produces objectless "Add" steps. Correctness over a marginal
+        // token saving. A per-dish decompose failure is a make-failure, not a serve.
         for (let gi = 0; gi < combinedGroups.length; gi++) {
           const g = combinedGroups[gi];
           const nodes = await decomposeOneDish(g, combinedIngredients, gi);
           if (nodes) mealNodes.push(...nodes);
-          else servedComponents.push(g.outputName);
+          else failedDishes.push(g.outputName);
         }
       }
 
@@ -605,6 +620,7 @@ export default function ImportRecipePage() {
           title: composeMenuTitle(componentNames), components: componentNames,
           description: '', cuisine: '', tags: [], servings: 4, difficulty: 'medium',
           totalTimeMinutes: 0, dag: servedDag,
+          ...(failedDishes.length ? { failedDishes } : {}),
         });
         setStatus('done');
         return;
@@ -640,6 +656,7 @@ export default function ImportRecipePage() {
         difficulty:  metaFromParse?.difficulty ?? 'medium',
         totalTimeMinutes: 0,
         dag:         mealDag,
+        ...(failedDishes.length ? { failedDishes } : {}),
       });
       setStatus('done');
     } catch (err: any) {
@@ -1150,6 +1167,21 @@ export default function ImportRecipePage() {
                   {Array.isArray(preview.components) && preview.components.length > 1 && (
                     <div style={{ marginTop: 6, fontFamily: MONO, fontSize: 11, color: 'var(--muted)', lineHeight: 1.5 }}>
                       This meal: {preview.components.join(' · ')}
+                    </div>
+                  )}
+                  {Array.isArray(preview.failedDishes) && preview.failedDishes.length > 0 && (
+                    <div style={{ marginTop: 10, padding: '10px 12px', border: '1px solid #c9a227', background: '#fdf6e3', borderRadius: 4, fontSize: 12.5, color: '#6b5a17', lineHeight: 1.5 }}>
+                      <strong style={{ fontWeight: 600 }}>
+                        Couldn{'\u2019'}t generate {preview.failedDishes.length === 1 ? 'this dish' : 'these dishes'}:
+                      </strong>{' '}
+                      {preview.failedDishes.join(', ')}. This is usually a temporary hiccup, not that the dish can{'\u2019'}t be made.
+                      <button
+                        onClick={composeMeal}
+                        disabled={composing}
+                        style={{ marginLeft: 8, padding: '2px 10px', border: '1px solid #c9a227', background: 'transparent', color: '#6b5a17', borderRadius: 3, fontFamily: MONO, fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', cursor: composing ? 'default' : 'pointer' }}
+                      >
+                        {composing ? 'Composing…' : 'Try again'}
+                      </button>
                     </div>
                   )}
                 </div>
