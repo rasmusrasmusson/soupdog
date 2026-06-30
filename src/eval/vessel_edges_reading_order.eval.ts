@@ -20,7 +20,7 @@ import type { Extraction, Dag, DagNode } from './multi_dish_decomposition.eval';
 // Local assertion type — this eval's behaviour codes (O/E/C) are specific to vessel
 // edges & reading order, distinct from the multi-dish eval's M/T/R/G. Kept local so
 // the shared eval file stays untouched.
-type Assertion = { name: string; behaviour: 'O' | 'E' | 'C'; check: (dag: Dag) => boolean | string };
+type Assertion = { name: string; behaviour: 'O' | 'E' | 'C' | 'B'; check: (dag: Dag) => boolean | string };
 
 // ─── pure helpers over the DAG ───────────────────────────────────────────────
 const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -208,4 +208,93 @@ export const caseBechamelOrdered: { name: string; extraction: Extraction; assert
   ],
 };
 
-export const vesselEdgesCases = [caseSaladConcurrent, caseBechamelOrdered];
+// ─── CASE 3 — Binding: multi-ingredient prep must NOT produce objectless steps ──
+// The risotto/Wellington failure mode: several ingredients each stated with a prep
+// ("onion, diced"; "garlic, minced"; "parmesan, grated") get their own transformation
+// node, but the model emits a BARE verb ("Dice", "Mince", "Grate") with no ingredient
+// bound and nothing consumed — an orphan the cook can't act on ("dice WHAT?"). Also
+// covers objectless "Add to the pan" with no ingredient and no consumed producer.
+// This case packs the trigger: 4 ingredients each needing a distinct prep + adds.
+export const caseBindingNoOrphans: { name: string; extraction: Extraction; assertions: Assertion[] } = {
+  name: 'binding: every prep/add step names its ingredient — no objectless "Dice"/"Add" orphans',
+  extraction: {
+    title: 'Mushroom Risotto Base',
+    servings: 4,
+    ingredients: [
+      { name: 'onion', quantityValue: 1, quantityUnit: 'piece', prepNote: 'finely diced' },
+      { name: 'garlic', quantityValue: 2, quantityUnit: 'clove', prepNote: 'minced' },
+      { name: 'mushrooms', quantityValue: 300, quantityUnit: 'g', prepNote: 'sliced' },
+      { name: 'parmesan', quantityValue: 50, quantityUnit: 'g', prepNote: 'grated' },
+      { name: 'arborio rice', quantityValue: 300, quantityUnit: 'g', prepNote: null },
+      { name: 'olive oil', quantityValue: 2, quantityUnit: 'tbsp', prepNote: null },
+    ],
+    equipment: ['chefs knife', 'grater', 'large pan'],
+    groups: [{
+      outputName: '',
+      steps: [
+        { instruction: 'Finely dice the onion', stepIngredients: ['onion'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Mince the garlic', stepIngredients: ['garlic'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Slice the mushrooms', stepIngredients: ['mushrooms'], stepTools: ['chefs knife'], taskFamily: 'cut' },
+        { instruction: 'Grate the parmesan', stepIngredients: ['parmesan'], stepTools: ['grater'], taskFamily: 'cut' },
+        { instruction: 'Heat the olive oil in the pan', stepIngredients: ['olive oil'], stepTools: ['large pan'], taskFamily: 'heat' },
+        { instruction: 'Add the diced onion and cook until soft', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'cook' },
+        { instruction: 'Add the minced garlic', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'combine' },
+        { instruction: 'Add the sliced mushrooms and cook until golden', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'cook' },
+        { instruction: 'Add the rice and toast', stepIngredients: ['arborio rice'], stepTools: ['large pan'], taskFamily: 'cook' },
+        { instruction: 'Stir in the grated parmesan', stepIngredients: [], stepTools: ['large pan'], taskFamily: 'mix' },
+      ],
+    }],
+  },
+  assertions: [
+    {
+      name: 'every prep (cut/dice/mince/slice/grate) node binds an ingredient — no bare prep verb',
+      behaviour: 'B',
+      check: (dag) => {
+        const prepRe = /^(slice|chop|dice|cut|grate|mince|tear|crush|zest|peel)\b/;
+        const orphans = dag.nodes.filter(n =>
+          prepRe.test(norm(n.task)) &&
+          (n.ingredients ?? []).length === 0 &&
+          (n.consumes ?? []).length === 0
+        );
+        return orphans.length === 0
+          ? true
+          : `objectless prep node(s): ${orphans.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+    {
+      name: 'every add/combine node either binds an ingredient OR consumes a producer (no objectless Add)',
+      behaviour: 'B',
+      check: (dag) => {
+        const addRe = /^(add|combine|place|tip|scatter|stir in|fold in|pour)\b/;
+        const orphans = dag.nodes.filter(n =>
+          addRe.test(norm(n.task)) &&
+          (n.ingredients ?? []).length === 0 &&
+          (n.consumes ?? []).length === 0
+        );
+        return orphans.length === 0
+          ? true
+          : `objectless add node(s): ${orphans.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+    {
+      name: 'no prep produces an intermediate that is then never consumed (dangling prep)',
+      behaviour: 'B',
+      check: (dag) => {
+        const prepRe = /^(slice|chop|dice|cut|grate|mince|tear)\b/;
+        const consumedIds = new Set<string>(dag.nodes.flatMap(n => n.consumes ?? []));
+        const dangling = dag.nodes.filter(n =>
+          prepRe.test(norm(n.task)) &&
+          (n.ingredients ?? []).length > 0 &&
+          !consumedIds.has(n.id)
+        );
+        // a dangling prep means the cook chopped something nothing uses — usually the
+        // flip side of an objectless "Add" (the add that should have consumed it is bare)
+        return dangling.length === 0
+          ? true
+          : `prep node(s) whose output is never consumed: ${dangling.map(o => `${o.id}:${o.task}`).join(', ')}`;
+      },
+    },
+  ],
+};
+
+export const vesselEdgesCases = [caseSaladConcurrent, caseBechamelOrdered, caseBindingNoOrphans];

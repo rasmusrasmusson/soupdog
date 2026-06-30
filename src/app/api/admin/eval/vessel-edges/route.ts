@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
 
   const report: any[] = [];
   const behaviourTally: Record<string, { pass: number; total: number }> = {
-    O: { pass: 0, total: 0 }, E: { pass: 0, total: 0 }, C: { pass: 0, total: 0 },
+    O: { pass: 0, total: 0 }, E: { pass: 0, total: 0 }, C: { pass: 0, total: 0 }, B: { pass: 0, total: 0 },
   };
 
   for (const c of vesselEdgesCases) {
@@ -122,6 +122,7 @@ export async function GET(req: NextRequest) {
       O: 'order — independent adds unchained / dependent chain kept',
       E: 'emission/reading — cut-one-add-one, no consumer before producer',
       C: 'convergence — final combine fans in from all inputs',
+      B: 'binding — every prep/add node names its ingredient or consumes a producer (no objectless steps)',
     },
     cases: report,
   });
