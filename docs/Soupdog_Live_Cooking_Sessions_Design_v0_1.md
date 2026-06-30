@@ -120,3 +120,59 @@ public — a visibility-tier concern (ties to Sharing & Delegation).
   recipe-kind dependency (§8) are direct consequences.
 - **Sharing & Delegation** — visibility tiers gate the multi-actor and private-
   recipe features.
+
+---
+
+## [ADD 2026-06-30] An appliance is a PARTICIPANT (executor), not just a feed or a tool
+
+Earlier framing in this doc and the others treats a connected appliance two ways only:
+(1) something that **feeds** a passive step's state (§3 — a sous-vide/thermometer reporting a
+reading), and (2) a scarce **tool resource** tasks contend for (Labour-Division Scheduler §3
+Tier 3 / §8 — "the one oven serialises oven tasks"). Both are real, but both are too small.
+
+**The fuller model: a connected appliance is a PARTICIPANT in the cooking session — an
+executor that receives its own slice of the meal DAG**, the same way a human cook does. It is
+not (only) a passive timer the human babysits, and not (only) a constraint; it is an actor with:
+
+- **its own delegated task slice** — the labour-division scheduler already divides the meal
+  BY TASK across executors; an appliance is simply an executor a task-slice can be assigned to.
+  "Send these tasks to the oven" and "send these tasks to Natasha" are the SAME mechanism with
+  different executors (human vs machine). This is the key unification.
+- **its own program / recipe** — the appliance's slice IS a broken-out recipe/task list,
+  expressed in terms the appliance executes (its program), the machine-readable face of the
+  same graph the human reads as steps. (Connects to Culinary-Knowledge-Layer §2e — tasks framed
+  for the machine/appliance view; and to the Ingredient–Process model's machine task type.)
+- **its own live status** — running / preheating / at-temp / done / fault — surfaced in the
+  session like a cook's progress, not merely a sensor reading folded into one passive step.
+- **a switchable view for the head chef** — the oversight tab-switcher (head chef flips between
+  each cook's per-actor screen) includes appliance screens: the chef can see WHAT THE APPLIANCE
+  IS DOING, the same way they see what each cook is doing. An appliance screen is one more
+  per-actor view in the same switcher, not a separate monitoring UI.
+
+### Why this matters / why now
+As cooking automates, the appliance-as-executor case GROWS — eventually a primary use case, not
+an edge one. Modelling the appliance as a participant (executor receiving a task partition) from
+the start means automation falls out of the SAME spine: the unified meal DAG + per-actor
+partition + live session + oversight switcher already built for humans extends to machines with
+no new architecture. Modelling it as "a passive step" or "just a tool" would force a separate
+mechanism later and re-close that seam.
+
+### Relationship to the two existing framings (not replaced — subsumed)
+- **Feed (§3)** is still true: an appliance executing its slice REPORTS status, and a passive
+  step it owns surfaces as a timer/reading. That's the participant emitting status — a property
+  of the executor, not a separate concept.
+- **Tool contention (Scheduler Tier 3)** is still true at SCHEDULING time: when the division is
+  computed, an appliance is also a scarce resource (one oven serialises). So an appliance wears
+  two hats — a RESOURCE the scheduler reasons about, and an EXECUTOR that receives and runs a
+  slice. Both, not either.
+
+### [OPEN]
+- Executor model: is "human cook" and "appliance" one `session_participant` shape with an
+  executor-type discriminator (human / appliance), or two related tables? (Lean: one shape with
+  a type — keeps the partition + oversight switcher uniform.)
+- An appliance's "own program" — how the task-slice maps to an appliance program (protocol is
+  "far out" per §10, but the SEAM — slice → program — should be named now).
+- Status vocabulary for appliance executors (running/preheating/at-temp/done/fault) and how it
+  composes with the human progress states in the oversight view.
+- Appliance-as-resource (scheduler) vs appliance-as-executor (session) share an identity — one
+  `equipment`/appliance row underlies both hats; confirm they reference the same entity.
