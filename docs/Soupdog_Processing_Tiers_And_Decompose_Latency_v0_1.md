@@ -114,3 +114,78 @@ Verified against current Anthropic docs (June 2026). Ordered by leverage:
 - THEN: Haiku-vs-eval experiment (cheap to try, eval-guarded).
 - LATER (own track): tier-2 background jobs (generalise the cooking-session pattern;
   settle §1 (a)-(d)); tier-3 batch interface (content-pipeline track).
+
+## 4. DECISIONS SHIPPED & VALIDATED (2026-07-01)
+
+### 4.1 Prompt caching — SHIPPED & VERIFIED
+Added an opt-in `cacheSystem?: boolean` to the shared `aiMessage`/`aiStreamStart` gate
+(`src/lib/ai/anthropic.ts`). Default (omitted) = plain-string system, byte-identical to
+before → every existing caller UNCHANGED. When true, system is sent as a cached
+`{type:'text', cache_control:{type:'ephemeral'}}` block. ONLY decompose opts in.
+Wrapper also logs `[ai cache] <feature>: read=X write=Y input=Z` when caching is on.
+VERIFIED LIVE: first decompose `read=0 write=6775`; second within TTL `read=6775 write=0`
+= a real cache hit. Cost win certain (cached reads 0.1x). Latency win modest — token
+counts showed the cached prefix is ~6775 tokens but OUTPUT is up to 8000, so OUTPUT
+GENERATION dominates decompose latency, not input prefill. That finding is what pointed
+to the Haiku experiment as the next lever.
+
+### 4.2 Decompose model = Haiku 4.5 — DECISION: ADOPTED as default
+Made the decompose model env-configurable: `process.env.DECOMPOSE_MODEL ||
+'claude-sonnet-4-6'` in the decompose route. Set `DECOMPOSE_MODEL=claude-haiku-4-5-20251001`
+in Vercel (Production). Remove the env var to instantly revert to Sonnet — no code change.
+
+**Why Haiku:** ~3x cheaper ($1/$5 vs $3/$15), faster, and — the surprise — quality HELD.
+
+**Evidence gathered (all on Haiku, live):**
+- vessel-edges eval harness (salad + béchamel), run 4x → O:3/3 E:4/4 C:1/1 EVERY time,
+  including the subtle béchamel order-dependence. `totalDecomposeMs` ~9.8–11.5s vs
+  Sonnet baseline 19.5s (~45% faster), tightly clustered (not noisy).
+- Six hard real recipes, each probing a different reasoning type:
+  - **Bolognese + mushroom risotto** (77-step multi-dish, siloed path): both dishes made,
+    monotonic 1→77, completions captured. Matched Sonnet; residual warts (a few objectless
+    Dice/Mince, duplicate Season) SAME class as Sonnet, not worse.
+  - **Sourdough bread** (long passive times): autolyse + 4 stretch-and-fold/rest cycles +
+    10h cold proof + 1h cool — all correct durations & order. Excellent.
+  - **Crème brûlée** (strict order + bain-marie): tempering (slow-pour warm cream while
+    whisking) correctly ordered, bain-marie placed right, chill→torch→serve. Excellent —
+    the hardest order-reasoning probe, passed clean.
+  - **Thai green curry** (made-intermediate consumed downstream): fry paste → base →
+    chicken into base → stock → aubergine → spinach → plate. Threading correct.
+  - **Whiskey sour** (trivial floor): clean dry-shake→ice→shake→strain→garnish, no
+    over-decomposition.
+  - **Beef Wellington** (multi-component convergence): the SUCCESSFUL output is good
+    (duxelles + seared/mustard beef + ham + pastry converge correctly). BUT see caveat.
+
+**[WATCH] Wellington reliability caveat:** Beef Wellington 502'd on the FIRST decompose
+attempt (Anthropic call failed at 27.85s — NOT the Vercel 240s ceiling), then SUCCEEDED on
+retry (21.3s). One failure, recovered. Can't separate "Haiku struggling with the heaviest
+convergence" from "transient API blip" on a single sample. NOT disqualifying (recovered +
+quality good when it completes), but: if 502s on complex/convergence recipes prove to be a
+PATTERN, the fix is to (a) add an automatic single retry in the decompose route before
+surfacing an error, or (b) route convergence-heavy recipes to Sonnet (the env-toggle
+already supports a per-context model split). Watch for recurrence before acting.
+
+### 4.3 Failure surfacing — CONFIRMED ALREADY IN PLACE (no build needed)
+Verified both decompose-failure surfaces tell the user + offer retry (never silent death):
+- Single-recipe import: on decompose fail, shows "We had trouble structuring that recipe.
+  Please try again." WITH a "Try again" button that re-runs `handleImportFile` with the
+  last file (`lastImportRef`). The Wellington 502 demonstrated this working live.
+- Meal compose: the amber "Couldn't generate this dish… Try again" notice + retry (built
+  earlier 2026-06-30) + per-dish `failureReasons` diagnostic.
+The single-recipe retry is currently MANUAL (button). If Haiku 502s on complex recipes
+turn out frequent, consider an automatic single retry before showing the error (ties to
+the §4.2 watch-item).
+
+### 4.4 Net outcome
+Decompose is now ~3x cheaper + ~45% faster (Haiku) with verified prompt caching on the
+stable prefix, maxDuration 240 as the failure floor, and honest failure+retry on both
+paths. Quality validated across 6 recipe types. One reliability watch-item (Wellington
+convergence 502). The env-var toggle keeps the whole thing reversible in seconds.
+
+### 4.5 Still ahead (unchanged from §3 sequencing)
+- Tier-2 background jobs (generalise the Active Cooking Session pattern; settle §1 (a)-(d)).
+- Tier-3 Batch API bulk pipeline (content-pipeline track).
+- Decompose QUALITY on large/dense recipes (objectless steps, duplicate steps, scrambled
+  cross-sub-group ordering) — SEPARATE from latency; logged in Unified_Meal_Graph §13.
+  Model choice (Haiku/Sonnet) interacts with it but doesn't fix it; it's a prompt/guide
+  problem.
